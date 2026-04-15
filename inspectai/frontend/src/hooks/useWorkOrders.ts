@@ -105,3 +105,48 @@ export function useUpdateWorkOrderStatus() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['work-orders'] }),
   })
 }
+
+export interface CreateWorkOrderInput {
+  assetName:           string
+  location:            string
+  priority:            string
+  dueDate:             string
+  assignedTo:          string   // user uuid
+  workInstructionId?:  string   // wi uuid
+  notes?:              string
+}
+
+export function useCreateWorkOrder() {
+  const qc      = useQueryClient()
+  const { user } = useAuth()
+
+  return useMutation({
+    mutationFn: async (input: CreateWorkOrderInput) => {
+      // Generate next WO number
+      const { count } = await supabase
+        .from('work_orders')
+        .select('id', { count: 'exact', head: true })
+      const woNumber = `WO-${String((count ?? 0) + 1).padStart(4, '0')}`
+
+      const { data, error } = await supabase
+        .from('work_orders')
+        .insert({
+          wo_number:           woNumber,
+          tenant_id:           user?.tenantId || undefined,
+          asset_name:          input.assetName,
+          location:            input.location,
+          priority:            input.priority,
+          due_date:            input.dueDate || null,
+          assigned_to:         input.assignedTo || null,
+          work_instruction_id: input.workInstructionId || null,
+          notes:               input.notes || null,
+          status:              'open',
+        })
+        .select()
+        .single()
+      if (error) throw new Error(error.message)
+      return data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['work-orders'] }),
+  })
+}

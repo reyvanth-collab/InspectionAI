@@ -3,6 +3,13 @@ import { cn } from '@/lib/cn'
 import { useAuth } from '@/context/AuthContext'
 import type { UserRole } from '@/types'
 
+const ROLE_BADGE: Record<UserRole, string> = {
+  admin:     'bg-danger-bg text-danger border-danger-border',
+  approver:  'bg-violet-500/10 text-violet-400 border-violet-500/20',
+  inspector: 'bg-info-bg text-info border-info-border',
+  viewer:    'bg-bg-3 text-text-2 border-border-2',
+}
+
 interface NavItem {
   path: string
   label: string
@@ -22,7 +29,7 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 export function Sidebar() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
 
   const visibleItems = NAV_ITEMS.filter(item =>
     !item.roles || (user && item.roles.includes(user.role))
@@ -66,13 +73,29 @@ export function Sidebar() {
 
       {/* User footer */}
       {user && (
-        <div className="border-t border-border px-4 py-3 flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-accent-2 flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0">
-            {user.avatarInitials}
+        <div className="border-t border-border px-4 py-3 flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-accent-2 flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0">
+              {user.avatarInitials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-medium text-text truncate">{user.name}</p>
+              <p className="text-[11px] text-text-3 truncate font-mono">{user.staffId}</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-medium text-text truncate">{user.name}</p>
-            <p className="text-[11px] text-text-3 truncate">{user.staffId}</p>
+          <div className="flex items-center justify-between">
+            <span className={cn(
+              'text-[10px] font-medium px-2 py-[2px] rounded-full border uppercase tracking-[0.06em]',
+              ROLE_BADGE[user.role]
+            )}>
+              {user.role}
+            </span>
+            <button
+              onClick={logout}
+              className="text-[11px] text-text-3 hover:text-danger transition-colors bg-transparent border-none cursor-pointer p-0"
+            >
+              Sign out →
+            </button>
           </div>
         </div>
       )}

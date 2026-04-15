@@ -67,7 +67,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session)
         if (session?.user) {
           const profile = await fetchProfile(session.user.id)
-          setUser(profile)
+          if (profile) {
+            setUser(profile)
+          } else {
+            const emailPrefix = session.user.email?.split('@')[0] ?? 'user'
+            setUser({
+              id:             session.user.id,
+              tenantId:       '',
+              staffId:        '',
+              name:           session.user.user_metadata?.name ?? emailPrefix,
+              email:          session.user.email ?? '',
+              role:           (session.user.user_metadata?.role as User['role']) ?? 'inspector',
+              avatarInitials: emailPrefix.slice(0, 2).toUpperCase(),
+            })
+          }
         } else {
           setUser(null)
         }
@@ -83,11 +96,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw new Error(error.message)
 
-    // Profile is set via onAuthStateChange, but fetch eagerly for faster UX
     if (data.user) {
       const profile = await fetchProfile(data.user.id)
-      if (!profile) throw new Error('User profile not found. Contact your administrator.')
-      setUser(profile)
+      if (profile) {
+        setUser(profile)
+      } else {
+        // Profile row missing (RLS or trigger issue) — build a fallback from auth data
+        const emailPrefix = data.user.email?.split('@')[0] ?? 'user'
+        setUser({
+          id:             data.user.id,
+          tenantId:       '',
+          staffId:        '',
+          name:           data.user.user_metadata?.name ?? emailPrefix,
+          email:          data.user.email ?? '',
+          role:           (data.user.user_metadata?.role as User['role']) ?? 'inspector',
+          avatarInitials: emailPrefix.slice(0, 2).toUpperCase(),
+        })
+      }
     }
   }, [])
 

@@ -3,22 +3,17 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/context/AuthContext'
+import { useUsers, useUpdateUserRole } from '@/hooks/useUsers'
+import { useToast } from '@/components/ui/Toast'
+import type { UserRole } from '@/types'
 
 type SettingsTab = 'branding' | 'sso' | 'integrations' | 'users'
 
 const TABS: Array<{ id: SettingsTab; label: string }> = [
-  { id: 'branding',     label: 'Branding' },
-  { id: 'sso',          label: 'SSO & Auth' },
-  { id: 'integrations', label: 'Integrations' },
-  { id: 'users',        label: 'Users & Access' },
-]
-
-const MOCK_USERS = [
-  { id: '1', name: 'Admin User', email: 'admin@inspectai.io',    staffId: 'ADM001', role: 'admin'     },
-  { id: '2', name: 'Sarah Lee',  email: 'sarah@inspectai.io',    staffId: 'APR001', role: 'approver'  },
-  { id: '3', name: 'James Tan',  email: 'james@inspectai.io',    staffId: 'INS001', role: 'inspector' },
-  { id: '4', name: 'Raj Kumar',  email: 'raj@inspectai.io',      staffId: 'INS002', role: 'inspector' },
-  { id: '5', name: 'Viewer User', email: 'viewer@inspectai.io', staffId: 'VWR001', role: 'viewer'    },
+  { id: 'branding',     label: 'Branding'      },
+  { id: 'sso',          label: 'SSO & Auth'    },
+  { id: 'integrations', label: 'Integrations'  },
+  { id: 'users',        label: 'Users & Access'},
 ]
 
 const ROLE_PILL: Record<string, string> = {
@@ -31,19 +26,33 @@ const ROLE_PILL: Record<string, string> = {
 const SSO_PROVIDERS = ['Azure AD', 'Okta', 'Google Workspace', 'Generic SAML 2.0']
 
 const INTEGRATIONS = [
-  { id: 'maximo', name: 'IBM Maximo', status: 'connected',     desc: 'Asset & work order sync' },
-  { id: 'sap',    name: 'SAP PM',     status: 'disconnected',  desc: 'Maintenance integration'  },
-  { id: 'teams',  name: 'MS Teams',   status: 'connected',     desc: 'Escalation notifications' },
-  { id: 'slack',  name: 'Slack',      status: 'disconnected',  desc: 'Alert notifications'      },
-  { id: 'powerbi',name: 'Power BI',   status: 'disconnected',  desc: 'Analytics dashboard'      },
+  { id: 'maximo', name: 'IBM Maximo', status: 'connected',    desc: 'Asset & work order sync'  },
+  { id: 'sap',    name: 'SAP PM',     status: 'disconnected', desc: 'Maintenance integration'  },
+  { id: 'teams',  name: 'MS Teams',   status: 'connected',    desc: 'Escalation notifications' },
+  { id: 'slack',  name: 'Slack',      status: 'disconnected', desc: 'Alert notifications'      },
+  { id: 'powerbi',name: 'Power BI',   status: 'disconnected', desc: 'Analytics dashboard'      },
 ]
 
 export default function Settings() {
-  const { user } = useAuth()
-  const [tab, setTab] = useState<SettingsTab>('branding')
+  const { user }   = useAuth()
+  const { toast }  = useToast()
+  const [tab, setTab]             = useState<SettingsTab>('branding')
   const [appName, setAppName]     = useState('InspectAI')
   const [primaryColor, setColor]  = useState('#4f8ef7')
   const [ssoProvider, setSso]     = useState(SSO_PROVIDERS[0])
+
+  const { data: users = [], isLoading: usersLoading } = useUsers()
+  const updateRole = useUpdateUserRole()
+
+  const handleRoleChange = async (userId: string, role: UserRole) => {
+    if (userId === user?.id) { toast("You can't change your own role", 'error'); return }
+    try {
+      await updateRole.mutateAsync({ userId, role })
+      toast('Role updated', 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to update role', 'error')
+    }
+  }
 
   if (user?.role !== 'admin') {
     return (
@@ -65,17 +74,14 @@ export default function Settings() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 mb-6 border-b border-border pb-0">
+      <div className="flex gap-1 mb-6 border-b border-border">
         {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-[13px] border-b-2 -mb-px transition-all duration-150 bg-transparent cursor-pointer ${
               tab === t.id
                 ? 'border-accent text-accent font-medium'
                 : 'border-transparent text-text-2 hover:text-text'
-            }`}
-          >
+            }`}>
             {t.label}
           </button>
         ))}
@@ -111,7 +117,6 @@ export default function Settings() {
             </CardBody>
           </Card>
 
-          {/* Preview */}
           <Card>
             <CardHeader>Live Preview</CardHeader>
             <CardBody>
@@ -138,7 +143,7 @@ export default function Settings() {
             <div>
               <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Identity Provider</label>
               <select value={ssoProvider} onChange={e => setSso(e.target.value)}
-                className="w-full max-w-sm px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent transition-colors cursor-pointer appearance-none">
+                className="w-full max-w-sm px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent transition-colors cursor-pointer">
                 {SSO_PROVIDERS.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
@@ -184,31 +189,51 @@ export default function Settings() {
         </div>
       )}
 
-      {/* ── USERS ── */}
+      {/* ── USERS (real data) ── */}
       {tab === 'users' && (
         <Card>
-          <CardHeader actions={<Button variant="primary" size="sm">+ Add User</Button>}>
+          <CardHeader>
             Users & Access Control
+            <span className="ml-2 text-[11px] text-text-3 font-normal font-mono">
+              {users.length} users
+            </span>
           </CardHeader>
           <CardBody className="p-0">
-            {MOCK_USERS.map(u => (
-              <div key={u.id} className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0">
-                <div className="w-8 h-8 rounded-full bg-accent-2 flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0">
-                  {u.name.split(' ').map(n => n[0]).join('')}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-text">{u.name}</p>
-                  <p className="text-[12px] text-text-2">{u.email} · <span className="font-mono">{u.staffId}</span></p>
-                </div>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_PILL[u.role]}`}>
-                  {u.role}
-                </span>
-                <div className="flex gap-1.5">
-                  <Button variant="secondary" size="sm">Edit</Button>
-                  <Button variant="danger"    size="sm">Remove</Button>
-                </div>
+            {usersLoading ? (
+              <div className="p-4 flex flex-col gap-3">
+                {[1,2,3].map(i => <div key={i} className="h-14 rounded shimmer" />)}
               </div>
-            ))}
+            ) : users.length === 0 ? (
+              <div className="px-4 py-6 text-[13px] text-text-3 text-center">No users found</div>
+            ) : (
+              users.map(u => (
+                <div key={u.id} className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0">
+                  <div className="w-8 h-8 rounded-full bg-accent-2 flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0">
+                    {u.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[13px] font-medium text-text">{u.name}</p>
+                      {u.id === user?.id && (
+                        <span className="text-[10px] text-text-3 bg-bg-3 border border-border px-1.5 py-0.5 rounded-full">you</span>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-text-2">{u.email} · <span className="font-mono">{u.staffId}</span></p>
+                  </div>
+                  <select
+                    value={u.role}
+                    disabled={u.id === user?.id || updateRole.isPending}
+                    onChange={e => handleRoleChange(u.id, e.target.value as UserRole)}
+                    className={`text-[11px] font-medium px-2 py-1 rounded-[6px] border outline-none cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${ROLE_PILL[u.role]}`}
+                  >
+                    <option value="admin">admin</option>
+                    <option value="approver">approver</option>
+                    <option value="inspector">inspector</option>
+                    <option value="viewer">viewer</option>
+                  </select>
+                </div>
+              ))
+            )}
           </CardBody>
         </Card>
       )}

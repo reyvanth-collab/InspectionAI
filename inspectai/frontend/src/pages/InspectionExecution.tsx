@@ -13,6 +13,8 @@ import {
 } from '@/hooks/useInspection'
 import { useAiAnalysis } from '@/hooks/useAiAnalysis'
 import { useToast } from '@/components/ui/Toast'
+import { SignaturePad } from '@/components/ui/SignaturePad'
+import { useAuth } from '@/context/AuthContext'
 
 type FindingResult = 'pass' | 'fail' | 'na'
 
@@ -49,20 +51,25 @@ export default function InspectionExecution() {
   const { id: workOrderDbId = '' } = useParams()
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { user }  = useAuth()
 
-  const { data: wo, isLoading: woLoading }   = useWorkOrder(workOrderDbId)
+  const { data: wo, isLoading: woLoading }      = useWorkOrder(workOrderDbId)
   const { data: record, isLoading: recLoading } = useInspectionRecord(workOrderDbId)
 
   const startInspection    = useStartInspection()
   const recordFinding      = useRecordFinding()
   const completeInspection = useCompleteInspection()
-  const { analyses, analyse, clear: clearAi } = useAiAnalysis()
+  const { analyses, analyse, clear: clearAi }   = useAiAnalysis()
 
   // Local state for results not yet saved (optimistic UI)
   const [localResults, setLocalResults] = useState<Record<string, FindingResult>>({})
   const [localNotes,   setLocalNotes]   = useState<Record<string, string>>({})
   const [saving,       setSaving]       = useState<Record<string, boolean>>({})
   const [activeNote,   setActiveNote]   = useState<string | null>(null)
+
+  // Signature state
+  const [showSignature,  setShowSignature]  = useState(false)
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
 
   if (woLoading || recLoading) {
     return (
@@ -161,12 +168,20 @@ export default function InspectionExecution() {
     }
   }
 
-  const handleComplete = async () => {
+  const handleCompleteClick = () => {
     if (!record) return
     if (answered < items.length) {
       toast(`${items.length - answered} items still pending`, 'error')
       return
     }
+    // Open signature pad before finalising
+    setShowSignature(true)
+  }
+
+  const handleSignatureApplied = async (dataUrl: string) => {
+    setSignatureDataUrl(dataUrl)
+    setShowSignature(false)
+    if (!record) return
     const overallResult: FindingResult = failed > 0 ? 'fail' : 'pass'
     try {
       await completeInspection.mutateAsync({
@@ -174,9 +189,10 @@ export default function InspectionExecution() {
         workOrderDbId,
         overallResult,
       })
-      toast('Inspection completed', 'success')
+      toast('Inspection completed and signed', 'success')
       navigate('/inspections')
     } catch (e) {
+      setSignatureDataUrl(null)
       toast(e instanceof Error ? e.message : 'Failed to complete', 'error')
     }
   }
@@ -371,11 +387,28 @@ export default function InspectionExecution() {
             variant="primary"
             size="lg"
             loading={completeInspection.isPending}
-            onClick={handleComplete}
+            onClick={handleCompleteClick}
           >
-            Complete Inspection
+            Complete &amp; Sign
           </Button>
         </div>
+      )}
+
+      {/* Signature applied indicator (after sign) */}
+      {signatureDataUrl && (
+        <div className="mt-3 flex items-center gap-3 p-3 bg-success-bg border border-success-border rounded-[8px]">
+          <img src={signatureDataUrl} alt="Signature" className="h-10 border border-border rounded" />
+          <p className="text-[12px] text-success">Signed by {user?.name}</p>
+        </div>
+      )}
+
+      {/* Signature pad modal */}
+      {showSignature && (
+        <SignaturePad
+          signerName={user?.name}
+          onSave={handleSignatureApplied}
+          onClose={() => setShowSignature(false)}
+        />
       )}
     </AppLayout>
   )

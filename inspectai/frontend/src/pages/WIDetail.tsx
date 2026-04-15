@@ -1,12 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
+import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { useWorkInstruction } from '@/hooks/useWorkInstructions'
-import type { WIStatus } from '@/types'
 
-const STATUS_MAP: Record<string, WIStatus> = {
+const STATUS_MAP: Record<string, BadgeVariant> = {
   active:           'active',
   expiring:         'expiring',
   expired:          'expired',
