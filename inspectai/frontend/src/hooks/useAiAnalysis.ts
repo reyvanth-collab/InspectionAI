@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { JWT_KEY } from '@/lib/api'
 
 export interface AiAnalysis {
   text:    string
@@ -7,28 +7,30 @@ export interface AiAnalysis {
   error:   string | null
 }
 
+interface AnalyseParams {
+  itemId:                  string
+  itemDescription:         string
+  acceptanceCriteria?:     string
+  assetName?:              string
+  location?:               string
+  inspectorNotes?:         string
+  momsHistoricalNokRate?:  number   // e.g. 23.4 (percent)
+  momsHistoricalTotal?:    number   // e.g. 45 (total inspections)
+}
+
 export function useAiAnalysis() {
   const [analyses, setAnalyses] = useState<Record<string, AiAnalysis>>({})
 
-  const analyse = useCallback(async (params: {
-    itemId:             string
-    itemDescription:    string
-    acceptanceCriteria?: string
-    assetName?:         string
-    location?:          string
-    inspectorNotes?:    string
-  }) => {
+  const analyse = useCallback(async (params: AnalyseParams) => {
     const { itemId, ...body } = params
 
-    // Reset this item's analysis
     setAnalyses(prev => ({
       ...prev,
       [itemId]: { text: '', loading: true, error: null },
     }))
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token ?? ''
+      const token = localStorage.getItem(JWT_KEY) ?? ''
 
       const res = await fetch('/api/ai/analyse-failure', {
         method:  'POST',
@@ -40,7 +42,8 @@ export function useAiAnalysis() {
       })
 
       if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status}`)
+        const text = await res.text().catch(() => '')
+        throw new Error(text || `HTTP ${res.status}`)
       }
 
       const reader  = res.body.getReader()
@@ -54,7 +57,7 @@ export function useAiAnalysis() {
         const lines = chunk.split('\n').filter(l => l.startsWith('data: '))
 
         for (const line of lines) {
-          const json = line.slice(6)
+          const json = line.slice(6).trim()
           if (json === '[DONE]') {
             setAnalyses(prev => ({
               ...prev,

@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { useWorkInstruction } from '@/hooks/useWorkInstructions'
+import { Modal } from '@/components/ui/Modal'
+import { useWorkInstruction, useSubmitForApproval } from '@/hooks/useWorkInstructions'
+import { useApprovers } from '@/hooks/useUsers'
+import { useToast } from '@/components/ui/Toast'
 
 const STATUS_MAP: Record<string, BadgeVariant> = {
   active:           'active',
@@ -26,7 +30,28 @@ interface RevisionHistory {
 export default function WIDetail() {
   const { id: dbId = '' } = useParams()
   const navigate          = useNavigate()
+  const { toast }         = useToast()
   const { data: wi, isLoading } = useWorkInstruction(dbId)
+  const { data: approvers = [] } = useApprovers()
+  const submitForApproval = useSubmitForApproval()
+
+  const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [selectedApprovers, setSelectedApprovers] = useState<string[]>([])
+
+  const toggleApprover = (id: string) =>
+    setSelectedApprovers(prev => prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id])
+
+  const handleSubmitApproval = async () => {
+    if (selectedApprovers.length === 0) { toast('Select at least one approver', 'error'); return }
+    try {
+      await submitForApproval.mutateAsync({ wiDbId: dbId, approverIds: selectedApprovers })
+      toast('Submitted for approval', 'success')
+      setShowApprovalModal(false)
+      setSelectedApprovers([])
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to submit', 'error')
+    }
+  }
 
   if (isLoading) {
     return (
@@ -79,8 +104,16 @@ export default function WIDetail() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => navigate(`/approvals`)}>Submit for Approval</Button>
-          <Button variant="primary">Edit WI</Button>
+          {w.status === 'draft' || w.status === 'active' ? (
+            <Button variant="secondary" onClick={() => setShowApprovalModal(true)}>
+              Submit for Approval
+            </Button>
+          ) : (
+            <Button variant="secondary" onClick={() => navigate('/approvals')}>
+              View Approvals
+            </Button>
+          )}
+          <Button variant="primary" onClick={() => navigate('/library')}>Back to Library</Button>
         </div>
       </div>
 
@@ -200,6 +233,62 @@ export default function WIDetail() {
           )}
         </div>
       </div>
+      {/* Submit for Approval modal */}
+      <Modal
+        open={showApprovalModal}
+        onClose={() => { setShowApprovalModal(false); setSelectedApprovers([]) }}
+        title="Submit for Approval"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setShowApprovalModal(false); setSelectedApprovers([]) }}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={submitForApproval.isPending}
+              onClick={handleSubmitApproval}
+            >
+              Submit
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[13px] text-text-2 mb-4">
+          Select approvers for <span className="text-text font-medium">{w.wi_number}</span>.
+          They will be notified to review this work instruction in order.
+        </p>
+        {approvers.length === 0 ? (
+          <p className="text-[13px] text-text-3">No approvers found in your organisation.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {approvers.map(approver => (
+              <label
+                key={approver.id}
+                className="flex items-center gap-3 p-3 rounded-[8px] border border-border-2 cursor-pointer hover:bg-bg-3 transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedApprovers.includes(approver.id)}
+                  onChange={() => toggleApprover(approver.id)}
+                  className="accent-accent w-4 h-4 flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-text">{approver.name}</p>
+                  <p className="text-[11px] text-text-3 font-mono">{approver.email}</p>
+                </div>
+                <span className="text-[10px] text-text-3 bg-bg border border-border px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  {approver.role}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+        {selectedApprovers.length > 0 && (
+          <p className="text-[11px] text-text-3 mt-3">
+            {selectedApprovers.length} approver{selectedApprovers.length > 1 ? 's' : ''} selected · steps will be created in selected order
+          </p>
+        )}
+      </Modal>
     </AppLayout>
   )
 }

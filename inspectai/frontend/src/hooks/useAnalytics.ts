@@ -28,24 +28,24 @@ export function useAnalytics(range: DateRange) {
       since.setDate(since.getDate() - parseInt(range))
       const sinceISO = since.toISOString()
 
-      // Pull findings joined through inspection_records (for date filter)
-      // and wi_checklist_items (for category)
-      const { data, error } = await supabase
-        .from('inspection_findings')
-        .select(`
-          result,
-          wi_checklist_items ( category ),
-          inspection_records!inner ( started_at )
-        `)
-        .gte('inspection_records.started_at', sinceISO)
-        .in('result', ['pass', 'fail'])
+      // Fire both queries in parallel
+      const [findingsResult, countResult] = await Promise.all([
+        supabase
+          .from('inspection_findings')
+          .select('result, wi_checklist_items(category), inspection_records!inner(started_at)')
+          .gte('inspection_records.started_at', sinceISO)
+          .in('result', ['pass', 'fail']),
+        supabase
+          .from('inspection_records')
+          .select('id', { count: 'exact', head: true })
+          .gte('started_at', sinceISO),
+      ])
 
-      if (error) throw new Error(error.message)
+      if (findingsResult.error) throw new Error(findingsResult.error.message)
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = (data ?? []) as any[]
+      const rows = (findingsResult.data ?? []) as any[]
 
-      // Aggregate by category
       const map = new Map<string, { pass: number; fail: number }>()
       let totalPass = 0
       let totalFail = 0
@@ -53,10 +53,8 @@ export function useAnalytics(range: DateRange) {
       for (const row of rows) {
         const category: string = row.wi_checklist_items?.category ?? 'General'
         const result: string   = row.result
-
         if (!map.has(category)) map.set(category, { pass: 0, fail: 0 })
         const entry = map.get(category)!
-
         if (result === 'pass') { entry.pass++; totalPass++ }
         else if (result === 'fail') { entry.fail++; totalFail++ }
       }
@@ -65,17 +63,11 @@ export function useAnalytics(range: DateRange) {
         .map(([label, counts]) => ({ label, ...counts }))
         .sort((a, b) => (b.pass + b.fail) - (a.pass + a.fail))
 
-      // Count distinct inspection records in range
-      const { count } = await supabase
-        .from('inspection_records')
-        .select('id', { count: 'exact', head: true })
-        .gte('started_at', sinceISO)
-
       return {
         byCategory,
         totalPass,
         totalFail,
-        totalInspections: count ?? 0,
+        totalInspections: countResult.count ?? 0,
       }
     },
   })

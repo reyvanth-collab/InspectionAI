@@ -2,125 +2,84 @@ import {
   createContext, useContext, useState, useEffect,
   useCallback, type ReactNode,
 } from 'react'
-import type { Session } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { api, JWT_KEY, decodeJWT } from '@/lib/api'
 import type { User } from '@/types'
 
 interface AuthContextValue {
-  user: User | null
-  session: Session | null
+  user:            User | null
   isAuthenticated: boolean
-  isLoading: boolean           // true while session is being restored on mount
-  theme: 'dark' | 'light'
-  login: (email: string, password: string) => Promise<void>
-  logout: () => Promise<void>
-  toggleTheme: () => void
+  isLoading:       boolean
+  theme:           'dark' | 'light'
+  login:           (email: string, password: string) => Promise<void>
+  logout:          () => void
+  toggleTheme:     () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-// Fetch the public.users profile row for an auth user id.
-async function fetchProfile(authId: string): Promise<User | null> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, tenant_id, staff_id, name, email, role, avatar_url')
-    .eq('id', authId)
-    .single()
-
-  if (error || !data) return null
-
-  const nameParts = (data.name as string).split(' ')
-  const initials  = nameParts.map((p: string) => p[0]).join('').slice(0, 2).toUpperCase()
-
+function userFromJWT(token: string): User | null {
+  const p = decodeJWT(token)
+  if (!p || !p.id) return null
+  const name = (p.name as string) ?? (p.email as string).split('@')[0]
   return {
-    id:             data.id as string,
-    tenantId:       data.tenant_id as string,
-    staffId:        data.staff_id as string,
-    name:           data.name as string,
-    email:          data.email as string,
-    role:           data.role as User['role'],
-    avatarInitials: initials,
-    avatarUrl:      data.avatar_url as string | undefined,
+    id:             p.id as string,
+    tenantId:       (p.tenantId as string) ?? '',
+    staffId:        (p.staffId  as string) ?? '',
+    name,
+    email:          p.email as string,
+    role:           (p.role as User['role']) ?? 'inspector',
+    avatarInitials: name.split(' ').map((s: string) => s[0]).join('').slice(0, 2).toUpperCase(),
   }
 }
 
+function isTokenExpired(token: string): boolean {
+  const p = decodeJWT(token)
+  if (!p?.exp) return true
+  return (p.exp as number) * 1000 < Date.now()
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser]       = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
+  const [user,      setUser]    = useState<User | null>(null)
   const [isLoading, setLoading] = useState(true)
-  const [theme, setTheme]     = useState<'dark' | 'light'>('dark')
+  const [theme,     setTheme]   = useState<'dark' | 'light'>('dark')
 
-  // ── Restore session on mount ────────────────────────────────
+  // ── Restore session from localStorage on mount ──────────────
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session)
-      if (session?.user) {
-        const profile = await fetchProfile(session.user.id)
-        setUser(profile)
-      }
-      setLoading(false)
-    })
-
-    // Listen for sign-in / sign-out / token refresh
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session)
-        if (session?.user) {
-          const profile = await fetchProfile(session.user.id)
-          if (profile) {
-            setUser(profile)
-          } else {
-            const emailPrefix = session.user.email?.split('@')[0] ?? 'user'
-            setUser({
-              id:             session.user.id,
-              tenantId:       '',
-              staffId:        '',
-              name:           session.user.user_metadata?.name ?? emailPrefix,
-              email:          session.user.email ?? '',
-              role:           (session.user.user_metadata?.role as User['role']) ?? 'inspector',
-              avatarInitials: emailPrefix.slice(0, 2).toUpperCase(),
-            })
-          }
-        } else {
-          setUser(null)
-        }
-        setLoading(false)
-      }
-    )
-
-    return () => subscription.unsubscribe()
+    const token = localStorage.getItem(JWT_KEY)
+    if (token && !isTokenExpired(token)) {
+      setUser(userFromJWT(token))
+    } else {
+      localStorage.removeItem(JWT_KEY)
+    }
+    setLoading(false)
   }, [])
 
-  // ── Login ───────────────────────────────────────────────────
+  // ── Login — POST /api/auth/login ────────────────────────────
   const login = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw new Error(error.message)
+    const res = await api.post<{
+      token: string
+      user: { id: string; name: string; email: string; role: string; staffId: string; tenantId: string }
+    }>('/auth/login', { email, password })
 
-    if (data.user) {
-      const profile = await fetchProfile(data.user.id)
-      if (profile) {
-        setUser(profile)
-      } else {
-        // Profile row missing (RLS or trigger issue) — build a fallback from auth data
-        const emailPrefix = data.user.email?.split('@')[0] ?? 'user'
-        setUser({
-          id:             data.user.id,
-          tenantId:       '',
-          staffId:        '',
-          name:           data.user.user_metadata?.name ?? emailPrefix,
-          email:          data.user.email ?? '',
-          role:           (data.user.user_metadata?.role as User['role']) ?? 'inspector',
-          avatarInitials: emailPrefix.slice(0, 2).toUpperCase(),
-        })
-      }
-    }
+    const { token, user: userData } = res.data
+    localStorage.setItem(JWT_KEY, token)
+
+    const name = userData.name ?? email.split('@')[0]
+    setUser({
+      id:             userData.id,
+      tenantId:       userData.tenantId ?? '',
+      staffId:        userData.staffId  ?? '',
+      name,
+      email:          userData.email,
+      role:           userData.role as User['role'],
+      avatarInitials: name.split(' ').map((s: string) => s[0]).join('').slice(0, 2).toUpperCase(),
+    })
   }, [])
 
   // ── Logout ──────────────────────────────────────────────────
-  const logout = useCallback(async () => {
-    await supabase.auth.signOut()
+  const logout = useCallback(() => {
+    localStorage.removeItem(JWT_KEY)
     setUser(null)
-    setSession(null)
   }, [])
 
   // ── Theme ───────────────────────────────────────────────────
@@ -134,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, session,
+      user,
       isAuthenticated: !!user,
       isLoading,
       theme,

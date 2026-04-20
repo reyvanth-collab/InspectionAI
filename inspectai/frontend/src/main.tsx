@@ -6,7 +6,12 @@ import './index.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 1000 * 60 * 5, retry: 1 },
+    queries: {
+      staleTime:        1000 * 60 * 5,   // data stays fresh for 5 min — no refetch on tab switch
+      gcTime:           1000 * 60 * 30,  // keep unused cache for 30 min — back-navigation is instant
+      retry:            1,
+      refetchOnWindowFocus: false,       // don't refetch just because user switched tabs
+    },
   },
 })
 

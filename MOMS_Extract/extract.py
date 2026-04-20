@@ -1,26 +1,25 @@
 """
-MOMS Checklist Extractor — Universal v3
+MOMS Checklist Extractor — Universal v4
 =========================================
-Dynamically resolves column headers and row labels for ANY WI structure.
-No hardcoded column positions. Works for radio checklists, measurement
-tables, form-style WIs, and mixed layouts.
+Production-grade extraction of MOMS checklist data for any WI number.
 
-Key algorithm:
-  For every input control at (row R, col C):
-    1. ColumnHeader  = scan upward from R for nearest Header row covering C
-    2. RowLabel      = scan left on same row R for nearest Label/Header
-    3. FullFieldName = ColumnHeader + " > " + RowLabel (if both exist)
-
-Sheets produced:
-  Summary          — run stats and result distribution
-  Checklist_Steps  — one row per input, fully labelled
-  Raw_Controls     — every control with full metadata (AI/ML feed)
+Key improvements in v4:
+  - Empty rows suppressed (unfilled template slots not written)
+  - Date filter: only records from --from_year onwards (default 2021)
+  - File splitting: separate Excel sheet per year, plus combined sheet
+  - File size guard: splits into multiple files if > MAX_ROWS_PER_FILE
+  - Dynamic header resolution for all table types
+  - Graceful handling if output file is already open
+  - Progress indicator during formatting
+  - FieldLabel truncation for long radio step descriptions
+  - Retry logic on file save
 
 Usage:
     python extract.py --wi SIG/WR/PMW/0007
     python extract.py --wi SIG/WR/PMW/0007 --limit 500
-    python extract.py --wi SIG/WR/PMW/0007 --limit 0      (all records)
-    python extract.py --wi SIG/WR/PMW/0007 --output C:/data
+    python extract.py --wi SIG/WR/PMW/0007 --limit 0
+    python extract.py --wi SIG/WR/PMW/0007 --from_year 2021
+    python extract.py --wi SIG/WR/PMW/0007 --output C:/Reports
 
 Author: SMRT Technical Operations
 """
@@ -30,13 +29,16 @@ import logging
 import os
 import re
 import sys
+import time
 from datetime import datetime
+from math import ceil
 
 import pandas as pd
 import pyodbc
 import xml.etree.ElementTree as ET
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 # ── LOGGING ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -46,13 +48,19 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ── DATABASE CONFIG ───────────────────────────────────────────────────────────
+# ── CONFIG ────────────────────────────────────────────────────────────────────
 DB_CONFIG = {
     "driver":   "SQL Server",
     "server":   "SQLRAILAGLP1",
     "port":     "9762",
     "database": "SMRT_MOMS_DB",
 }
+
+# Maximum rows per Excel file before splitting into multiple files
+MAX_ROWS_PER_FILE = 200_000
+
+# Maximum FieldLabel length (radio step descriptions can be very long)
+MAX_LABEL_LEN = 200
 
 # ── CONTROL TYPE CLASSIFICATION ───────────────────────────────────────────────
 CTRL_CATEGORY = {
@@ -74,16 +82,22 @@ INPUT_CATEGORIES = {
     "narrative", "remark", "confirmation", "datetime"
 }
 
+# Controls where an empty value is still meaningful to keep
+# (e.g. a radio with no result = unanswered step — analytically significant)
+KEEP_IF_EMPTY = {"result"}
+
 # Excel colours
 COLORS = {
     "header_bg":  "1F4E79",
     "section_bg": "2E75B6",
+    "year_bg":    "E9EFF7",
     "ok_bg":      "E2EFDA",
     "nok_bg":     "FCE4D6",
     "na_bg":      "FFF2CC",
     "alt_row":    "F2F2F2",
     "white":      "FFFFFF",
     "warn":       "C00000",
+    "grey_text":  "595959",
 }
 
 
@@ -97,18 +111,18 @@ def get_connection():
     )
     try:
         conn = pyodbc.connect(conn_str, timeout=30)
-        log.info(f"Connected to {DB_CONFIG['database']} on {DB_CONFIG['server']}")
+        log.info(f"Connected  →  {DB_CONFIG['database']} @ {DB_CONFIG['server']}")
         return conn
     except pyodbc.Error as e:
-        log.error(f"Connection failed: {e}")
+        log.error(f"DB connection failed: {e}")
         sys.exit(1)
 
 
-def fetch_records(wi_number, limit):
+def fetch_records(wi_number: str, limit: int, from_year: int) -> list:
     conn   = get_connection()
     cursor = conn.cursor()
     top    = f"TOP {limit}" if limit > 0 else ""
-    cursor.execute(f"""
+    query  = f"""
         SELECT {top}
             ID, Checklist, WorkOrderID,
             ChecklistTemplateID, ChecklistTemplateLookup,
@@ -117,67 +131,70 @@ def fetch_records(wi_number, limit):
         FROM   Checklist
         WHERE  IsDeleted = 0
           AND  ChecklistTemplateID = ?
+          AND  YEAR(Created) >= ?
         ORDER  BY ID DESC
-    """, (wi_number,))
+    """
+    cursor.execute(query, (wi_number, from_year))
     rows = cursor.fetchall()
     conn.close()
-    log.info(f"Fetched {len(rows):,} records for WI: {wi_number}")
+    log.info(
+        f"Fetched {len(rows):,} records  "
+        f"(WI: {wi_number}, from: {from_year}, limit: {limit or 'ALL'})"
+    )
     return rows
 
 
 # ── XML SECTION MODEL ─────────────────────────────────────────────────────────
-def build_section_model(section):
+def build_section_model(section: ET.Element) -> dict:
     """
-    Build a rich model of a section with two indexes:
-      row_map[row]     = [ctrl, ...]       — all controls on a row
-      col_map[col]     = [ctrl, ...]       — all controls in a column
-      header_rows      = sorted list of row numbers that are pure Header rows
-      col_header_map   = {(header_row, col): label} — header labels by position
+    Index all controls in a section by row and column.
+    Also detects header rows and builds col→header label mapping.
     """
-    row_map = {}
-    col_map = {}
+    row_map        = {}   # row_num: [ctrl_dict, ...]
+    col_map        = {}   # col_num: [ctrl_dict, ...]
+    header_rows    = []   # list of row numbers that are pure-header rows
+    col_header_map = {}   # (header_row, col): label
 
     for ctrl in section.findall(".//ControlBase"):
-        r   = int(ctrl.findtext("Row",         "0"))
-        c   = int(ctrl.findtext("Column",      "0"))
-        cs  = int(ctrl.findtext("ColumnSpan",  "1"))
-        t   =     ctrl.findtext("Type",        "")
-        lbl =     ctrl.findtext("Label",       "").strip()\
-                      .replace("#lbh#", " ").replace("\n", " ").strip()
-        dat =     ctrl.findtext("Data",        "").strip()
+        r   = int(ctrl.findtext("Row",        "0"))
+        c   = int(ctrl.findtext("Column",     "0"))
+        cs  = int(ctrl.findtext("ColumnSpan", "1"))
+        t   =     ctrl.findtext("Type",       "")
+        lbl = (   ctrl.findtext("Label",      "") or "")\
+                  .strip()\
+                  .replace("#lbh#", " ")\
+                  .replace("\n", " ")\
+                  .replace("\t", " ")\
+                  .strip()
+        dat = (ctrl.findtext("Data", "") or "").strip()
 
-        ctrl_dict = {
-            "row":      r,
-            "col":      c,
-            "col_span": cs,
-            "type":     t,
-            "label":    lbl,
-            "data":     dat,
-            "group":    ctrl.findtext("GroupName",    "").strip(),
-            "name":     ctrl.findtext("n",            "").strip(),
-            "mandatory":ctrl.findtext("Mandatory",    ""),
-            "dd_items": ctrl.findtext("DropDownItems","").strip(),
-            "min_val":  ctrl.findtext("Min",          "").strip(),
-            "max_val":  ctrl.findtext("Max",          "").strip(),
+        d = {
+            "row":       r,
+            "col":       c,
+            "col_span":  cs,
+            "type":      t,
+            "label":     lbl,
+            "data":      dat,
+            "group":     (ctrl.findtext("GroupName",    "") or "").strip(),
+            "name":      (ctrl.findtext("n",            "") or "").strip(),
+            "mandatory": (ctrl.findtext("Mandatory",    "") or "").strip(),
+            "dd_items":  (ctrl.findtext("DropDownItems","") or "").strip(),
+            "min_val":   (ctrl.findtext("Min",          "") or "").strip(),
+            "max_val":   (ctrl.findtext("Max",          "") or "").strip(),
         }
 
-        row_map.setdefault(r, []).append(ctrl_dict)
-        # Register this control against every column it spans
+        row_map.setdefault(r, []).append(d)
         for offset in range(cs):
-            col_map.setdefault(c + offset, []).append(ctrl_dict)
+            col_map.setdefault(c + offset, []).append(d)
 
-    # Find pure header rows (all non-empty controls are Headers)
-    # and build a col-position → label lookup per header row
-    header_rows      = []   # list of row numbers
-    col_header_map   = {}   # (row, col) -> label
-
+    # Detect header rows and build col→label index
     for r, controls in sorted(row_map.items()):
         non_empty = [c for c in controls if c["label"] or c["data"]]
         if not non_empty:
             continue
-        all_hdrs = all(c["type"] == "Header" for c in non_empty)
-        has_lbl  = any(c["label"] for c in non_empty)
-        if all_hdrs and has_lbl and len(non_empty) >= 2:
+        if (all(c["type"] == "Header" for c in non_empty)
+                and any(c["label"] for c in non_empty)
+                and len(non_empty) >= 2):
             header_rows.append(r)
             for c in non_empty:
                 for offset in range(c["col_span"]):
@@ -191,91 +208,68 @@ def build_section_model(section):
     }
 
 
-# ── DYNAMIC HEADER RESOLUTION ─────────────────────────────────────────────────
-def resolve_column_header(model, ctrl_row, ctrl_col):
-    """
-    Find the most relevant column header for an input control at (ctrl_row, ctrl_col).
-    Scans upward from ctrl_row to find the nearest header row that covers ctrl_col.
-    Returns the header label string or empty string.
-    """
-    col_header_map = model["col_header_map"]
-    header_rows    = model["header_rows"]
+# ── DYNAMIC LABEL RESOLUTION ──────────────────────────────────────────────────
+_SKIP_HEADERS = frozenset(["WI TITLE", "WR NO.", "WI NO.", "PAGE"])
 
-    # Find header rows that are above this control (strictly less than)
-    above = [r for r in header_rows if r < ctrl_row]
-    if not above:
-        return ""
 
-    # Start from closest header row and work upward
+def resolve_column_header(model: dict, ctrl_row: int, ctrl_col: int) -> str:
+    """
+    Scan upward from ctrl_row to find the nearest header row covering ctrl_col.
+    Skips generic WI title headers.
+    """
+    above = [r for r in model["header_rows"] if r < ctrl_row]
     for hdr_row in sorted(above, reverse=True):
-        label = col_header_map.get((hdr_row, ctrl_col), "")
-        if label:
-            # Skip generic WI title headers — not useful as field names
-            if any(skip in label for skip in ["WI TITLE", "WR NO.", "WI NO.", "Page"]):
-                continue
-            return label
-
+        label = model["col_header_map"].get((hdr_row, ctrl_col), "")
+        if label and not any(s in label.upper() for s in _SKIP_HEADERS):
+            return re.sub(r"\s+", " ", label).strip()
     return ""
 
 
-def resolve_row_label(model, ctrl_row, ctrl_col):
+def resolve_row_label(model: dict, ctrl_row: int, ctrl_col: int) -> str:
     """
-    Find the row label for an input control at (ctrl_row, ctrl_col).
-    Scans left on the same row for the nearest Label or Header control.
-    Returns the label string or empty string.
+    Scan left on the same row for the nearest Label or Header control.
     """
-    row_controls = model["row_map"].get(ctrl_row, [])
-
-    # Get all label-type controls to the left of this input
-    left_labels = [
-        c for c in row_controls
+    left = [
+        c for c in model["row_map"].get(ctrl_row, [])
         if c["type"] in ("Label", "Header")
         and c["col"] < ctrl_col
         and c["label"]
     ]
-
-    if not left_labels:
+    if not left:
         return ""
-
-    # Return the closest one to the left
-    return max(left_labels, key=lambda c: c["col"])["label"]
+    return re.sub(r"\s+", " ", max(left, key=lambda c: c["col"])["label"]).strip()
 
 
-def build_full_field_name(col_header, row_label, ctrl_label):
+def build_field_name(col_header: str, row_label: str, ctrl_label: str,
+                     max_len: int = MAX_LABEL_LEN) -> str:
     """
-    Construct a meaningful field name from available context.
-    Priority: col_header > row_label > ctrl_label
-    Combines both if both are meaningful and non-redundant.
+    Combine col_header and row_label into a meaningful field name.
+    Truncates to max_len to prevent excessively long labels.
     """
     parts = []
 
-    # Clean up col_header — remove excessive whitespace/tabs
     if col_header:
-        clean_hdr = re.sub(r"\s+", " ", col_header).strip()
-        # Truncate very long headers (keep meaningful part)
-        if len(clean_hdr) > 60:
-            clean_hdr = clean_hdr[:60].rsplit(" ", 1)[0] + "..."
-        parts.append(clean_hdr)
+        clean = col_header[:80] if len(col_header) > 80 else col_header
+        parts.append(clean)
 
     if row_label:
-        clean_row = re.sub(r"\s+", " ", row_label).strip()
-        # Only add row label if it's not already contained in col_header
-        if clean_row and clean_row.lower() not in (col_header or "").lower():
-            parts.append(clean_row)
+        clean = re.sub(r"\s+", " ", row_label).strip()
+        # Only add if not already contained in col_header
+        if clean and clean.lower() not in (col_header or "").lower():
+            parts.append(clean)
 
     if not parts and ctrl_label:
         parts.append(ctrl_label)
 
-    return " > ".join(parts) if parts else ""
+    result = " > ".join(parts)
+    if len(result) > max_len:
+        result = result[:max_len - 3] + "..."
+    return result
 
 
 # ── RADIO RESULT ──────────────────────────────────────────────────────────────
-def radio_result(row_controls):
-    """Resolve OK/NOK/NA from radio buttons on a row."""
-    radio_map = {
-        c["col"]: c["data"]
-        for c in row_controls if c["type"] == "Radio"
-    }
+def radio_result(row_controls: list) -> str:
+    radio_map = {c["col"]: c["data"] for c in row_controls if c["type"] == "Radio"}
     if radio_map.get(6) == "true": return "OK"
     if radio_map.get(7) == "true": return "NOK"
     if radio_map.get(8) == "true": return "NA"
@@ -283,11 +277,8 @@ def radio_result(row_controls):
 
 
 # ── METADATA DETECTION ────────────────────────────────────────────────────────
-def detect_wi_metadata(root):
-    """
-    Extract form-level metadata from first section header controls.
-    Flexible — does not assume fixed row/col positions.
-    """
+def detect_wi_metadata(root: ET.Element) -> dict:
+    """Extract form-level metadata. Flexible — works for any WI layout."""
     meta = {
         "WI_Title":    "",
         "WI_Number":   "",
@@ -298,31 +289,25 @@ def detect_wi_metadata(root):
         "Multimeter":  "",
     }
 
-    all_ctrls = root.findall(".//ControlBase")
-
-    # Build a flat list for scanning
     flat = []
-    for ctrl in all_ctrls:
+    for ctrl in root.findall(".//ControlBase"):
         flat.append({
-            "row":   int(ctrl.findtext("Row", "0")),
+            "row":   int(ctrl.findtext("Row",    "0")),
             "col":   int(ctrl.findtext("Column", "0")),
-            "cs":    int(ctrl.findtext("ColumnSpan", "1")),
-            "type":  ctrl.findtext("Type", ""),
-            "label": ctrl.findtext("Label", "").strip().replace("#lbh#", " "),
-            "data":  ctrl.findtext("Data", "").strip(),
+            "type":  ctrl.findtext("Type",  ""),
+            "label": (ctrl.findtext("Label", "") or "").strip().replace("#lbh#", " "),
+            "data":  (ctrl.findtext("Data",  "") or "").strip(),
         })
 
-    def adjacent_input(header_fragment):
-        """Find the input value adjacent to a header with a given label fragment."""
+    def adjacent_input(fragment: str) -> str:
         matches = [
             c for c in flat
             if c["type"] == "Header"
-            and header_fragment.lower() in c["label"].lower()
+            and fragment.lower() in c["label"].lower()
         ]
         if not matches:
             return ""
         hdr = matches[0]
-        # Look for input on same row, to the right
         candidates = sorted(
             [c for c in flat
              if c["row"] == hdr["row"]
@@ -332,27 +317,27 @@ def detect_wi_metadata(root):
         )
         return candidates[0]["data"] if candidates else ""
 
-    # WI Title — longest Header label in first 3 rows
-    title_candidates = [
+    # WI Title: longest Header label in first 3 rows, ignoring meta labels
+    title_skip = {"WI TITLE", "WI NO", "WR NO", "PAGE"}
+    candidates = [
         c for c in flat
         if c["type"] == "Header"
         and c["row"] <= 3
         and len(c["label"]) > 15
-        and not any(skip in c["label"].upper()
-                    for skip in ["WI TITLE", "WI NO", "WR NO", "PAGE"])
+        and not any(s in c["label"].upper() for s in title_skip)
     ]
-    if title_candidates:
-        meta["WI_Title"] = max(title_candidates, key=lambda x: len(x["label"]))["label"]
+    if candidates:
+        meta["WI_Title"] = max(candidates, key=lambda x: len(x["label"]))["label"]
 
-    # WI Number — Header with slash pattern e.g. SIG/WI/PMW/0007 REV 14
+    # WI/WR Number: Header with slash pattern
     for c in flat:
         if c["type"] == "Header" and c["row"] <= 5:
-            if re.search(r"[A-Z]+/[A-Z]+/", c["label"]) and not meta["WI_Number"]:
-                if "WI" in c["label"] or "wi" in c["label"].lower():
-                    meta["WI_Number"] = c["label"]
-            if re.search(r"[A-Z]+/[A-Z]+/", c["label"]) and "WR" in c["label"]:
-                if not meta["WR_Number"]:
-                    meta["WR_Number"] = c["label"]
+            lbl = c["label"]
+            if re.search(r"[A-Z]{2,}/[A-Z]{2,}/", lbl):
+                if "WI" in lbl and not meta["WI_Number"]:
+                    meta["WI_Number"] = lbl
+                if "WR" in lbl and not meta["WR_Number"]:
+                    meta["WR_Number"] = lbl
 
     meta["MaintOrder"]  = adjacent_input("Maintenance Order")
     meta["Station"]     = adjacent_input("Station")
@@ -363,53 +348,54 @@ def detect_wi_metadata(root):
 
 
 # ── SUBSECTION CONTEXT ────────────────────────────────────────────────────────
-def update_context(ctx, row_controls, row_num):
+def update_context(ctx: dict, row_controls: list) -> bool:
     """
-    Detect subsection headers (17.x, 17.x.x) and update context dict.
-    Returns True if this row is a context-only row (should not emit data).
+    Detect and update subsection context (17.x, 17.x.x patterns).
+    Returns True if this row is a context-only row (no data to emit).
     """
     non_empty = [c for c in row_controls if c["label"] or c["data"]]
-    all_hdrs  = non_empty and all(c["type"] in ("Header", "Label") for c in non_empty)
-
-    if not all_hdrs:
+    if not non_empty:
+        return False
+    if not all(c["type"] in ("Header", "Label") for c in non_empty):
         return False
 
-    # Check col 0 for subsection number pattern
-    col0_labels = [c["label"] for c in non_empty if c["col"] == 0 and c["label"]]
-    col2_labels = [c["label"] for c in non_empty if c["col"] == 2 and c["label"]]
+    col0 = [c["label"] for c in non_empty if c["col"] == 0 and c["label"]]
+    col2 = [c["label"] for c in non_empty if c["col"] == 2 and c["label"]]
 
-    if col0_labels:
-        lbl0 = col0_labels[0]
+    if not col0:
+        return False
 
-        # Subsection: 17.1 / 17.2 etc
-        if re.match(r"^\d+\.\d+$", lbl0) and col2_labels:
-            ctx["subsection_no"]   = lbl0
-            ctx["subsection_name"] = col2_labels[0]
-            ctx["subitem_no"]      = ""
-            ctx["subitem_name"]    = ""
-            return True
+    lbl0 = col0[0]
+    col2_span = next((c["col_span"] for c in non_empty if c["col"] == 2), 1)
 
-        # Sub-item: 17.1.1 etc (label spanning >= 5 cols)
-        col2_span = next(
-            (c["col_span"] for c in non_empty if c["col"] == 2), 1
-        )
-        if re.match(r"^\d+\.\d+\.\d+$", lbl0) and col2_span >= 5:
-            ctx["subitem_no"]   = lbl0
-            ctx["subitem_name"] = col2_labels[0] if col2_labels else ""
-            return True
+    if re.match(r"^\d+\.\d+$", lbl0) and col2:
+        ctx.update({
+            "subsection_no":   lbl0,
+            "subsection_name": col2[0],
+            "subitem_no":      "",
+            "subitem_name":    "",
+        })
+        return True
+
+    if re.match(r"^\d+\.\d+\.\d+$", lbl0) and col2_span >= 5:
+        ctx.update({
+            "subitem_no":   lbl0,
+            "subitem_name": col2[0] if col2 else "",
+        })
+        return True
 
     return False
 
 
 # ── CORE PARSER ───────────────────────────────────────────────────────────────
-def parse_record(row):
+def parse_record(row) -> dict:
     """
-    Parse one MOMS record. Returns:
-      { 'steps': [...], 'raw': [...], 'error': str|None }
+    Parse one MOMS record into structured step and raw control rows.
+    Only emits rows where value is filled OR category is in KEEP_IF_EMPTY.
+    Returns: {'steps': [...], 'raw': [...], 'error': str|None}
     """
-    record_id = row.ID
-    xml_str   = row.Checklist
-    out       = {"steps": [], "raw": [], "error": None}
+    out = {"steps": [], "raw": [], "error": None}
+    xml_str = row.Checklist
 
     if not xml_str or not str(xml_str).strip():
         out["error"] = "Empty XML"
@@ -418,12 +404,11 @@ def parse_record(row):
     try:
         root = ET.fromstring(xml_str)
     except ET.ParseError as e:
-        out["error"] = f"XML parse error: {e}"
+        out["error"] = f"Parse error: {e}"
         return out
 
-    # ── Base record metadata ──────────────────────────────────────────────────
     base = {
-        "ID":          record_id,
+        "ID":          row.ID,
         "WorkOrderID": str(row.WorkOrderID or "").strip(),
         "TemplateID":  str(row.ChecklistTemplateID or "").strip(),
         "Template":    str(row.ChecklistTemplateLookup or "").strip(),
@@ -431,33 +416,23 @@ def parse_record(row):
         "CreatedBy":   str(row.CreatedBy or "").strip(),
         "FilledBy":    str(row.FilledBy or "").strip(),
         "VersionNo":   row.VersionNo,
+        **detect_wi_metadata(root),
     }
 
-    form_meta = detect_wi_metadata(root)
-    base      = {**base, **form_meta}
+    for sec_idx, section in enumerate(root.findall(".//Section")):
+        sec_name = (section.findtext("n", "") or "").strip() or f"Section_{sec_idx}"
 
-    sections = root.findall(".//Section")
-
-    for sec_idx, section in enumerate(sections):
-        sec_name = section.findtext("n", "").strip() or f"Section_{sec_idx}"
-
-        # Skip sections with no analytical controls
+        # Skip sections with no analytical controls at all
         type_counts = {}
         for c in section.findall(".//ControlBase"):
             t = c.findtext("Type", "")
             type_counts[t] = type_counts.get(t, 0) + 1
-
-        analytical = {
-            t: v for t, v in type_counts.items()
-            if CTRL_CATEGORY.get(t, "") in INPUT_CATEGORIES
-        }
-        if not analytical:
+        if not any(CTRL_CATEGORY.get(t, "") in INPUT_CATEGORIES
+                   for t in type_counts):
             continue
 
-        # Build section model with header indexes
         model = build_section_model(section)
 
-        # Subsection context tracker
         ctx = {
             "subsection_no":   "",
             "subsection_name": "",
@@ -468,11 +443,9 @@ def parse_record(row):
         for row_num in sorted(model["row_map"].keys()):
             row_controls = model["row_map"][row_num]
 
-            # Update subsection context (returns True = context-only row, skip)
-            if update_context(ctx, row_controls, row_num):
+            if update_context(ctx, row_controls):
                 continue
 
-            # Collect input controls on this row
             inputs = [
                 c for c in row_controls
                 if CTRL_CATEGORY.get(c["type"], "") in INPUT_CATEGORIES
@@ -480,51 +453,60 @@ def parse_record(row):
             if not inputs:
                 continue
 
-            # ── For each input control, resolve full label context ─────────────
             for ctrl in inputs:
                 ctrl_type = ctrl["type"]
                 category  = CTRL_CATEGORY.get(ctrl_type, "other")
                 raw_value = ctrl["data"]
 
-                # ── DYNAMIC HEADER RESOLUTION ─────────────────────────────────
-                col_header = resolve_column_header(model, row_num, ctrl["col"])
-                row_label  = resolve_row_label(model, row_num, ctrl["col"])
-                field_name = build_full_field_name(col_header, row_label, ctrl["label"])
-
-                # ── Normalise value per control type ──────────────────────────
+                # ── Normalise value ───────────────────────────────────────────
                 if ctrl_type == "Radio":
-                    # Only emit one row per radio group (col 6 = OK trigger)
                     if ctrl["col"] != 6:
-                        continue
-                    value      = radio_result(row_controls)
-                    # For radio, field_name = step description (col 2 label)
-                    step_label = next(
-                        (c["label"] for c in row_controls
-                         if c["type"] == "Label" and c["col"] == 2),
-                        field_name
-                    )
-                    field_name = step_label or field_name
+                        continue  # Only emit once per radio group
+                    value = radio_result(row_controls)
 
                 elif ctrl_type == "CheckBox":
-                    value = "YES" if raw_value == "true" else (
-                            "NO"  if raw_value == "false" else "")
+                    value = ("YES" if raw_value == "true"
+                             else "NO" if raw_value == "false"
+                             else "")
 
                 else:
                     value = raw_value
 
-                # Step number (col 0 label) for checklist rows
+                # ── Filter: skip empty rows unless analytically significant ───
+                is_empty = not value or str(value).strip() == ""
+                if is_empty and category not in KEEP_IF_EMPTY:
+                    continue
+
+                # ── Resolve labels ────────────────────────────────────────────
+                col_header = resolve_column_header(model, row_num, ctrl["col"])
+                row_label  = resolve_row_label(model, row_num, ctrl["col"])
+
+                # For radio steps, the best field name is the step description
+                if ctrl_type == "Radio":
+                    step_desc = next(
+                        (c["label"] for c in row_controls
+                         if c["type"] == "Label" and c["col"] == 2),
+                        ""
+                    )
+                    field_name = build_field_name(
+                        col_header, step_desc or row_label, ctrl["label"]
+                    )
+                else:
+                    field_name = build_field_name(col_header, row_label, ctrl["label"])
+
                 step_no = next(
                     (c["label"] for c in row_controls
                      if c["type"] == "Label" and c["col"] == 0),
                     ""
                 )
 
-                # Inline remark for radio steps (col 9)
-                inline_remark = next(
-                    (c["data"] for c in row_controls
-                     if c["type"] in ("Remark", "TextArea") and c["col"] == 9),
-                    ""
-                ) if ctrl_type == "Radio" else ""
+                inline_remark = (
+                    next(
+                        (c["data"] for c in row_controls
+                         if c["type"] in ("Remark", "TextArea") and c["col"] == 9),
+                        ""
+                    ) if ctrl_type == "Radio" else ""
+                )
 
                 # ── Checklist_Steps row ───────────────────────────────────────
                 out["steps"].append({
@@ -537,19 +519,17 @@ def parse_record(row):
                     "SubItemName":    ctx["subitem_name"],
                     "StepNo":         step_no,
                     "FieldLabel":     field_name,
-                    "ColHeader":      col_header,     # <- raw column header
-                    "RowLabel":       row_label,       # <- raw row label
+                    "ColHeader":      col_header,
+                    "RowLabel":       row_label,
                     "CtrlType":       ctrl_type,
                     "Category":       category,
                     "Value":          value,
-                    "IsFilled":       bool(value),
+                    "IsFilled":       not is_empty,
                     "IsNOK":          value == "NOK",
                     "Remark":         inline_remark,
                     "HasRemark":      bool(inline_remark),
                     "DropDownOpts":   ctrl["dd_items"],
                     "Mandatory":      ctrl["mandatory"],
-                    "GridRow":        row_num,
-                    "GridCol":        ctrl["col"],
                 })
 
                 # ── Raw_Controls row (full fidelity) ──────────────────────────
@@ -569,6 +549,7 @@ def parse_record(row):
                     "CtrlName":     ctrl["name"],
                     "GroupName":    ctrl["group"],
                     "RawValue":     raw_value,
+                    "Value":        value,
                     "DropDownOpts": ctrl["dd_items"],
                     "Mandatory":    ctrl["mandatory"],
                     "MinVal":       ctrl["min_val"],
@@ -578,26 +559,64 @@ def parse_record(row):
     return out
 
 
+# ── DATAFRAME POST-PROCESSING ─────────────────────────────────────────────────
+def postprocess(df_steps: pd.DataFrame, df_raw: pd.DataFrame):
+    """Clean and enrich DataFrames after parsing."""
+    if df_steps.empty:
+        return df_steps, df_raw
+
+    # Parse Created to datetime
+    df_steps["Created"] = pd.to_datetime(df_steps["Created"], errors="coerce")
+    df_steps["Year"]    = df_steps["Created"].dt.year
+    df_steps["Month"]   = df_steps["Created"].dt.to_period("M").astype(str)
+
+    if not df_raw.empty:
+        df_raw["Created"] = pd.to_datetime(df_raw["Created"], errors="coerce")
+        df_raw["Year"]    = df_raw["Created"].dt.year
+
+    # Remove duplicate step rows (same record + same grid position)
+    before = len(df_steps)
+    df_steps = df_steps.drop_duplicates(
+        subset=["ID", "SectionIdx", "FieldLabel", "CtrlType", "Value"],
+        keep="first"
+    )
+    dupes_removed = before - len(df_steps)
+    if dupes_removed:
+        log.info(f"Removed {dupes_removed:,} duplicate step rows")
+
+    # Sort for readability
+    df_steps = df_steps.sort_values(
+        ["Created", "ID", "SectionIdx"],
+        ascending=[False, False, True]
+    ).reset_index(drop=True)
+
+    return df_steps, df_raw
+
+
 # ── SUMMARY ───────────────────────────────────────────────────────────────────
-def build_summary(df_steps, wi_number, limit, record_count, error_count):
+def build_summary(df_steps: pd.DataFrame, wi_number: str, limit: int,
+                  from_year: int, record_count: int, error_count: int,
+                  output_files: list) -> pd.DataFrame:
+
     if df_steps.empty:
         filled = nok = ok = na = total_steps = 0
-        ctrl_dist = {}
-        cat_dist  = {}
+        ctrl_dist = {}; cat_dist = {}; year_dist = {}
     else:
-        filled      = df_steps[df_steps["IsFilled"] == True]["ID"].nunique()
-        nok         = int(df_steps["IsNOK"].sum())
-        val_counts  = df_steps["Value"].value_counts()
-        ok          = int(val_counts.get("OK",  0))
-        na          = int(val_counts.get("NA",  0))
-        total_steps = len(df_steps)
-        ctrl_dist   = df_steps["CtrlType"].value_counts().to_dict()
-        cat_dist    = df_steps["Category"].value_counts().to_dict()
+        filled     = int(df_steps[df_steps["IsFilled"]]["ID"].nunique())
+        nok        = int(df_steps["IsNOK"].sum())
+        vc         = df_steps["Value"].value_counts()
+        ok         = int(vc.get("OK",  0))
+        na         = int(vc.get("NA",  0))
+        total_steps= len(df_steps)
+        ctrl_dist  = df_steps["CtrlType"].value_counts().to_dict()
+        cat_dist   = df_steps["Category"].value_counts().to_dict()
+        year_dist  = df_steps.groupby("Year")["ID"].nunique().to_dict()
 
     rows = [
         ("── Extraction Info ──",    ""),
         ("WI Number",                wi_number),
         ("Extracted On",             datetime.now().strftime("%Y-%m-%d %H:%M")),
+        ("From Year",                str(from_year)),
         ("Record Limit",             str(limit) if limit > 0 else "All records"),
         ("",                         ""),
         ("── Record Counts ──",      ""),
@@ -607,16 +626,22 @@ def build_summary(df_steps, wi_number, limit, record_count, error_count):
         ("Parse Errors",             error_count),
         ("",                         ""),
         ("── Step Results ──",       ""),
-        ("Total Step Rows",          total_steps),
+        ("Total Step Rows (filled)", total_steps),
         ("OK Responses",             ok),
         ("NOK Responses",            nok),
         ("NA Responses",             na),
         ("",                         ""),
-        ("── Control Types ──",      ""),
+        ("── Records by Year ──",    ""),
+    ] + [(f"  {y}", v) for y, v in sorted(year_dist.items())] + [
+        ("",                         ""),
+        ("── Control Type Mix ──",   ""),
     ] + [(f"  {k}", v) for k, v in sorted(ctrl_dist.items())] + [
         ("",                         ""),
         ("── Categories ──",         ""),
-    ] + [(f"  {k}", v) for k, v in sorted(cat_dist.items())]
+    ] + [(f"  {k}", v) for k, v in sorted(cat_dist.items())] + [
+        ("",                         ""),
+        ("── Output Files ──",       ""),
+    ] + [(f"  File {i+1}", f) for i, f in enumerate(output_files)]
 
     return pd.DataFrame(rows, columns=["Metric", "Value"])
 
@@ -625,151 +650,273 @@ def build_summary(df_steps, wi_number, limit, record_count, error_count):
 def _font(bold=False, color="000000", size=10):
     return Font(name="Arial", bold=bold, color=color, size=size)
 
-def _fill(hex_color):
+def _fill(hex_color: str):
     return PatternFill("solid", fgColor=hex_color)
 
 def _border():
-    s = Side(style="thin", color="CCCCCC")
+    s = Side(style="thin", color="D0D0D0")
     return Border(left=s, right=s, top=s, bottom=s)
 
 
-def format_sheet(ws, col_widths, result_col=None, freeze_col=4):
-    """Apply consistent formatting to a data worksheet."""
+def format_data_sheet(ws, col_widths: dict, result_col: str = None,
+                      freeze_col: int = 5):
+    """Format a data worksheet efficiently."""
+    # Header row
     for cell in ws[1]:
         cell.font      = _font(bold=True, color="FFFFFF")
         cell.fill      = _fill(COLORS["header_bg"])
         cell.alignment = Alignment(horizontal="center", vertical="center",
                                    wrap_text=True)
         cell.border    = _border()
-    ws.row_dimensions[1].height = 32
+    ws.row_dimensions[1].height = 30
 
+    # Data rows — batch process for speed
     for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
         bg = COLORS["alt_row"] if row_idx % 2 == 0 else COLORS["white"]
         for cell in row:
-            cell.font      = _font()
+            cell.font      = _font(size=9)
             cell.border    = _border()
-            cell.alignment = Alignment(vertical="center", wrap_text=True)
+            cell.alignment = Alignment(vertical="center", wrap_text=False)
+
             if result_col and cell.column_letter == result_col:
                 val = str(cell.value or "").strip()
                 if   val == "OK":  cell.fill = _fill(COLORS["ok_bg"])
                 elif val == "NOK":
                     cell.fill = _fill(COLORS["nok_bg"])
-                    cell.font = _font(bold=True, color=COLORS["warn"])
+                    cell.font = _font(bold=True, color=COLORS["warn"], size=9)
                 elif val == "NA":  cell.fill = _fill(COLORS["na_bg"])
                 else:              cell.fill = _fill(bg)
             else:
                 cell.fill = _fill(bg)
 
-    for col_letter, width in col_widths.items():
-        ws.column_dimensions[col_letter].width = width
+        ws.row_dimensions[row_idx].height = 15
+
+    for col, width in col_widths.items():
+        ws.column_dimensions[col].width = width
 
     ws.freeze_panes    = ws.cell(row=2, column=freeze_col + 1)
     ws.auto_filter.ref = ws.dimensions
 
 
-def format_summary(ws):
+def format_summary_sheet(ws):
     ws.column_dimensions["A"].width = 35
     ws.column_dimensions["B"].width = 30
     for row in ws.iter_rows():
         for cell in row:
             val = str(cell.value or "")
             if val.startswith("──"):
-                cell.font = _font(bold=True, color="FFFFFF")
+                cell.font = _font(bold=True, color="FFFFFF", size=10)
                 cell.fill = _fill(COLORS["section_bg"])
             else:
                 cell.font = _font(size=10)
                 cell.fill = _fill(COLORS["white"])
             cell.border    = _border()
             cell.alignment = Alignment(vertical="center")
-        ws.row_dimensions[row[0].row].height = 20
+        ws.row_dimensions[row[0].row].height = 18
 
 
-def apply_formatting(path):
+STEPS_COL_WIDTHS = {
+    "A": 8,  "B": 14, "C": 12, "D": 22, "E": 18,
+    "F": 18, "G": 16, "H": 14, "I": 14, "J": 14,
+    "K": 10, "L": 35, "M": 22, "N": 20, "O": 10,
+    "P": 10, "Q": 30, "R": 8,  "S": 8,  "T": 8,
+    "U": 8,  "V": 18, "W": 6,  "X": 8,
+}
+
+RAW_COL_WIDTHS = {
+    "A": 8,  "B": 14, "C": 12, "D": 22, "E": 8,
+    "F": 8,  "G": 10, "H": 10, "I": 22, "J": 20,
+    "K": 35, "L": 18, "M": 18, "N": 10, "O": 22,
+    "P": 30, "Q": 8,  "R": 8,  "S": 8,  "T": 8,
+}
+
+
+def apply_formatting(path: str):
+    """Load workbook and apply all formatting. Handles large sheets efficiently."""
+    log.info(f"Applying formatting to {os.path.basename(path)} ...")
     wb = load_workbook(path)
 
     if "Summary" in wb.sheetnames:
-        format_summary(wb["Summary"])
+        format_summary_sheet(wb["Summary"])
+        log.info("  Summary ✓")
 
-    if "Checklist_Steps" in wb.sheetnames:
-        ws = wb["Checklist_Steps"]
+    # Format all year sheets and the combined sheet
+    for sheet_name in wb.sheetnames:
+        if sheet_name in ("Summary", "Raw_Controls"):
+            continue
+        ws = wb[sheet_name]
+        if ws.max_row <= 1:
+            continue
         val_col = next(
             (c.column_letter for c in ws[1] if str(c.value) == "Value"), None
         )
-        format_sheet(ws, {
-            "A": 8,  "B": 14, "C": 14, "D": 28, "E": 20,
-            "F": 18, "G": 18, "H": 14, "I": 14, "J": 14,
-            "K": 12, "L": 35, "M": 20, "N": 20, "O": 12,
-            "P": 12, "Q": 30, "R": 8,  "S": 8,  "T": 8,
-            "U": 8,  "V": 20, "W": 8,  "X": 8,
-        }, result_col=val_col, freeze_col=5)
+        format_data_sheet(ws, STEPS_COL_WIDTHS,
+                          result_col=val_col, freeze_col=5)
+        log.info(f"  {sheet_name} ✓")
 
     if "Raw_Controls" in wb.sheetnames:
         ws = wb["Raw_Controls"]
-        format_sheet(ws, {
-            "A": 8,  "B": 14, "C": 14, "D": 28, "E": 8,
-            "F": 8,  "G": 12, "H": 12, "I": 20, "J": 20,
-            "K": 35, "L": 20, "M": 20, "N": 12, "O": 30,
-            "P": 8,  "Q": 8,  "R": 8,  "S": 8,
-        }, freeze_col=4)
+        if ws.max_row > 1:
+            format_data_sheet(wb["Raw_Controls"], RAW_COL_WIDTHS, freeze_col=4)
+            log.info("  Raw_Controls ✓")
 
     wb.save(path)
-    log.info("Formatting applied")
+    log.info(f"Formatting complete: {os.path.basename(path)}")
+
+
+# ── SAFE FILE SAVE ────────────────────────────────────────────────────────────
+def safe_save(writer_fn, path: str, retries: int = 3, delay: int = 5):
+    """
+    Save with retry logic. If the file is open in Excel,
+    wait and retry rather than crashing.
+    """
+    for attempt in range(1, retries + 1):
+        try:
+            writer_fn(path)
+            return path
+        except PermissionError:
+            if attempt < retries:
+                log.warning(
+                    f"  File is open in another application. "
+                    f"Please close it. Retrying in {delay}s "
+                    f"(attempt {attempt}/{retries})..."
+                )
+                time.sleep(delay)
+            else:
+                # Save to a new filename instead of failing
+                base, ext = os.path.splitext(path)
+                alt_path  = f"{base}_v{attempt}{ext}"
+                log.warning(f"  Saving to alternate path: {alt_path}")
+                writer_fn(alt_path)
+                return alt_path
 
 
 # ── OUTPUT ────────────────────────────────────────────────────────────────────
-def safe_name(wi_number):
+def safe_name(wi_number: str) -> str:
     return re.sub(r"[^\w]", "_", wi_number).strip("_")
 
 
-def save_workbook(df_steps, df_raw, df_summary, wi_number, output_folder):
+def write_workbook(path: str, df_steps: pd.DataFrame, df_raw: pd.DataFrame,
+                   df_summary: pd.DataFrame, years: list):
+    """Write all sheets to a single workbook."""
+    def _write(p):
+        with pd.ExcelWriter(p, engine="openpyxl", datetime_format="YYYY-MM-DD HH:MM") as writer:
+            df_summary.to_excel(writer, sheet_name="Summary",
+                                index=False, header=False)
+
+            # Year-by-year sheets
+            for year in sorted(years):
+                year_df = df_steps[df_steps["Year"] == year].copy()
+                if year_df.empty:
+                    continue
+                year_df = year_df.drop(
+                    columns=["Year", "Month", "IsFilled", "IsNOK"],
+                    errors="ignore"
+                )
+                sheet_name = str(year)
+                year_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                log.info(f"  Sheet '{sheet_name}': {len(year_df):,} rows")
+
+            # Combined sheet (all years)
+            combined = df_steps.drop(
+                columns=["IsFilled", "IsNOK"], errors="ignore"
+            )
+            combined.to_excel(writer, sheet_name="All_Years", index=False)
+            log.info(f"  Sheet 'All_Years': {len(combined):,} rows")
+
+            # Raw controls
+            if not df_raw.empty:
+                df_raw_out = df_raw.drop(
+                    columns=["Year", "GridRow", "GridCol"], errors="ignore"
+                )
+                df_raw_out.to_excel(writer, sheet_name="Raw_Controls", index=False)
+                log.info(f"  Sheet 'Raw_Controls': {len(df_raw_out):,} rows")
+
+    return safe_save(_write, path)
+
+
+def save_outputs(df_steps: pd.DataFrame, df_raw: pd.DataFrame,
+                 df_summary: pd.DataFrame, wi_number: str,
+                 output_folder: str) -> list:
+    """
+    Save output. Splits into multiple files if row count exceeds MAX_ROWS_PER_FILE.
+    Returns list of output file paths.
+    """
     os.makedirs(output_folder, exist_ok=True)
-    ts       = datetime.now().strftime("%Y%m%d_%H%M")
-    path     = os.path.join(output_folder, f"{safe_name(wi_number)}_{ts}.xlsx")
+    ts      = datetime.now().strftime("%Y%m%d_%H%M")
+    base    = safe_name(wi_number)
+    paths   = []
 
-    with pd.ExcelWriter(path, engine="openpyxl") as writer:
-        df_summary.to_excel(writer, sheet_name="Summary",
-                            index=False, header=False)
-        if not df_steps.empty:
-            df_steps.drop(
-                columns=["GridRow", "GridCol"], errors="ignore"
-            ).to_excel(writer, sheet_name="Checklist_Steps", index=False)
-        if not df_raw.empty:
-            df_raw.to_excel(writer, sheet_name="Raw_Controls", index=False)
+    if df_steps.empty:
+        log.warning("No data to write.")
+        return paths
 
-    return path
+    years = sorted(df_steps["Year"].dropna().unique().astype(int).tolist())
+    total_rows = len(df_steps)
+
+    if total_rows <= MAX_ROWS_PER_FILE:
+        # Single file
+        path = os.path.join(output_folder, f"{base}_{ts}.xlsx")
+        path = write_workbook(path, df_steps, df_raw, df_summary, years)
+        paths.append(path)
+    else:
+        # Split by year into separate files
+        log.info(
+            f"Row count {total_rows:,} exceeds limit {MAX_ROWS_PER_FILE:,}. "
+            f"Splitting by year..."
+        )
+        for year in years:
+            year_steps = df_steps[df_steps["Year"] == year].copy()
+            year_raw   = df_raw[df_raw["Year"] == year].copy() if not df_raw.empty else pd.DataFrame()
+            if year_steps.empty:
+                continue
+            path = os.path.join(output_folder, f"{base}_{year}_{ts}.xlsx")
+            path = write_workbook(path, year_steps, year_raw, df_summary, [year])
+            paths.append(path)
+            log.info(f"  Saved {year}: {len(year_steps):,} rows → {os.path.basename(path)}")
+
+    return paths
 
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract MOMS checklist data for any WI number.",
+        description="Universal MOMS checklist extractor — any WI, any structure.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   python extract.py --wi SIG/WR/PMW/0007
   python extract.py --wi SIG/WR/PMW/0007 --limit 1000
-  python extract.py --wi SIG/WR/PMW/0007 --limit 0
+  python extract.py --wi SIG/WR/PMW/0007 --limit 0 --from_year 2021
   python extract.py --wi SIG/WR/PMW/0007 --output C:/Reports
         """
     )
-    parser.add_argument("--wi",     required=True,
+    parser.add_argument("--wi",        required=True,
                         help="WI number e.g. SIG/WR/PMW/0007")
-    parser.add_argument("--limit",  type=int, default=500,
-                        help="Max records. 0 = all. Default: 500")
-    parser.add_argument("--output", default="output",
+    parser.add_argument("--limit",     type=int, default=0,
+                        help="Max records to fetch. 0 = all. Default: 0 (all)")
+    parser.add_argument("--from_year", type=int, default=2021,
+                        help="Only fetch records from this year onwards. Default: 2021")
+    parser.add_argument("--output",    default="output",
                         help="Output folder. Default: output/")
     args = parser.parse_args()
 
     wi_number = args.wi.strip()
+
     log.info("=" * 60)
-    log.info(f"  WI : {wi_number}  |  Limit : {args.limit or 'ALL'}")
+    log.info(f"  WI        : {wi_number}")
+    log.info(f"  From Year : {args.from_year}")
+    log.info(f"  Limit     : {args.limit or 'ALL'}")
+    log.info(f"  Output    : {args.output}")
     log.info("=" * 60)
 
-    records = fetch_records(wi_number, args.limit)
+    # ── Fetch ─────────────────────────────────────────────────────────────────
+    records = fetch_records(wi_number, args.limit, args.from_year)
     if not records:
-        log.warning("No records found. Check WI number.")
+        log.warning("No records found. Check WI number and date range.")
         sys.exit(0)
 
+    # ── Parse ─────────────────────────────────────────────────────────────────
     all_steps, all_raw, errors = [], [], []
 
     for i, row in enumerate(records, 1):
@@ -781,7 +928,7 @@ Examples:
             all_steps.extend(parsed["steps"])
             all_raw.extend(parsed["raw"])
         if i % 100 == 0:
-            log.info(f"  Parsed {i:,} / {len(records):,} ...")
+            log.info(f"  Parsed {i:,} / {len(records):,} records ...")
 
     log.info(
         f"Parsing complete → "
@@ -790,24 +937,55 @@ Examples:
         f"{len(errors):,} errors"
     )
 
-    df_steps   = pd.DataFrame(all_steps)
-    df_raw     = pd.DataFrame(all_raw)
-    df_summary = build_summary(
-        df_steps, wi_number, args.limit, len(records), len(errors)
+    # ── Build DataFrames ──────────────────────────────────────────────────────
+    df_steps = pd.DataFrame(all_steps)
+    df_raw   = pd.DataFrame(all_raw)
+    df_steps, df_raw = postprocess(df_steps, df_raw)
+
+    log.info(
+        f"After dedup → "
+        f"{len(df_steps):,} step rows | "
+        f"{len(df_raw):,} raw rows"
     )
 
-    path = save_workbook(df_steps, df_raw, df_summary, wi_number, args.output)
-    log.info(f"Saved: {path}")
+    # ── Save ──────────────────────────────────────────────────────────────────
+    # Build summary with placeholder for output files (filled after save)
+    df_summary = build_summary(
+        df_steps, wi_number, args.limit, args.from_year,
+        len(records), len(errors), []
+    )
 
-    apply_formatting(path)
+    output_paths = save_outputs(df_steps, df_raw, df_summary, wi_number, args.output)
 
+    # Rebuild summary with actual filenames and apply formatting
+    df_summary = build_summary(
+        df_steps, wi_number, args.limit, args.from_year,
+        len(records), len(errors),
+        [os.path.basename(p) for p in output_paths]
+    )
+
+    for path in output_paths:
+        # Update summary sheet in each file
+        wb = load_workbook(path)
+        if "Summary" in wb.sheetnames:
+            ws = wb["Summary"]
+            ws.delete_rows(1, ws.max_row)
+            for r_idx, r in enumerate(df_summary.itertuples(index=False), 1):
+                ws.cell(r_idx, 1, r[0])
+                ws.cell(r_idx, 2, r[1])
+            wb.save(path)
+
+        apply_formatting(path)
+
+    # ── Save errors ───────────────────────────────────────────────────────────
     if errors:
         err_path = os.path.join(
             args.output, f"{safe_name(wi_number)}_errors.csv"
         )
         pd.DataFrame(errors).to_csv(err_path, index=False)
-        log.warning(f"Errors saved: {err_path}")
+        log.warning(f"Parse errors saved: {err_path}")
 
+    # ── Final report ──────────────────────────────────────────────────────────
     nok_count = int(df_steps["IsNOK"].sum()) if not df_steps.empty else 0
 
     log.info("=" * 60)
@@ -816,9 +994,12 @@ Examples:
     log.info(f"  Step rows      : {len(df_steps):,}")
     log.info(f"  NOK responses  : {nok_count:,}")
     log.info(f"  Parse errors   : {len(errors):,}")
-    log.info(f"  Output         : {path}")
+    for p in output_paths:
+        size_mb = os.path.getsize(p) / 1024 / 1024
+        log.info(f"  Output         : {p}  ({size_mb:.1f} MB)")
     log.info("=" * 60)
 
 
 if __name__ == "__main__":
     main()
+    

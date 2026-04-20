@@ -33,6 +33,29 @@ export function useUsers() {
   })
 }
 
+export function useApprovers() {
+  const { user } = useAuth()
+  return useQuery({
+    queryKey: ['approvers'],
+    enabled:  !!user,
+    queryFn:  async (): Promise<TenantUser[]> => {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name, email, staff_id, role')
+        .in('role', ['admin', 'approver'])
+        .order('name')
+      if (error) throw new Error(error.message)
+      return (data ?? []).map(r => ({
+        id:      r.id as string,
+        name:    r.name as string,
+        email:   r.email as string,
+        staffId: r.staff_id as string,
+        role:    r.role as UserRole,
+      }))
+    },
+  })
+}
+
 export function useUpdateUserRole() {
   const qc = useQueryClient()
   return useMutation({

@@ -9,19 +9,17 @@ interface DBNotification {
   message: string
   severity: string
   read: boolean
-  entity_type: string | null
-  entity_id: string | null
   created_at: string
 }
 
 function toNotification(row: DBNotification): Notification {
   return {
-    id:         row.id,
-    title:      row.title,
-    message:    row.message,
-    severity:   row.severity as Notification['severity'],
-    createdAt:  new Date(row.created_at).toLocaleString('en-SG', { hour12: false }).slice(0, 16),
-    read:       row.read,
+    id:        row.id,
+    title:     row.title,
+    message:   row.message,
+    severity:  row.severity as Notification['severity'],
+    createdAt: new Date(row.created_at).toLocaleString('en-SG', { hour12: false }).slice(0, 16),
+    read:      row.read,
   }
 }
 
@@ -34,15 +32,14 @@ export function useNotifications() {
     queryFn:  async () => {
       const { data, error } = await supabase
         .from('notifications')
-        .select('*')
+        .select('id, title, message, severity, read, created_at')
         .order('created_at', { ascending: false })
-        .limit(100)
+        .limit(50)
 
       if (error) throw new Error(error.message)
       return (data as DBNotification[]).map(toNotification)
     },
-    // Refetch every 30s for near-real-time feel
-    refetchInterval: 30_000,
+    refetchInterval: 2 * 60 * 1000,   // poll every 2 min, not 30s
   })
 }
 
@@ -57,7 +54,19 @@ export function useMarkAllRead() {
         .eq('read', false)
       if (error) throw new Error(error.message)
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onMutate: async () => {
+      // Optimistic update — mark all read in cache instantly
+      await qc.cancelQueries({ queryKey: ['notifications'] })
+      const prev = qc.getQueryData<Notification[]>(['notifications'])
+      qc.setQueryData<Notification[]>(['notifications'],
+        old => old?.map(n => ({ ...n, read: true })) ?? []
+      )
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['notifications'], ctx.prev)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   })
 }
 
@@ -72,6 +81,17 @@ export function useMarkRead() {
         .eq('id', id)
       if (error) throw new Error(error.message)
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ['notifications'] })
+      const prev = qc.getQueryData<Notification[]>(['notifications'])
+      qc.setQueryData<Notification[]>(['notifications'],
+        old => old?.map(n => n.id === id ? { ...n, read: true } : n) ?? []
+      )
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['notifications'], ctx.prev)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   })
 }

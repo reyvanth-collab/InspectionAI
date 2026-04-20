@@ -10,6 +10,7 @@ import approvalsRouter     from './routes/approvals'
 import notificationsRouter from './routes/notifications'
 import analyticsRouter     from './routes/analytics'
 import aiRouter            from './routes/ai'
+import momsRouter          from './routes/moms'
 import { errorHandler }    from './middleware/errorHandler'
 
 dotenv.config()
@@ -24,6 +25,7 @@ app.use(cors({
   credentials: true,
 }))
 app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // ── Routes ──────────────────────────────────────────────────
 app.use('/api/auth',              authRouter)
@@ -33,6 +35,7 @@ app.use('/api/approvals',         approvalsRouter)
 app.use('/api/notifications',     notificationsRouter)
 app.use('/api/analytics',         analyticsRouter)
 app.use('/api/ai',                aiRouter)
+app.use('/api/moms',             momsRouter)
 
 // ── Health check ────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
