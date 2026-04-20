@@ -15,6 +15,9 @@ import Notifications      from '@/pages/Notifications'
 import Settings           from '@/pages/Settings'
 import InspectionExecution from '@/pages/InspectionExecution'
 import WIDetail            from '@/pages/WIDetail'
+import WIBuilder           from '@/pages/WIBuilder'
+import MOMSAnalytics       from '@/pages/MOMSAnalytics'
+import AuditTrail          from '@/pages/AuditTrail'
 
 // Shows nothing while Supabase restores the session — prevents redirect flicker.
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -48,11 +51,15 @@ function AppRoutes() {
       <Route path="/dashboard"     element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/inspections"    element={<ProtectedRoute><Inspections /></ProtectedRoute>} />
       <Route path="/inspections/:id" element={<ProtectedRoute><InspectionExecution /></ProtectedRoute>} />
-      <Route path="/library"        element={<ProtectedRoute><MasterLibrary /></ProtectedRoute>} />
-      <Route path="/library/:id"   element={<ProtectedRoute><WIDetail /></ProtectedRoute>} />
+      <Route path="/library"            element={<ProtectedRoute><MasterLibrary /></ProtectedRoute>} />
+      <Route path="/library/new"        element={<ProtectedRoute><WIBuilder /></ProtectedRoute>} />
+      <Route path="/library/:id/edit"   element={<ProtectedRoute><WIBuilder /></ProtectedRoute>} />
+      <Route path="/library/:id"        element={<ProtectedRoute><WIDetail /></ProtectedRoute>} />
       <Route path="/approvals"     element={<ProtectedRoute><Approvals /></ProtectedRoute>} />
       <Route path="/analytics"     element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+      <Route path="/moms"          element={<ProtectedRoute><MOMSAnalytics /></ProtectedRoute>} />
       <Route path="/reports"       element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+      <Route path="/audit-trail"   element={<ProtectedRoute><AuditTrail /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
       <Route path="/settings"      element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 

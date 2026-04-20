@@ -1,40 +1,33 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import type { WorkOrder } from '@/types'
 
-// ── Types matching the DB schema ────────────────────────────
 interface DBWorkOrder {
   id: string
   wo_number: string
-  work_instruction_id: string | null
   asset_name: string
-  asset_id: string | null
   location: string | null
   type: string | null
   priority: string
   status: string
-  assigned_to: string | null
   due_date: string | null
-  completed_at: string | null
-  notes: string | null
-  created_at: string
   users: { name: string } | null
   work_instructions: { wi_number: string; title: string } | null
 }
 
 function toWorkOrder(row: DBWorkOrder): WorkOrder {
   return {
-    id:          row.wo_number,
-    asset:       row.asset_name,
-    location:    row.location ?? '',
-    type:        row.type ?? '',
-    priority:    row.priority as WorkOrder['priority'],
-    status:      row.status.replace('_', '-') as WorkOrder['status'],
-    assignedTo:  row.users?.name ?? '—',
-    dueDate:     row.due_date ?? '',
-    wiRef:       row.work_instructions?.wi_number ?? '—',
-    dbId:        row.id,
+    id:         row.wo_number,
+    asset:      row.asset_name,
+    location:   row.location ?? '',
+    type:       row.type ?? '',
+    priority:   row.priority as WorkOrder['priority'],
+    status:     row.status.replace('_', '-') as WorkOrder['status'],
+    assignedTo: row.users?.name ?? '—',
+    dueDate:    row.due_date ?? '',
+    wiRef:      row.work_instructions?.wi_number ?? '—',
+    dbId:       row.id,
   }
 }
 
@@ -42,17 +35,15 @@ export function useWorkOrders(statusFilter?: string) {
   const { user } = useAuth()
 
   return useQuery({
-    queryKey: ['work-orders', statusFilter],
-    enabled:  !!user,
-    queryFn:  async () => {
+    queryKey:        ['work-orders', statusFilter],
+    enabled:         !!user,
+    placeholderData: keepPreviousData,   // keeps old rows visible while new filter loads
+    queryFn: async () => {
       let query = supabase
         .from('work_orders')
-        .select(`
-          *,
-          users ( name ),
-          work_instructions ( wi_number, title )
-        `)
-        .order('due_date', { ascending: true })
+        .select('id, wo_number, asset_name, location, type, priority, status, due_date, users(name), work_instructions(wi_number, title)')
+        .order('due_date', { ascending: true, nullsFirst: false })
+        .limit(100)
 
       if (statusFilter && statusFilter !== 'all') {
         query = query.eq('status', statusFilter.replace('-', '_'))
@@ -60,7 +51,7 @@ export function useWorkOrders(statusFilter?: string) {
 
       const { data, error } = await query
       if (error) throw new Error(error.message)
-      return (data as DBWorkOrder[]).map(toWorkOrder)
+      return (data as unknown as DBWorkOrder[]).map(toWorkOrder)
     },
   })
 }
@@ -75,11 +66,11 @@ export function useWorkOrder(dbId: string) {
       const { data, error } = await supabase
         .from('work_orders')
         .select(`
-          *,
+          id, wo_number, asset_name, location, type, priority, status, due_date, notes,
           users ( name, email, staff_id ),
           work_instructions (
             id, wi_number, title, revision, category,
-            wi_checklist_items ( id, item_no, description, acceptance_criteria, sort_order )
+            wi_checklist_items ( id, item_no, description, acceptance_criteria, sort_order, field_type, required, placeholder, options_json, unit, min_value, max_value, conditional_json )
           )
         `)
         .eq('id', dbId)
@@ -107,25 +98,24 @@ export function useUpdateWorkOrderStatus() {
 }
 
 export interface CreateWorkOrderInput {
-  assetName:           string
-  location:            string
-  priority:            string
-  dueDate:             string
-  assignedTo:          string   // user uuid
-  workInstructionId?:  string   // wi uuid
-  notes?:              string
+  assetName:          string
+  location:           string
+  priority:           string
+  dueDate:            string
+  assignedTo:         string
+  workInstructionId?: string
+  notes?:             string
 }
 
 export function useCreateWorkOrder() {
-  const qc      = useQueryClient()
+  const qc       = useQueryClient()
   const { user } = useAuth()
 
   return useMutation({
     mutationFn: async (input: CreateWorkOrderInput) => {
-      // Generate next WO number
-      const { count } = await supabase
-        .from('work_orders')
-        .select('id', { count: 'exact', head: true })
+      const [{ count }, ] = await Promise.all([
+        supabase.from('work_orders').select('id', { count: 'exact', head: true }),
+      ])
       const woNumber = `WO-${String((count ?? 0) + 1).padStart(4, '0')}`
 
       const { data, error } = await supabase
@@ -142,7 +132,7 @@ export function useCreateWorkOrder() {
           notes:               input.notes || null,
           status:              'open',
         })
-        .select()
+        .select('id')
         .single()
       if (error) throw new Error(error.message)
       return data
