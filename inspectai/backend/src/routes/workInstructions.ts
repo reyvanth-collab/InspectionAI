@@ -58,12 +58,12 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res, next) => {
         `SELECT id, item_no, description, acceptance_criteria, category, sort_order,
                 field_type, required, placeholder, options_json, unit, min_value, max_value, conditional_json
          FROM public.wi_checklist_items
-         WHERE wi_id = $1
+         WHERE work_instruction_id = $1
          ORDER BY sort_order`,
         [req.params.id]
       ),
       query(
-        `SELECT * FROM public.wi_revision_history WHERE wi_id = $1 ORDER BY effective_date DESC`,
+        `SELECT * FROM public.wi_revision_history WHERE work_instruction_id = $1 ORDER BY effective_date DESC`,
         [req.params.id]
       ),
     ])
@@ -86,7 +86,7 @@ router.get('/:id/items', requireAuth, async (req: AuthRequest, res, next) => {
       `SELECT id, item_no, description, acceptance_criteria, category, sort_order,
               field_type, required, placeholder, options_json, unit, min_value, max_value, conditional_json
        FROM public.wi_checklist_items
-       WHERE wi_id = $1
+       WHERE work_instruction_id = $1
        ORDER BY sort_order`,
       [req.params.id]
     )
@@ -160,7 +160,7 @@ router.put('/:id', requireAuth, requireRole('admin', 'approver'), async (req: Au
     if (wiResult.rows.length === 0) { res.status(404).json({ error: 'Not found' }); return }
 
     // Replace all checklist items
-    await query(`DELETE FROM public.wi_checklist_items WHERE wi_id = $1`, [req.params.id])
+    await query(`DELETE FROM public.wi_checklist_items WHERE work_instruction_id = $1`, [req.params.id])
     if (checklistItems?.length) {
       await insertItems(req.params.id, req.user!.tenantId, checklistItems)
     }
@@ -243,7 +243,7 @@ async function insertItems(wiId: string, tenantId: string, items: ChecklistItemI
 
     await query(
       `INSERT INTO public.wi_checklist_items
-         (wi_id, tenant_id, item_no, description, acceptance_criteria, category,
+         (work_instruction_id, tenant_id, item_no, description, acceptance_criteria, category,
           field_type, required, placeholder, options_json, unit, min_value, max_value,
           conditional_json, sort_order)
        VALUES ${placeholders}`,

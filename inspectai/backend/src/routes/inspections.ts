@@ -40,7 +40,7 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res, next) => {
       query(
         `SELECT ci.*
          FROM   public.wi_checklist_items ci
-         JOIN   public.work_orders wo ON wo.work_instruction_id = ci.wi_id
+         JOIN   public.work_orders wo ON wo.work_instruction_id = ci.work_instruction_id
          WHERE  wo.id = $1
          ORDER  BY ci.sort_order`,
         [req.params.id]
