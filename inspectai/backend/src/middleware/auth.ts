@@ -28,8 +28,9 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
 }
 
 export function requireRole(...roles: string[]) {
+  const lower = roles.map(r => r.toLowerCase())
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user || !lower.includes(req.user.role.toLowerCase())) {
       res.status(403).json({ error: 'Insufficient permissions' })
       return
     }

@@ -223,7 +223,7 @@ async function insertItems(wiId: string, tenantId: string, items: ChecklistItemI
     const chunk = items.slice(i, i + CHUNK)
     const values: unknown[] = []
     const placeholders = chunk.map((item, j) => {
-      const b = j * 14
+      const b = j * 15
       values.push(
         wiId, tenantId,
         item.itemNo, item.description, item.acceptanceCriteria || null,
