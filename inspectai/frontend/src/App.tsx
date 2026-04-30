@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
+import { OfflineProvider } from '@/context/OfflineContext'
 import { ToastProvider } from '@/components/ui/Toast'
 import type { ReactNode } from 'react'
 
@@ -72,9 +73,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <ToastProvider>
-          <AppRoutes />
-        </ToastProvider>
+        <OfflineProvider>
+          <ToastProvider>
+            <AppRoutes />
+          </ToastProvider>
+        </OfflineProvider>
       </AuthProvider>
     </BrowserRouter>
   )

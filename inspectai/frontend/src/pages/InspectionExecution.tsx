@@ -16,6 +16,7 @@ import { useMomsWiSummary, type MomsWiSummary } from '@/hooks/useMomsWiSummary'
 import { useToast } from '@/components/ui/Toast'
 import { SignaturePad } from '@/components/ui/SignaturePad'
 import { useAuth } from '@/context/AuthContext'
+import { useOffline } from '@/context/OfflineContext'
 import { JWT_KEY } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
@@ -302,8 +303,9 @@ function FieldInput({
 export default function InspectionExecution() {
   const { id: workOrderDbId = '' } = useParams()
   const navigate = useNavigate()
-  const { toast } = useToast()
-  const { user }  = useAuth()
+  const { toast }    = useToast()
+  const { user }     = useAuth()
+  const { isOnline, enqueue } = useOffline()
 
   const { data: wo, isLoading: woLoading }      = useWorkOrder(workOrderDbId)
   const { data: record, isLoading: recLoading } = useInspectionRecord(workOrderDbId)
@@ -451,8 +453,25 @@ export default function InspectionExecution() {
         })
       } else { clearAi(itemId) }
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Save failed', 'error')
-      setLocalResults(prev => { const p = { ...prev }; delete p[itemId]; return p })
+      if (!isOnline) {
+        enqueue({
+          endpoint: `/inspections/${workOrderDbId}/findings`,
+          method:   'POST',
+          body:     {
+            inspectionRecordId: record!.id,
+            checklistItemId:    itemId,
+            result:             next,
+            notes:              localValues[itemId]
+              ? `${localValues[itemId]}${localNotes[itemId] ? '\n' + localNotes[itemId] : ''}`
+              : localNotes[itemId],
+          },
+          label: `${item.item_no} — ${next}`,
+        })
+        toast('Offline — result saved locally, will sync on reconnect', 'info')
+      } else {
+        toast(e instanceof Error ? e.message : 'Save failed', 'error')
+        setLocalResults(prev => { const p = { ...prev }; delete p[itemId]; return p })
+      }
     } finally {
       setSaving(prev => ({ ...prev, [itemId]: false }))
     }
