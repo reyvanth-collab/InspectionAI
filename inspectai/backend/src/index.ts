@@ -11,6 +11,7 @@ import notificationsRouter from './routes/notifications'
 import analyticsRouter     from './routes/analytics'
 import aiRouter            from './routes/ai'
 import momsRouter          from './routes/moms'
+import reportsRouter       from './routes/reports'
 import { errorHandler }    from './middleware/errorHandler'
 
 dotenv.config()
@@ -36,6 +37,7 @@ app.use('/api/notifications',     notificationsRouter)
 app.use('/api/analytics',         analyticsRouter)
 app.use('/api/ai',                aiRouter)
 app.use('/api/moms',             momsRouter)
+app.use('/api/reports',          reportsRouter)
 
 // ── Health check ────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
