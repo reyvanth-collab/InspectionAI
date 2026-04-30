@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { type LucideIcon, GripVertical, Trash2, Copy, Eye, ArrowLeft, X,
+import { type LucideIcon, GripVertical, Trash2, Copy, Eye, ArrowLeft, X, Upload,
          CheckSquare, Type, Hash, ChevronDown, ToggleLeft, Calendar,
          Ruler, Camera, AlignLeft, PenLine, AlignJustify,
          CheckCheck, AlertCircle, Zap, Settings2, ChevronRight } from 'lucide-react'
@@ -9,6 +9,7 @@ import { TopNav } from '@/components/layout/TopNav'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { useSaveWIWithItems, useWIBuilderData } from '@/hooks/useWorkInstructions'
+import { ImportPdfModal } from '@/components/ui/ImportPdfModal'
 import { cn } from '@/lib/cn'
 
 // ── Field types ──────────────────────────────────────────────────
@@ -105,6 +106,7 @@ export default function WIBuilder() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showPreview,setShowPreview]= useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
+  const [showImport,   setShowImport]   = useState(false)
 
   // Drag state
   const dragTypeRef    = useRef<FieldType | null>(null)   // dragging from palette
@@ -303,6 +305,10 @@ export default function WIBuilder() {
           />
 
           <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+            <Button variant="ghost" size="sm" onClick={() => setShowImport(true)}>
+              <Upload size={14} className="mr-1" /> Import PDF
+            </Button>
+            <div className="w-px h-4 bg-border" />
             <Button variant="ghost" size="sm" onClick={() => setShowPreview(true)}>
               <Eye size={14} className="mr-1" /> Preview
             </Button>
@@ -436,6 +442,26 @@ export default function WIBuilder() {
       {/* Preview modal */}
       {showPreview && (
         <PreviewModal meta={meta} fields={fields} onClose={() => setShowPreview(false)} />
+      )}
+
+      {/* Import PDF modal */}
+      {showImport && (
+        <ImportPdfModal
+          onClose={() => setShowImport(false)}
+          onImport={(importedFields, importedMeta, importMode) => {
+            setFields(prev => importMode === 'append' ? [...prev, ...importedFields] : importedFields)
+            if (!isEdit || !meta.title || meta.title === 'New Work Instruction') {
+              setMeta(p => ({
+                ...p,
+                title:    importedMeta.title    || p.title,
+                wiNumber: importedMeta.wiNumber || p.wiNumber,
+                revision: importedMeta.revision || p.revision,
+              }))
+            }
+            setShowImport(false)
+            toast(`Imported ${importedFields.length} items from PDF`, 'success')
+          }}
+        />
       )}
     </div>
   )
