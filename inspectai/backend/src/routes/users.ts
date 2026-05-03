@@ -25,7 +25,7 @@ router.get('/approvers', requireAuth, async (req: AuthRequest, res, next) => {
       `SELECT id, name, email, staff_id, role
        FROM   public.users
        WHERE  tenant_id = $1
-         AND  lower(role) IN ('admin', 'approver')
+         AND  lower(role::text) IN ('admin', 'approver')
        ORDER  BY name`,
       [req.user!.tenantId]
     )

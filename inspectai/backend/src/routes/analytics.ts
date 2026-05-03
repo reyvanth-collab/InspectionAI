@@ -80,7 +80,7 @@ router.get('/audit-logs', requireAuth, async (req: AuthRequest, res, next) => {
     const result = await query(
       `SELECT al.id, al.action, al.table_name, al.created_at, u.name AS performed_by_name
        FROM   public.audit_logs al
-       LEFT JOIN public.users u ON u.id::text = al.performed_by::text
+       LEFT JOIN public.users u ON u.id = al.user_id
        WHERE  al.tenant_id = $1
          ${table ? 'AND al.table_name = $3' : ''}
        ORDER  BY al.created_at DESC

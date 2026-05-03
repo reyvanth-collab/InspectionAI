@@ -158,8 +158,11 @@ router.post(
         res.status(422).json({ error: `No rows found in sheet '${sheetName}'` }); return
       }
 
-      // Ensure table + indexes
+      // Ensure table + indexes; backfill columns added after initial deploy
       await query(CREATE_TABLE_SQL)
+      await query(`ALTER TABLE IF EXISTS public.moms_checklist_steps ADD COLUMN IF NOT EXISTS section_name     TEXT`)
+      await query(`ALTER TABLE IF EXISTS public.moms_checklist_steps ADD COLUMN IF NOT EXISTS sub_section_name TEXT`)
+      await query(`ALTER TABLE IF EXISTS public.moms_checklist_steps ADD COLUMN IF NOT EXISTS category         TEXT`)
       await query(`CREATE INDEX IF NOT EXISTS idx_moms_tenant_wi    ON public.moms_checklist_steps (tenant_id, wi_number)`)
       await query(`CREATE INDEX IF NOT EXISTS idx_moms_work_order   ON public.moms_checklist_steps (tenant_id, work_order_id)`)
       await query(`CREATE INDEX IF NOT EXISTS idx_moms_inspected_at ON public.moms_checklist_steps (tenant_id, inspected_at)`)
