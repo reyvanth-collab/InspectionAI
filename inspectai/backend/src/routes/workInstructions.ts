@@ -200,6 +200,40 @@ router.patch('/:id/status', requireAuth, requireRole('admin', 'approver'), async
   } catch (err) { next(err) }
 })
 
+// ── POST /api/work-instructions/:id/submit-approval ─────────────
+router.post('/:id/submit-approval', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const { approverIds } = req.body as { approverIds: string[] }
+    const wiId = req.params.id
+
+    // Create approval workflow record
+    const approvalRes = await query(
+      `INSERT INTO public.approval_workflows (work_instruction_id, tenant_id, submitted_by, status)
+       VALUES ($1, $2, $3, 'pending')
+       RETURNING id`,
+      [wiId, req.user!.tenantId, req.user!.id]
+    )
+    const workflowId = approvalRes.rows[0].id
+
+    // Create one step per approver
+    for (let i = 0; i < approverIds.length; i++) {
+      await query(
+        `INSERT INTO public.approval_steps (workflow_id, approver_id, step_order, status)
+         VALUES ($1, $2, $3, 'pending')`,
+        [workflowId, approverIds[i], i + 1]
+      )
+    }
+
+    // Update WI status to under_review
+    await query(
+      `UPDATE public.work_instructions SET status = 'under_review' WHERE id = $1 AND tenant_id = $2`,
+      [wiId, req.user!.tenantId]
+    )
+
+    res.json({ data: { workflowId } })
+  } catch (err) { next(err) }
+})
+
 // ── Helpers ──────────────────────────────────────────────────────
 interface ChecklistItemInput {
   itemNo:              string

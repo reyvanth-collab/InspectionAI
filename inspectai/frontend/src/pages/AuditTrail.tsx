@@ -113,7 +113,7 @@ export default function AuditTrail() {
                 </span>
 
                 <span className="flex-1 text-[13px] text-text truncate">
-                  {log.users?.name ?? log.performed_by ?? '—'}
+                  {log.performed_by_name ?? '—'}
                 </span>
 
                 <span

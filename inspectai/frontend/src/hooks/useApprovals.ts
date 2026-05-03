@@ -1,45 +1,48 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
+
+export interface ApprovalStep {
+  id:            string
+  step_number:   number
+  label:         string | null
+  status:        string
+  comment:       string | null
+  completed_at:  string | null
+  approver_id:   string
+  approver_name: string | null
+}
+
+export interface Approval {
+  id:                string
+  wi_id:             string
+  submitted_by:      string
+  submitted_at:      string
+  final_status:      string
+  wi_number:         string
+  wi_title:          string
+  revision:          string
+  submitted_by_name: string | null
+  approval_steps:    ApprovalStep[]
+}
 
 export function useApprovals() {
   const { user } = useAuth()
-
   return useQuery({
     queryKey: ['approvals'],
     enabled:  !!user,
-    queryFn:  async () => {
-      const { data, error } = await supabase
-        .from('approval_records')
-        .select(`
-          *,
-          work_instructions ( wi_number, title, revision ),
-          submitter:users!approval_records_submitted_by_fkey ( name ),
-          approval_steps (
-            id, step_number, label, status, comment, completed_at,
-            approver:users!approval_steps_approver_id_fkey ( name )
-          )
-        `)
-        .order('submitted_at', { ascending: false })
-
-      if (error) throw new Error(error.message)
-      return data
+    queryFn: async (): Promise<Approval[]> => {
+      const res = await api.get<{ data: Approval[] }>('/approvals')
+      return res.data.data
     },
   })
 }
 
 export function useApproveStep() {
   const qc = useQueryClient()
-
   return useMutation({
-    mutationFn: async ({
-      stepId, comment,
-    }: { stepId: string; comment?: string }) => {
-      const { error } = await supabase
-        .from('approval_steps')
-        .update({ status: 'done', comment, completed_at: new Date().toISOString() })
-        .eq('id', stepId)
-      if (error) throw new Error(error.message)
+    mutationFn: async ({ stepId, comment }: { stepId: string; comment?: string }) => {
+      await api.patch(`/approvals/steps/${stepId}/approve`, { comment })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
   })
@@ -47,16 +50,9 @@ export function useApproveStep() {
 
 export function useRejectStep() {
   const qc = useQueryClient()
-
   return useMutation({
-    mutationFn: async ({
-      stepId, comment,
-    }: { stepId: string; comment: string }) => {
-      const { error } = await supabase
-        .from('approval_steps')
-        .update({ status: 'rejected', comment })
-        .eq('id', stepId)
-      if (error) throw new Error(error.message)
+    mutationFn: async ({ stepId, comment }: { stepId: string; comment: string }) => {
+      await api.patch(`/approvals/steps/${stepId}/reject`, { comment })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
   })

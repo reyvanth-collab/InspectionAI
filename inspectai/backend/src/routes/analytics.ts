@@ -70,4 +70,25 @@ router.get('/by-category', requireAuth, async (req: AuthRequest, res, next) => {
   } catch (err) { next(err) }
 })
 
+// GET /api/analytics/audit-logs?limit=100&table=work_instructions
+router.get('/audit-logs', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const limit  = Math.min(parseInt(String(req.query.limit ?? '100')), 1000)
+    const table  = req.query.table ? String(req.query.table) : null
+    const params: unknown[] = [req.user!.tenantId, limit]
+    if (table) params.push(table)
+    const result = await query(
+      `SELECT al.id, al.action, al.table_name, al.created_at, u.name AS performed_by_name
+       FROM   public.audit_logs al
+       LEFT JOIN public.users u ON u.id::text = al.performed_by::text
+       WHERE  al.tenant_id = $1
+         ${table ? 'AND al.table_name = $3' : ''}
+       ORDER  BY al.created_at DESC
+       LIMIT  $2`,
+      params
+    )
+    res.json({ data: result.rows })
+  } catch (err) { next(err) }
+})
+
 export default router

@@ -1,36 +1,28 @@
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 
 export interface AuditLog {
-  id: string
-  action: string
-  table_name: string
-  performed_by: string | null
-  created_at: string
-  users: { name: string } | null
+  id:                  string
+  action:              string
+  table_name:          string
+  performed_by_name:   string | null
+  created_at:          string
+  // legacy compat
+  users?:              { name: string } | null
+  performed_by?:       string | null
 }
 
-export function useAuditLogs(limit = 5, tableName?: string) {
+export function useAuditLogs(limit = 5, tableFilter?: string) {
   const { user } = useAuth()
-
   return useQuery({
-    queryKey: ['audit-logs', limit, tableName],
+    queryKey: ['audit-logs', limit, tableFilter],
     enabled:  !!user,
     queryFn:  async (): Promise<AuditLog[]> => {
-      let query = supabase
-        .from('audit_logs')
-        .select('id, action, table_name, performed_by, created_at, users(name)')
-        .order('created_at', { ascending: false })
-        .limit(limit)
-
-      if (tableName) {
-        query = query.eq('table_name', tableName)
-      }
-
-      const { data, error } = await query
-      if (error) throw new Error(error.message)
-      return (data ?? []) as unknown as AuditLog[]
+      const params = new URLSearchParams({ limit: String(limit) })
+      if (tableFilter) params.set('table', tableFilter)
+      const res = await api.get<{ data: AuditLog[] }>(`/analytics/audit-logs?${params}`)
+      return res.data.data
     },
   })
 }

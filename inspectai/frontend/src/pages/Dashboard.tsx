@@ -137,7 +137,7 @@ export default function Dashboard() {
                       <span className="text-text-3">{TABLE_LABEL[log.table_name] ?? log.table_name}</span>
                     </p>
                     <p className="text-[11px] text-text-3 mt-0.5">
-                      {log.users?.name ?? 'System'} · {formatRelative(log.created_at)}
+                      {log.performed_by_name ?? 'System'} · {formatRelative(log.created_at)}
                     </p>
                   </div>
                 </div>

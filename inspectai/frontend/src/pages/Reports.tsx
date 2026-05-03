@@ -312,7 +312,7 @@ function AuditTrailTab() {
                   row.action === 'INSERT' ? 'text-success' : 'text-accent'
                 }`}>{row.action}</span>
                 <span className="font-mono text-[12px] text-text-2 flex-1">{row.table_name}</span>
-                <span className="text-[12px] text-text-2 flex-1">{row.users?.name ?? row.performed_by ?? '—'}</span>
+                <span className="text-[12px] text-text-2 flex-1">{row.performed_by_name ?? '—'}</span>
               </div>
             ))}
           </>

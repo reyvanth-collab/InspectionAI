@@ -7,6 +7,10 @@ const router = Router()
 // GET /api/inspections — list work orders
 router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
   try {
+    const statusFilter = req.query.status ? String(req.query.status) : null
+    const params: unknown[] = [req.user!.tenantId]
+    if (statusFilter) params.push(statusFilter)
+
     const result = await query(
       `SELECT wo.id, wo.wo_number, wo.asset_name, wo.location, wo.type,
               wo.priority, wo.status, wo.due_date, wo.completed_at, wo.notes,
@@ -16,9 +20,10 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
        LEFT JOIN public.users u  ON u.id = wo.assigned_to
        LEFT JOIN public.work_instructions wi ON wi.id = wo.work_instruction_id
        WHERE  wo.tenant_id = $1
+         ${statusFilter ? 'AND wo.status = $2' : ''}
        ORDER  BY wo.due_date ASC NULLS LAST
        LIMIT  100`,
-      [req.user!.tenantId]
+      params
     )
     res.json({ data: result.rows })
   } catch (err) { next(err) }

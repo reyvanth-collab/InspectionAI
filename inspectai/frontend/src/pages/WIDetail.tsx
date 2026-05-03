@@ -100,7 +100,7 @@ export default function WIDetail() {
           </div>
           <h1 className="text-[20px] font-semibold tracking-[-0.3px]">{w.title}</h1>
           <p className="text-[13px] text-text-2 mt-1">
-            {w.category} · Owner: {w.users?.name ?? '—'}
+            {w.category} · Owner: {w.owner_name ?? '—'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -194,7 +194,7 @@ export default function WIDetail() {
                 { label: 'WI Number',      value: w.wi_number },
                 { label: 'Revision',       value: w.revision },
                 { label: 'Category',       value: w.category ?? '—' },
-                { label: 'Owner',          value: w.users?.name ?? '—' },
+                { label: 'Owner',          value: w.owner_name ?? '—' },
                 { label: 'Effective Date', value: w.effective_date ?? '—' },
                 { label: 'Expiry Date',    value: w.expiry_date ?? '—' },
                 {
