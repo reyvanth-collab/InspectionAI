@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { query } from '../lib/db'
 import { signToken } from '../lib/jwt'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
+import { auditLog } from '../lib/events'
 
 const router = Router()
 
@@ -22,11 +23,15 @@ router.post('/login', async (req, res, next) => {
     }
     const { email, password } = parsed.data
 
-    // Fetch user + password hash
+    // Fetch user profile + Supabase-auth password hash. The app still issues
+    // its own JWT, but the checked-in schema stores credentials in auth.users.
     const result = await query(
-      `SELECT id, name, email, role, staff_id, tenant_id, password_hash
-       FROM public.users
-       WHERE email = $1
+      `SELECT u.id, u.name, u.email, u.role, u.staff_id, u.tenant_id,
+              au.encrypted_password AS password_hash
+       FROM public.users u
+       JOIN auth.users au ON au.id = u.id
+       WHERE lower(u.email) = lower($1)
+         AND u.active = true
        LIMIT 1`,
       [email]
     )
@@ -64,6 +69,15 @@ router.post('/login', async (req, res, next) => {
         staffId:  user.staff_id,
         tenantId: user.tenant_id,
       },
+    })
+
+    await auditLog({
+      tenantId: user.tenant_id,
+      userId:   user.id,
+      action:   'auth.login',
+      entityType: 'users',
+      entityId: user.id,
+      detail: { email: user.email },
     })
   } catch (err) {
     next(err)

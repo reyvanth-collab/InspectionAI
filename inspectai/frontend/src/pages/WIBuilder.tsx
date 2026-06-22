@@ -30,6 +30,10 @@ export interface WIField {
   minValue:           string
   maxValue:           string
   conditional: { fieldId: string; operator: 'equals' | 'not_equals' | 'contains'; value: string } | null
+  sourcePage:         number | null
+  sourceText:         string
+  aiConfidence:       number | null
+  aiWarnings:         string[]
 }
 
 interface WIMeta {
@@ -86,6 +90,10 @@ function makeField(type: FieldType, sortOrder: number): WIField {
     minValue:           '',
     maxValue:           '',
     conditional:        null,
+    sourcePage:         null,
+    sourceText:         '',
+    aiConfidence:       null,
+    aiWarnings:         [],
     // sortOrder is stored externally in the array index
   }
   void sortOrder  // used externally
@@ -141,6 +149,10 @@ export default function WIBuilder() {
         minValue:           item.min_value != null ? String(item.min_value) : '',
         maxValue:           item.max_value != null ? String(item.max_value) : '',
         conditional:        item.conditional_json ? JSON.parse(item.conditional_json as string) as WIField['conditional'] : null,
+        sourcePage:         item.source_page != null ? Number(item.source_page) : null,
+        sourceText:         (item.source_text as string) ?? '',
+        aiConfidence:       item.ai_confidence != null ? Number(item.ai_confidence) : null,
+        aiWarnings:         Array.isArray(item.ai_warnings) ? item.ai_warnings as string[] : [],
       })))
     }
   }, [existingData])
@@ -226,6 +238,10 @@ export default function WIBuilder() {
       minValue:            f.minValue !== '' ? Number(f.minValue) : undefined,
       maxValue:            f.maxValue !== '' ? Number(f.maxValue) : undefined,
       conditionalJson:     f.conditional ? JSON.stringify(f.conditional) : undefined,
+      sourcePage:          f.sourcePage,
+      sourceText:          f.sourceText || undefined,
+      aiConfidence:        f.aiConfidence ?? undefined,
+      aiWarnings:          f.aiWarnings.length > 0 ? f.aiWarnings : undefined,
       sortOrder:           i * 10,
     }))
 
@@ -480,6 +496,7 @@ function CanvasFieldRow({
 }) {
   const palette = PALETTE.find(p => p.type === field.type)
   const Icon = palette?.Icon ?? CheckSquare
+  const extractionNeedsReview = (field.aiConfidence != null && field.aiConfidence < 0.75) || field.aiWarnings.length > 0
 
   if (field.type === 'heading') {
     return (
@@ -494,6 +511,11 @@ function CanvasFieldRow({
         <GripVertical size={14} className="text-border-2 cursor-grab flex-shrink-0" />
         <AlignJustify size={13} className="text-text-2 flex-shrink-0" />
         <span className="flex-1 text-[12px] font-bold text-text uppercase tracking-[0.06em]">{field.label}</span>
+        {extractionNeedsReview && (
+          <span className="text-[9px] font-semibold text-warning bg-warning-bg/20 ring-1 ring-warning-border rounded px-1.5 py-0.5 uppercase">
+            AI review
+          </span>
+        )}
         <span className="text-[9px] font-semibold text-text-3 bg-bg-2 rounded px-1.5 py-0.5 uppercase">heading</span>
         <div className="hidden group-hover:flex items-center gap-0.5">
           <button onClick={e => { e.stopPropagation(); onDuplicate() }}
@@ -534,6 +556,11 @@ function CanvasFieldRow({
           cond
         </span>
       )}
+      {extractionNeedsReview && (
+        <span className="text-[9px] font-semibold text-warning bg-warning-bg/20 ring-1 ring-warning-border rounded px-1.5 py-0.5 flex-shrink-0 uppercase">
+          AI review
+        </span>
+      )}
       <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
         <button onClick={e => { e.stopPropagation(); onDuplicate() }}
           className="w-6 h-6 flex items-center justify-center rounded text-text-3 hover:text-text hover:bg-border/30 bg-transparent border-none cursor-pointer">
@@ -572,6 +599,43 @@ function PropertiesPanel({
         </p>
         <p className="text-[10px] text-text-3 mt-0.5">Field configuration</p>
       </div>
+
+      {(field.sourcePage || field.sourceText || field.aiConfidence != null || field.aiWarnings.length > 0) && (
+        <div className={SECTION}>
+          <label className={LABEL}>AI extraction evidence</label>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {field.sourcePage && (
+              <span className="text-[10px] text-text-2 bg-bg border border-border rounded px-1.5 py-0.5">
+                Page {field.sourcePage}
+              </span>
+            )}
+            {field.aiConfidence != null && (
+              <span className={cn(
+                'text-[10px] border rounded px-1.5 py-0.5',
+                field.aiConfidence < 0.75
+                  ? 'text-warning bg-warning-bg/20 border-warning-border'
+                  : 'text-success bg-success-bg/20 border-success-border'
+              )}>
+                {Math.round(field.aiConfidence * 100)}% confidence
+              </span>
+            )}
+          </div>
+          {field.sourceText && (
+            <p className="text-[11px] text-text-2 leading-relaxed bg-bg border border-border rounded-[6px] p-2">
+              {field.sourceText}
+            </p>
+          )}
+          {field.aiWarnings.length > 0 && (
+            <div className="mt-2 flex flex-col gap-1">
+              {field.aiWarnings.map((warning, i) => (
+                <p key={i} className="text-[11px] text-warning leading-relaxed">
+                  {warning}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Label */}
       <div className={SECTION}>
@@ -801,6 +865,16 @@ function PreviewField({ field, index }: { field: WIField; index: number }) {
           {field.conditional && (
             <span className="inline-block mt-1 text-[9px] font-semibold text-violet-400 bg-violet-500/10 ring-1 ring-violet-500/20 rounded px-1.5 py-0.5">
               conditional
+            </span>
+          )}
+          {(field.aiConfidence != null || field.aiWarnings.length > 0) && (
+            <span className={cn(
+              'inline-block mt-1 ml-1 text-[9px] font-semibold rounded px-1.5 py-0.5 ring-1',
+              (field.aiConfidence != null && field.aiConfidence < 0.75) || field.aiWarnings.length > 0
+                ? 'text-warning bg-warning-bg/20 ring-warning-border'
+                : 'text-success bg-success-bg/20 ring-success-border'
+            )}>
+              AI imported {field.aiConfidence != null ? `${Math.round(field.aiConfidence * 100)}%` : ''}
             </span>
           )}
         </div>

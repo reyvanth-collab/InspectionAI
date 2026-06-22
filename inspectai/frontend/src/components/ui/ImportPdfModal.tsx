@@ -11,6 +11,10 @@ interface ImportedItem {
   fieldType:          string
   acceptanceCriteria: string | null
   required:           boolean
+  sourcePage?:        number | null
+  sourceText?:        string | null
+  confidence?:        number | null
+  warnings?:          string[]
 }
 
 interface ImportedWI {
@@ -50,6 +54,10 @@ function toWIField(item: ImportedItem): WIField {
     minValue:           '',
     maxValue:           '',
     conditional:        null,
+    sourcePage:         item.sourcePage ?? null,
+    sourceText:         item.sourceText ?? '',
+    aiConfidence:       item.confidence ?? null,
+    aiWarnings:         item.warnings ?? [],
   }
 }
 
@@ -121,6 +129,8 @@ export function ImportPdfModal({ onImport, onClose }: ImportPdfModalProps) {
 
   const checkableCount = imported?.items.filter(i => i.fieldType !== 'heading').length ?? 0
   const headingCount   = imported?.items.filter(i => i.fieldType === 'heading').length ?? 0
+  const lowConfidenceCount = imported?.items.filter(i => i.confidence != null && i.confidence < 0.75).length ?? 0
+  const warningCount = imported?.items.reduce((sum, i) => sum + (i.warnings?.length ?? 0), 0) ?? 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -203,6 +213,11 @@ export function ImportPdfModal({ onImport, onClose }: ImportPdfModalProps) {
                   <span className="font-mono text-[12px] text-text-2">{imported.wiNumber}</span>
                   {imported.revision && <span className="text-[12px] text-text-3">{imported.revision}</span>}
                   <span className="text-[12px] text-text-2">{checkableCount} tasks · {headingCount} sections</span>
+                  {(lowConfidenceCount > 0 || warningCount > 0) && (
+                    <span className="text-[12px] text-warning">
+                      {lowConfidenceCount} low confidence, {warningCount} warnings
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -243,12 +258,45 @@ export function ImportPdfModal({ onImport, onClose }: ImportPdfModalProps) {
                       )}>
                         {item.itemNo}
                       </span>
-                      <span className={cn(
-                        'flex-1 leading-snug',
+                      <div className={cn(
+                        'flex-1 leading-snug min-w-0',
                         item.fieldType === 'heading' ? 'font-semibold text-text' : 'text-text-2'
                       )}>
-                        {item.description}
-                      </span>
+                        <span>{item.description}</span>
+                        {(item.sourcePage || item.sourceText || item.confidence != null || (item.warnings?.length ?? 0) > 0) && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-normal">
+                            {item.sourcePage && (
+                              <span className="text-text-3 bg-bg-3 border border-border rounded px-1.5 py-0.5">
+                                p. {item.sourcePage}
+                              </span>
+                            )}
+                            {item.confidence != null && (
+                              <span className={cn(
+                                'border rounded px-1.5 py-0.5',
+                                item.confidence < 0.75
+                                  ? 'text-warning bg-warning-bg/20 border-warning-border'
+                                  : 'text-success bg-success-bg/20 border-success-border'
+                              )}>
+                                {Math.round(item.confidence * 100)}%
+                              </span>
+                            )}
+                            {item.sourceText && (
+                              <span className="text-text-3 truncate max-w-[300px]">
+                                {item.sourceText}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {(item.warnings?.length ?? 0) > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {item.warnings!.slice(0, 2).map((warning, wi) => (
+                              <span key={wi} className="text-[10px] text-warning bg-warning-bg/20 border border-warning-border rounded px-1.5 py-0.5">
+                                {warning}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <span className="flex items-center gap-1 w-20 flex-shrink-0 pt-px">
                         {FIELD_ICON[item.fieldType] ?? <CheckSquare size={12} className="text-accent" />}
                         <span className="text-[10px] text-text-3">{FIELD_LABEL[item.fieldType] ?? item.fieldType}</span>

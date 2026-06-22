@@ -141,6 +141,10 @@ export interface ChecklistItemInput {
   minValue?:           number
   maxValue?:           number
   conditionalJson?:    string
+  sourcePage?:         number | null
+  sourceText?:         string
+  aiConfidence?:       number | null
+  aiWarnings?:         string[]
   sortOrder:           number
 }
 

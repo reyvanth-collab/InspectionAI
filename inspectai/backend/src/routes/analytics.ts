@@ -4,10 +4,16 @@ import { query } from '../lib/db'
 
 const router = Router()
 
+function parseBoundedInt(value: unknown, fallback: number, max: number) {
+  const parsed = Number.parseInt(String(value ?? fallback), 10)
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback
+  return Math.min(parsed, max)
+}
+
 // GET /api/analytics/summary?days=30
 router.get('/summary', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const days  = Math.min(parseInt(String(req.query.days ?? '30')), 365)
+    const days  = parseBoundedInt(req.query.days, 30, 365)
     const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
     const [totalRes, passRes, failRes, recordsRes] = await Promise.all([
@@ -49,7 +55,7 @@ router.get('/summary', requireAuth, async (req: AuthRequest, res, next) => {
 // GET /api/analytics/by-category?days=30
 router.get('/by-category', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const days  = Math.min(parseInt(String(req.query.days ?? '30')), 365)
+    const days  = parseBoundedInt(req.query.days, 30, 365)
     const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
     const result = await query(
@@ -73,16 +79,16 @@ router.get('/by-category', requireAuth, async (req: AuthRequest, res, next) => {
 // GET /api/analytics/audit-logs?limit=100&table=work_instructions
 router.get('/audit-logs', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const limit  = Math.min(parseInt(String(req.query.limit ?? '100')), 1000)
+    const limit  = parseBoundedInt(req.query.limit, 100, 1000)
     const table  = req.query.table ? String(req.query.table) : null
     const params: unknown[] = [req.user!.tenantId, limit]
     if (table) params.push(table)
     const result = await query(
-      `SELECT al.id, al.action, al.table_name, al.created_at, u.name AS performed_by_name
+      `SELECT al.id, al.action, al.entity_type AS table_name, al.created_at, u.name AS performed_by_name
        FROM   public.audit_logs al
        LEFT JOIN public.users u ON u.id = al.user_id
        WHERE  al.tenant_id = $1
-         ${table ? 'AND al.table_name = $3' : ''}
+         ${table ? 'AND al.entity_type = $3' : ''}
        ORDER  BY al.created_at DESC
        LIMIT  $2`,
       params

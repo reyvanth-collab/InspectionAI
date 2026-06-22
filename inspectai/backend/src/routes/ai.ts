@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import multer from 'multer'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { z } from 'zod'
+import { query } from '../lib/db'
+import { auditLog } from '../lib/events'
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -14,6 +16,111 @@ const router = Router()
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
+
+type ValidationStatus = 'aligned' | 'review_required' | 'uncertain'
+type FindingResult = 'pass' | 'fail' | 'na'
+
+interface ValidationResult {
+  status: ValidationStatus
+  recommendedResult: FindingResult | 'keep'
+  confidence: number
+  reason: string
+  evidence: string[]
+  riskLevel: 'low' | 'medium' | 'high'
+  requiredAction: string
+}
+
+interface ValidateFindingInput {
+  inspectionRecordId: string
+  checklistItemId: string
+  selectedResult: FindingResult
+  itemDescription: string
+  acceptanceCriteria?: string
+  fieldType?: string
+  required?: boolean
+  minValue?: number | null
+  maxValue?: number | null
+  capturedValue?: string
+  inspectorNotes?: string
+  assetName?: string
+  location?: string
+  photoCount?: number
+  momsHistoricalNokRate?: number
+  momsHistoricalTotal?: number
+}
+
+function stripJsonFences(text: string) {
+  return text.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim()
+}
+
+function clampConfidence(value: unknown, fallback = 0.5) {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(0, Math.min(1, n))
+}
+
+function deterministicValidation(input: ValidateFindingInput): ValidationResult {
+  const evidence: string[] = []
+  const note = `${input.inspectorNotes ?? ''} ${input.capturedValue ?? ''}`.toLowerCase()
+  const value = input.capturedValue != null && input.capturedValue.trim() !== ''
+    ? Number(input.capturedValue)
+    : null
+  const failWords = ['leak', 'leaking', 'crack', 'broken', 'damage', 'damaged', 'corrosion', 'corroded', 'burn', 'loose', 'fail', 'failed', 'nok', 'unsafe']
+
+  if (value != null && Number.isFinite(value)) {
+    if (input.minValue != null && value < input.minValue) evidence.push(`Measured value ${value} is below minimum ${input.minValue}`)
+    if (input.maxValue != null && value > input.maxValue) evidence.push(`Measured value ${value} is above maximum ${input.maxValue}`)
+  }
+
+  const noteLooksBad = failWords.some(word => note.includes(word))
+  if (noteLooksBad) evidence.push('Inspector notes/value contain defect language')
+
+  if (input.selectedResult === 'pass' && evidence.length > 0) {
+    return {
+      status: 'review_required',
+      recommendedResult: 'fail',
+      confidence: 0.86,
+      reason: 'The selected PASS conflicts with recorded evidence or configured limits.',
+      evidence,
+      riskLevel: 'high',
+      requiredAction: 'Supervisor or inspector must review the result before completion.',
+    }
+  }
+
+  if (input.selectedResult === 'fail' && !input.inspectorNotes && !input.capturedValue && (input.photoCount ?? 0) === 0) {
+    return {
+      status: 'uncertain',
+      recommendedResult: 'keep',
+      confidence: 0.62,
+      reason: 'The FAIL result has no supporting note, measurement, or photo evidence.',
+      evidence: ['Failure result lacks supporting evidence'],
+      riskLevel: 'medium',
+      requiredAction: 'Add evidence or confirm the failure during review.',
+    }
+  }
+
+  if (input.selectedResult === 'na' && input.required !== false) {
+    return {
+      status: 'review_required',
+      recommendedResult: 'keep',
+      confidence: 0.78,
+      reason: 'A required checklist item was marked N/A.',
+      evidence: ['Required item marked N/A'],
+      riskLevel: 'medium',
+      requiredAction: 'Confirm why the required item is not applicable.',
+    }
+  }
+
+  return {
+    status: 'aligned',
+    recommendedResult: 'keep',
+    confidence: evidence.length > 0 ? 0.72 : 0.82,
+    reason: 'The selected result is consistent with the available structured evidence.',
+    evidence,
+    riskLevel: 'low',
+    requiredAction: 'No additional action required beyond normal review.',
+  }
+}
 
 // ── POST /api/ai/analyse-failure ─────────────────────────────────
 // Streams Claude's failure analysis as SSE, enriched with MOMS history.
@@ -159,6 +266,163 @@ Most probable root cause based on visual evidence.
   }
 })
 
+// POST /api/ai/validate-finding
+// Checks whether the selected inspection result agrees with evidence and criteria.
+const ValidateFindingSchema = z.object({
+  inspectionRecordId: z.string().uuid(),
+  checklistItemId:   z.string().uuid(),
+  selectedResult:    z.enum(['pass', 'fail', 'na']),
+  itemDescription:   z.string().min(1),
+  acceptanceCriteria:z.string().optional(),
+  fieldType:         z.string().optional(),
+  required:          z.boolean().optional(),
+  minValue:          z.number().nullable().optional(),
+  maxValue:          z.number().nullable().optional(),
+  capturedValue:     z.string().optional(),
+  inspectorNotes:    z.string().optional(),
+  assetName:         z.string().optional(),
+  location:          z.string().optional(),
+  photoCount:        z.number().int().min(0).optional(),
+  momsHistoricalNokRate: z.number().optional(),
+  momsHistoricalTotal:   z.number().optional(),
+})
+
+router.post('/validate-finding', requireAuth, async (req: AuthRequest, res: Response) => {
+  const parsed = ValidateFindingSchema.safeParse(req.body)
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return }
+
+  const input = parsed.data
+  let validation = deterministicValidation(input)
+  const model = 'claude-haiku-4-5-20251001'
+
+  if (process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY.includes('your-')) {
+    try {
+      const message = await client.messages.create({
+        model,
+        max_tokens: 900,
+        messages: [{
+          role: 'user',
+          content: `You are an industrial inspection quality-control AI. Validate whether the inspector's selected result is consistent with the checklist criteria and evidence.
+
+Return ONLY a JSON object with this exact shape:
+{
+  "status": "aligned|review_required|uncertain",
+  "recommendedResult": "pass|fail|na|keep",
+  "confidence": 0.0,
+  "reason": "short explanation",
+  "evidence": ["specific evidence strings"],
+  "riskLevel": "low|medium|high",
+  "requiredAction": "what the human reviewer should do"
+}
+
+Rules:
+- Never silently override the inspector. Flag review only.
+- If PASS conflicts with notes, value limits, or defect language, use review_required.
+- If FAIL has weak evidence, use uncertain unless evidence clearly supports fail.
+- If N/A is used on a required item, use review_required.
+- If evidence is insufficient, be conservative and use uncertain.
+
+Context:
+- Asset: ${input.assetName ?? 'Not specified'}
+- Location: ${input.location ?? 'Not specified'}
+- Checklist item: ${input.itemDescription}
+- Acceptance criteria: ${input.acceptanceCriteria ?? 'Not specified'}
+- Field type: ${input.fieldType ?? 'pass_fail'}
+- Required: ${input.required !== false}
+- Selected result: ${input.selectedResult}
+- Captured value: ${input.capturedValue ?? 'None'}
+- Min value: ${input.minValue ?? 'None'}
+- Max value: ${input.maxValue ?? 'None'}
+- Inspector notes: ${input.inspectorNotes ?? 'None'}
+- Photo count: ${input.photoCount ?? 0}
+- Historical NOK rate: ${input.momsHistoricalNokRate ?? 'Unknown'}
+- Historical sample size: ${input.momsHistoricalTotal ?? 'Unknown'}
+
+Deterministic pre-check:
+${JSON.stringify(validation)}`,
+        }],
+      })
+      const content = message.content[0]
+      if (content.type === 'text') {
+        const raw = stripJsonFences(content.text)
+        const ai = JSON.parse(raw) as Partial<ValidationResult>
+        validation = {
+          status: ['aligned', 'review_required', 'uncertain'].includes(String(ai.status))
+            ? ai.status as ValidationStatus
+            : validation.status,
+          recommendedResult: ['pass', 'fail', 'na', 'keep'].includes(String(ai.recommendedResult))
+            ? ai.recommendedResult as FindingResult | 'keep'
+            : validation.recommendedResult,
+          confidence: clampConfidence(ai.confidence, validation.confidence),
+          reason: typeof ai.reason === 'string' && ai.reason.trim() ? ai.reason : validation.reason,
+          evidence: Array.isArray(ai.evidence) ? ai.evidence.map(String).slice(0, 8) : validation.evidence,
+          riskLevel: ['low', 'medium', 'high'].includes(String(ai.riskLevel))
+            ? ai.riskLevel as 'low' | 'medium' | 'high'
+            : validation.riskLevel,
+          requiredAction: typeof ai.requiredAction === 'string' && ai.requiredAction.trim()
+            ? ai.requiredAction
+            : validation.requiredAction,
+        }
+      }
+    } catch {
+      // Keep deterministic result when the AI service is unavailable or returns malformed JSON.
+    }
+  }
+
+  const updateRes = await query(
+    `UPDATE public.inspection_findings f
+     SET ai_validation_status = $1,
+         ai_validation_confidence = $2,
+         ai_validation_reason = $3,
+         ai_validation_recommended_result = $4,
+         ai_validation_evidence = $5::jsonb,
+         updated_at = NOW()
+     FROM public.inspection_records ir
+     WHERE f.inspection_record_id = ir.id
+       AND f.inspection_record_id = $6
+       AND f.checklist_item_id = $7
+       AND f.tenant_id = $8
+       AND ir.tenant_id = $8
+     RETURNING f.id`,
+    [
+      validation.status,
+      validation.confidence,
+      validation.reason,
+      validation.recommendedResult,
+      JSON.stringify({
+        evidence: validation.evidence,
+        riskLevel: validation.riskLevel,
+        requiredAction: validation.requiredAction,
+        model,
+        promptVersion: 'finding-validation-v1',
+      }),
+      input.inspectionRecordId,
+      input.checklistItemId,
+      req.user!.tenantId,
+    ]
+  )
+
+  if (updateRes.rows.length > 0) {
+    await auditLog({
+      tenantId: req.user!.tenantId,
+      userId: req.user!.id,
+      action: 'ai.finding.validated',
+      entityType: 'inspection_findings',
+      entityId: updateRes.rows[0].id,
+      severity: validation.status === 'review_required' ? 'warning' : 'info',
+      detail: {
+        status: validation.status,
+        recommended_result: validation.recommendedResult,
+        confidence: validation.confidence,
+        prompt_version: 'finding-validation-v1',
+        model,
+      },
+    })
+  }
+
+  res.json({ data: validation })
+})
+
 // ── POST /api/ai/maximo-payload ──────────────────────────────────
 // Generates a structured Maximo Work Order JSON payload from inspection results.
 const MaximoSchema = z.object({
@@ -268,7 +532,11 @@ Schema:
       "description": "the full task description text",
       "fieldType": "heading|pass_fail|text|measurement|textarea",
       "acceptanceCriteria": "specific pass/fail criteria if stated, else null",
-      "required": true
+      "required": true,
+      "sourcePage": 1,
+      "sourceText": "short verbatim source snippet from the PDF row",
+      "confidence": 0.0,
+      "warnings": ["short warning strings if extraction is unclear, else empty array"]
     }
   ]
 }
@@ -285,6 +553,9 @@ Important:
 - Do NOT include document header, footer, signature blocks, title page, date fields, or table column headers
 - Set itemNo exactly as shown in the document (e.g. "A", "17.1.1", "17.4.2")
 - The items array must be in document order
+- For each item include the PDF page number and a short sourceText snippet used to extract it
+- Use confidence 0.0 to 1.0; below 0.75 means a human must review the row carefully
+- Add warnings for unclear row merges, missing criteria, ambiguous field type, duplicate item numbers, or partial text
 - Return ONLY the JSON object — no markdown, no explanation`,
           },
         ],
@@ -299,8 +570,34 @@ Important:
     try {
       const parsed = JSON.parse(raw) as {
         wiTitle: string; wiNumber: string; revision?: string
-        items: Array<{ itemNo: string; description: string; fieldType: string; acceptanceCriteria: string | null; required: boolean }>
+        items: Array<{
+          itemNo: string
+          description: string
+          fieldType: string
+          acceptanceCriteria: string | null
+          required: boolean
+          sourcePage?: number | null
+          sourceText?: string | null
+          confidence?: number | null
+          warnings?: string[]
+        }>
       }
+      await auditLog({
+        tenantId: req.user!.tenantId,
+        userId: req.user!.id,
+        action: 'ai.wi_pdf.extracted',
+        entityType: 'work_instructions',
+        severity: parsed.items.some(item => (item.confidence ?? 1) < 0.75 || (item.warnings?.length ?? 0) > 0) ? 'warning' : 'info',
+        detail: {
+          file_name: file.originalname,
+          wi_number: parsed.wiNumber,
+          item_count: parsed.items.length,
+          low_confidence_count: parsed.items.filter(item => (item.confidence ?? 1) < 0.75).length,
+          warning_count: parsed.items.reduce((sum, item) => sum + (item.warnings?.length ?? 0), 0),
+          model: 'claude-sonnet-4-6',
+          prompt_version: 'wi-pdf-extraction-v2',
+        },
+      })
       res.json({ data: parsed })
     } catch {
       res.status(500).json({ error: 'AI returned invalid JSON — please try again', raw })

@@ -3,6 +3,7 @@ import multer from 'multer'
 import * as XLSX from 'xlsx'
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth'
 import { query } from '../lib/db'
+import { auditLog } from '../lib/events'
 
 const router  = Router()
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } })
@@ -177,7 +178,7 @@ router.post(
         const values: unknown[] = []
 
         const placeholders = chunk.map((r, j) => {
-          const b = j * 28
+          const b = j * 26
           values.push(
             tenantId, r.moms_id, r.work_order_id, r.template_id, r.template_name,
             r.wi_number, r.wr_number, r.wi_title, r.station, r.equipment_id,
@@ -213,6 +214,13 @@ router.post(
           wiNumbers, workOrders: woIds,
           filledRows: filled, nokCount,
         },
+      })
+      await auditLog({
+        tenantId: req.user!.tenantId,
+        userId: req.user!.id,
+        action: 'moms.imported',
+        entityType: 'moms_checklist_steps',
+        detail: { inserted, sheet: sheetName, wi_numbers: wiNumbers, work_orders: woIds.length, nok_count: nokCount },
       })
     } catch (err) { next(err) }
   }

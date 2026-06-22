@@ -102,6 +102,17 @@ CREATE TABLE public.wi_checklist_items (
   acceptance_criteria text,
   category            text,
   required            boolean NOT NULL DEFAULT true,
+  field_type          text NOT NULL DEFAULT 'pass_fail',
+  placeholder         text,
+  options_json        text,
+  unit                text,
+  min_value           numeric,
+  max_value           numeric,
+  conditional_json    text,
+  source_page         integer,
+  source_text         text,
+  ai_confidence       numeric,
+  ai_warnings         text[],
   sort_order          integer NOT NULL DEFAULT 0,
   created_at          timestamptz NOT NULL DEFAULT now()
 );
@@ -177,6 +188,7 @@ CREATE TABLE public.inspection_records (
   signed_by       uuid REFERENCES public.users(id),
   signed_at       timestamptz,
   signature_hash  text,                          -- SHA-256 of signed payload
+  signature_data_url text,
   device_info     jsonb,
   notes           text,
   created_at      timestamptz NOT NULL DEFAULT now(),
@@ -201,6 +213,11 @@ CREATE TABLE public.inspection_findings (
   ai_failure_class     text,
   ai_failure_code      text,
   ai_recommended_action text,
+  ai_validation_status text,
+  ai_validation_confidence numeric,
+  ai_validation_reason text,
+  ai_validation_recommended_result text,
+  ai_validation_evidence jsonb,
   created_at           timestamptz NOT NULL DEFAULT now(),
   updated_at           timestamptz NOT NULL DEFAULT now(),
   UNIQUE (inspection_record_id, checklist_item_id)
@@ -368,6 +385,39 @@ CREATE TABLE public.inspection_schemas (
   updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- 19. moms_checklist_steps
+-- Imported historical MOMS checklist step data.
+CREATE TABLE public.moms_checklist_steps (
+  id               bigserial PRIMARY KEY,
+  tenant_id        uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  moms_id          bigint,
+  work_order_id    text,
+  template_id      text,
+  template_name    text,
+  wi_number        text,
+  wr_number        text,
+  wi_title         text,
+  station          text,
+  equipment_id     text,
+  section_name     text,
+  sub_section_no   text,
+  sub_section_name text,
+  sub_item_no      text,
+  sub_item_name    text,
+  step_no          text,
+  step_desc        text,
+  col_header       text,
+  ctrl_type        text,
+  category         text,
+  result           text,
+  remark           text,
+  is_filled        boolean DEFAULT false,
+  has_nok          boolean DEFAULT false,
+  filled_by        text,
+  inspected_at     timestamptz,
+  imported_at      timestamptz DEFAULT now()
+);
+
 
 -- ============================================================
 -- INDEXES
@@ -413,6 +463,12 @@ CREATE INDEX idx_al_created            ON public.audit_logs(created_at DESC);
 -- notifications
 CREATE INDEX idx_notif_tenant_user     ON public.notifications(tenant_id, user_id);
 CREATE INDEX idx_notif_unread          ON public.notifications(tenant_id, user_id) WHERE read = false;
+
+-- moms_checklist_steps
+CREATE INDEX idx_moms_tenant_wi        ON public.moms_checklist_steps(tenant_id, wi_number);
+CREATE INDEX idx_moms_work_order       ON public.moms_checklist_steps(tenant_id, work_order_id);
+CREATE INDEX idx_moms_inspected_at     ON public.moms_checklist_steps(tenant_id, inspected_at);
+CREATE INDEX idx_moms_category         ON public.moms_checklist_steps(tenant_id, category);
 
 -- support_tickets
 CREATE INDEX idx_st_tenant             ON public.support_tickets(tenant_id);

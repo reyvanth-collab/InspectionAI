@@ -71,7 +71,6 @@ export default function WIDetail() {
     )
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const w = wi as any
   const items: ChecklistItem[]    = [...(w.wi_checklist_items ?? [])].sort(
     (a: ChecklistItem, b: ChecklistItem) => a.sort_order - b.sort_order

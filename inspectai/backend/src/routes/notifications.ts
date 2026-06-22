@@ -11,9 +11,10 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
       `SELECT id, title, message, severity, read, created_at
        FROM   public.notifications
        WHERE  tenant_id = $1
+         AND  (user_id IS NULL OR user_id = $2)
        ORDER  BY created_at DESC
        LIMIT  50`,
-      [req.user!.tenantId]
+      [req.user!.tenantId, req.user!.id]
     )
     res.json({ data: result.rows })
   } catch (err) { next(err) }
@@ -23,8 +24,12 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
 router.patch('/read-all', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     await query(
-      `UPDATE public.notifications SET read = true WHERE tenant_id = $1 AND read = false`,
-      [req.user!.tenantId]
+      `UPDATE public.notifications
+       SET read = true
+       WHERE tenant_id = $1
+         AND (user_id IS NULL OR user_id = $2)
+         AND read = false`,
+      [req.user!.tenantId, req.user!.id]
     )
     res.json({ message: 'All notifications marked as read' })
   } catch (err) { next(err) }
@@ -34,8 +39,12 @@ router.patch('/read-all', requireAuth, async (req: AuthRequest, res, next) => {
 router.patch('/:id/read', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     await query(
-      `UPDATE public.notifications SET read = true WHERE id = $1 AND tenant_id = $2`,
-      [req.params.id, req.user!.tenantId]
+      `UPDATE public.notifications
+       SET read = true
+       WHERE id = $1
+         AND tenant_id = $2
+         AND (user_id IS NULL OR user_id = $3)`,
+      [req.params.id, req.user!.tenantId, req.user!.id]
     )
     res.json({ message: 'Notification marked as read' })
   } catch (err) { next(err) }

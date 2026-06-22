@@ -9,9 +9,11 @@ import {
   useInspectionRecord,
   useStartInspection,
   useRecordFinding,
+  useAttachFindingPhoto,
   useCompleteInspection,
+  type InspectionFinding,
 } from '@/hooks/useInspection'
-import { useAiAnalysis } from '@/hooks/useAiAnalysis'
+import { useAiAnalysis, useAiValidation, type AiValidation } from '@/hooks/useAiAnalysis'
 import { useMomsWiSummary, type MomsWiSummary } from '@/hooks/useMomsWiSummary'
 import { useToast } from '@/components/ui/Toast'
 import { SignaturePad } from '@/components/ui/SignaturePad'
@@ -121,24 +123,27 @@ function MomsBanner({ data }: { data: MomsWiSummary }) {
 }
 
 // ── Photo + Vision AI panel ───────────────────────────────────────
-function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, location }: {
+function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, location, onPhotoCaptured }: {
   itemDescription: string; acceptanceCriteria?: string | null
   assetName?: string; location?: string
+  onPhotoCaptured?: (imageDataUrl: string) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [state, setState] = useState<{ text: string; loading: boolean; error: string | null } | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
 
   const analysePhoto = useCallback(async (file: File) => {
-    setPreview(URL.createObjectURL(file))
     setState({ text: '', loading: true, error: null })
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload  = () => resolve((reader.result as string).split(',')[1])
+        reader.onload  = () => resolve(reader.result as string)
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
+      setPreview(dataUrl)
+      onPhotoCaptured?.(dataUrl)
+      const base64 = dataUrl.split(',')[1]
       const mediaType = (file.type as 'image/jpeg' | 'image/png' | 'image/webp') || 'image/jpeg'
       const token = localStorage.getItem(JWT_KEY) ?? ''
       const res = await fetch('/api/ai/analyse-photo', {
@@ -149,9 +154,11 @@ function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, lo
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
       const reader2 = res.body.getReader()
       const decoder = new TextDecoder()
-      while (true) {
+      let streamDone = false
+      while (!streamDone) {
         const { done, value } = await reader2.read()
-        if (done) break
+        streamDone = done
+        if (streamDone) break
         for (const line of decoder.decode(value).split('\n').filter(l => l.startsWith('data: '))) {
           const json = line.slice(6).trim()
           if (json === '[DONE]') { setState(p => p ? { ...p, loading: false } : p); break }
@@ -167,7 +174,7 @@ function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, lo
     } finally {
       setState(p => p ? { ...p, loading: false } : p)
     }
-  }, [itemDescription, acceptanceCriteria, assetName, location])
+  }, [itemDescription, acceptanceCriteria, assetName, location, onPhotoCaptured])
 
   return (
     <div className="mt-2">
@@ -299,7 +306,33 @@ function FieldInput({
   return null
 }
 
+function validationFromFinding(finding?: InspectionFinding): AiValidation | null {
+  if (!finding?.ai_validation_status || !finding.ai_validation_reason) return null
+  const evidencePayload = finding.ai_validation_evidence ?? {}
+  return {
+    status: finding.ai_validation_status,
+    recommendedResult: finding.ai_validation_recommended_result ?? 'keep',
+    confidence: Number(finding.ai_validation_confidence ?? 0),
+    reason: finding.ai_validation_reason,
+    evidence: evidencePayload.evidence ?? [],
+    riskLevel: evidencePayload.riskLevel ?? 'low',
+    requiredAction: evidencePayload.requiredAction ?? 'No additional action required.',
+  }
+}
+
 // ── Main component ────────────────────────────────────────────────
+function validationTone(status?: AiValidation['status']) {
+  if (status === 'review_required') return 'bg-danger-bg border-danger-border text-danger'
+  if (status === 'uncertain') return 'bg-warning-bg/20 border-warning-border text-warning'
+  return 'bg-success-bg/20 border-success-border text-success'
+}
+
+function validationLabel(status?: AiValidation['status']) {
+  if (status === 'review_required') return 'Human review required'
+  if (status === 'uncertain') return 'Evidence needed'
+  return 'Aligned'
+}
+
 export default function InspectionExecution() {
   const { id: workOrderDbId = '' } = useParams()
   const navigate = useNavigate()
@@ -311,15 +344,16 @@ export default function InspectionExecution() {
   const { data: record, isLoading: recLoading } = useInspectionRecord(workOrderDbId)
 
   // Hoist WI number before any early returns (hook order must be constant)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wi       = (wo as any)?.work_instructions
   const wiNumber = wi?.wi_number as string | undefined
 
   // All hooks unconditional
   const startInspection    = useStartInspection()
   const recordFinding      = useRecordFinding()
+  const attachPhoto        = useAttachFindingPhoto()
   const completeInspection = useCompleteInspection()
   const { analyses, analyse, clear: clearAi } = useAiAnalysis()
+  const { validations, validate: validateFinding, clear: clearValidation } = useAiValidation()
   const { data: momsData }                    = useMomsWiSummary(wiNumber)
 
   const [localResults,  setLocalResults]  = useState<Record<string, FindingResult>>({})
@@ -351,6 +385,19 @@ export default function InspectionExecution() {
       draftRestored.current = true
     } catch { /* ignore */ }
   }, [workOrderDbId])
+
+  const recordHydrated = useRef<string | null>(null)
+  useEffect(() => {
+    if (!record?.id || recordHydrated.current === record.id) return
+    const restoredNotes: Record<string, string> = {}
+    for (const finding of record.inspection_findings ?? []) {
+      if (finding.notes) restoredNotes[finding.checklist_item_id] = finding.notes
+    }
+    if (Object.keys(restoredNotes).length > 0) {
+      setLocalNotes(prev => ({ ...restoredNotes, ...prev }))
+    }
+    recordHydrated.current = record.id
+  }, [record])
 
   // ── Auto-save draft to localStorage ──────────────────────────
   const saveDraft = useCallback(() => {
@@ -404,7 +451,6 @@ export default function InspectionExecution() {
   const answered = checkableItems.filter(i => results[i.id] != null).length
   const passed   = Object.values(results).filter(r => r === 'pass').length
   const failed   = Object.values(results).filter(r => r === 'fail').length
-  const naCount  = Object.values(results).filter(r => r === 'na').length
   const pct      = checkableItems.length > 0 ? Math.round((answered / checkableItems.length) * 100) : 0
 
   // ── Handlers ─────────────────────────────────────────────────
@@ -420,7 +466,9 @@ export default function InspectionExecution() {
     const next = results[itemId] === result ? undefined : result
     if (!next) {
       setLocalResults(prev => { const p = { ...prev }; delete p[itemId]; return p })
-      clearAi(itemId); return
+      clearAi(itemId)
+      clearValidation(itemId)
+      return
     }
     setLocalResults(prev => ({ ...prev, [itemId]: next }))
     setSaving(prev => ({ ...prev, [itemId]: true }))
@@ -429,18 +477,43 @@ export default function InspectionExecution() {
         ? `${localValues[itemId]}${localNotes[itemId] ? '\n' + localNotes[itemId] : ''}`
         : localNotes[itemId]
       await recordFinding.mutateAsync({
+        workOrderDbId,
         inspectionRecordId: record.id,
         checklistItemId:    itemId,
         result:             next,
         notes:              notesForItem,
       })
-      if (next === 'fail') {
-        const momsMatch = momsData?.topNokSteps.find(s =>
-          s.step_desc && (
-            s.step_desc.toLowerCase().includes(item.description.toLowerCase().slice(0, 40)) ||
-            item.description.toLowerCase().includes((s.step_desc).toLowerCase().slice(0, 40))
-          )
+      const momsMatch = momsData?.topNokSteps.find(s =>
+        s.step_desc && (
+          s.step_desc.toLowerCase().includes(item.description.toLowerCase().slice(0, 40)) ||
+          item.description.toLowerCase().includes((s.step_desc).toLowerCase().slice(0, 40))
         )
+      )
+      const validation = await validateFinding({
+        itemId,
+        inspectionRecordId: record.id,
+        checklistItemId: item.id,
+        selectedResult: next,
+        itemDescription: item.description,
+        acceptanceCriteria: item.acceptance_criteria ?? undefined,
+        fieldType: item.field_type ?? 'pass_fail',
+        required: item.required !== false,
+        minValue: item.min_value ?? null,
+        maxValue: item.max_value ?? null,
+        capturedValue: localValues[itemId],
+        inspectorNotes: localNotes[itemId],
+        assetName: woData.asset_name as string | undefined,
+        location: woData.location as string | undefined,
+        photoCount: record.inspection_findings?.find(f => f.checklist_item_id === item.id)?.photo_urls?.length ?? 0,
+        momsHistoricalNokRate: momsMatch ? parseFloat(momsMatch.nok_rate) : momsData?.nokRate,
+        momsHistoricalTotal: momsMatch ? parseInt(momsMatch.total) : momsData?.totalInspections,
+      })
+      if (validation?.status === 'review_required') {
+        toast('AI review flagged this result for human review', 'error')
+      } else if (validation?.status === 'uncertain') {
+        toast('AI review needs more evidence for this result', 'info')
+      }
+      if (next === 'fail') {
         analyse({
           itemId,
           itemDescription:       item.description,
@@ -494,14 +567,13 @@ export default function InspectionExecution() {
     setSignatureDataUrl(dataUrl)
     setShowSignature(false)
     if (!record) return
-    const overallResult: FindingResult = failed > 0 ? 'fail' : 'pass'
     try {
-      await completeInspection.mutateAsync({ inspectionRecordId: record.id, workOrderDbId, overallResult })
+      const completed = await completeInspection.mutateAsync({ inspectionRecordId: record.id, workOrderDbId, signatureDataUrl: dataUrl })
       localStorage.removeItem(draftKey(workOrderDbId))
       toast('Inspection completed and signed', 'success')
       setCompletionSummary({
-        overallResult,
-        passed, failed, na: naCount, total: checkableItems.length,
+        overallResult: completed.overallResult,
+        passed: completed.passed, failed: completed.failed, na: completed.na, total: checkableItems.length,
         failedItems: checkableItems.filter(i => results[i.id] === 'fail').map(i => ({
           item_no: i.item_no, description: i.description, note: localNotes[i.id],
         })),
@@ -625,6 +697,10 @@ export default function InspectionExecution() {
             const isSaving = saving[item.id]
             const showNote = activeNote === item.id
             const ai       = analyses[item.id]
+            const finding  = record?.inspection_findings?.find(f => f.checklist_item_id === item.id)
+            const validation = validations[item.id]?.data ?? validationFromFinding(finding)
+            const validationLoading = validations[item.id]?.loading
+            const validationError = validations[item.id]?.error
             const fieldVal = localValues[item.id] ?? ''
 
             // Section heading
@@ -687,8 +763,86 @@ export default function InspectionExecution() {
                           acceptanceCriteria={item.acceptance_criteria}
                           assetName={woData.asset_name as string}
                           location={woData.location as string}
+                          onPhotoCaptured={(imageDataUrl) => {
+                            if (!record) return
+                            attachPhoto.mutate({
+                              workOrderDbId,
+                              inspectionRecordId: record.id,
+                              checklistItemId: item.id,
+                              imageDataUrl,
+                            }, {
+                              onSuccess: () => toast('Photo evidence saved', 'success'),
+                              onError: (err) => {
+                                if (!isOnline) {
+                                  enqueue({
+                                    endpoint: `/inspections/${workOrderDbId}/findings/photo`,
+                                    method: 'POST',
+                                    body: {
+                                      inspectionRecordId: record.id,
+                                      checklistItemId: item.id,
+                                      imageDataUrl,
+                                    },
+                                    label: `${item.item_no} - photo evidence`,
+                                  })
+                                  toast('Offline - photo queued for sync', 'info')
+                                } else {
+                                  toast(err instanceof Error ? err.message : 'Photo save failed', 'error')
+                                }
+                              },
+                            })
+                          }}
                         />
                       </>
+                    )}
+
+                    {/* AI result validation */}
+                    {(validation || validationLoading || validationError) && (
+                      <div className={cn(
+                        'mt-3 p-3 border rounded-[8px]',
+                        validationError ? 'bg-danger-bg border-danger-border text-danger' : validationTone(validation?.status)
+                      )}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.08em]">AI Result Review</span>
+                          {validationLoading && <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
+                          {validation && (
+                            <span className="ml-auto text-[10px] font-mono opacity-75">
+                              {Math.round(validation.confidence * 100)}%
+                            </span>
+                          )}
+                        </div>
+                        {validationError ? (
+                          <p className="text-[12px]">{validationError}</p>
+                        ) : validation ? (
+                          <div className="text-[12px] leading-relaxed text-text">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={cn(
+                                'px-1.5 py-0.5 rounded border text-[10px] font-semibold uppercase tracking-[0.06em]',
+                                validationTone(validation.status)
+                              )}>
+                                {validationLabel(validation.status)}
+                              </span>
+                              {validation.recommendedResult !== 'keep' && (
+                                <span className="text-[11px] text-text-2">
+                                  Recommended: {validation.recommendedResult.toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <p>{validation.reason}</p>
+                            {validation.evidence.length > 0 && (
+                              <ul className="mt-1 list-disc pl-4 text-text-2">
+                                {validation.evidence.slice(0, 3).map((evidence, i) => (
+                                  <li key={i}>{evidence}</li>
+                                ))}
+                              </ul>
+                            )}
+                            {validation.requiredAction && (
+                              <p className="mt-1 text-text-2">{validation.requiredAction}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-[12px] text-text-2">Checking result consistency...</p>
+                        )}
+                      </div>
                     )}
 
                     {/* AI analysis */}
