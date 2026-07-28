@@ -13,6 +13,7 @@ import aiRouter            from './routes/ai'
 import momsRouter          from './routes/moms'
 import reportsRouter       from './routes/reports'
 import usersRouter         from './routes/users'
+import assetsRouter        from './routes/assets'
 import { errorHandler }    from './middleware/errorHandler'
 
 dotenv.config()
@@ -40,6 +41,7 @@ app.use('/api/ai',                aiRouter)
 app.use('/api/moms',             momsRouter)
 app.use('/api/reports',          reportsRouter)
 app.use('/api/users',            usersRouter)
+app.use('/api/assets',           assetsRouter)
 
 // ── Health check ────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

@@ -15,6 +15,7 @@ interface DBWorkOrderRow {
   assigned_to_name: string | null
   wi_number:        string | null
   wi_title:         string | null
+  checklist_item_count?: number | string | null
 }
 
 function toWorkOrder(row: DBWorkOrderRow): WorkOrder {
@@ -25,9 +26,10 @@ function toWorkOrder(row: DBWorkOrderRow): WorkOrder {
     type:       row.type ?? '',
     priority:   row.priority as WorkOrder['priority'],
     status:     row.status.replace('_', '-') as WorkOrder['status'],
-    assignedTo: row.assigned_to_name ?? '—',
+    assignedTo: row.assigned_to_name ?? '-',
     dueDate:    row.due_date ?? '',
-    wiRef:      row.wi_number ?? '—',
+    wiRef:      row.wi_number ?? '-',
+    checklistItemCount: Number(row.checklist_item_count ?? 0),
     dbId:       row.id,
   }
 }
@@ -76,6 +78,21 @@ export function useUpdateWorkOrderStatus() {
       await api.patch(`/inspections/${dbId}/status`, { status })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['work-orders'] }),
+  })
+}
+
+export function useAssignWorkInstruction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ dbId, workInstructionId }: { dbId: string; workInstructionId: string }) => {
+      const res = await api.patch<{ data: Record<string, unknown> }>(`/inspections/${dbId}/work-instruction`, { workInstructionId })
+      return res.data.data
+    },
+    onSuccess: (_data, { dbId }) => {
+      qc.invalidateQueries({ queryKey: ['work-orders'] })
+      qc.invalidateQueries({ queryKey: ['work-order', dbId] })
+      qc.invalidateQueries({ queryKey: ['inspection-record', dbId] })
+    },
   })
 }
 

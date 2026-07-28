@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { type LucideIcon, GripVertical, Trash2, Copy, Eye, ArrowLeft, X, Upload,
          CheckSquare, Type, Hash, ChevronDown, ToggleLeft, Calendar,
          Ruler, Camera, AlignLeft, PenLine, AlignJustify,
-         CheckCheck, AlertCircle, Zap, Settings2, ChevronRight } from 'lucide-react'
+         CheckCheck, AlertCircle, Zap, Settings2 } from 'lucide-react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopNav } from '@/components/layout/TopNav'
 import { Button } from '@/components/ui/Button'
@@ -43,6 +43,18 @@ interface WIMeta {
   revision:      string
   effectiveDate: string
   expiryDate:    string
+}
+
+interface StarterTemplate {
+  id: string
+  name: string
+  desc: string
+  items: Array<Partial<WIField> & Pick<WIField, 'type' | 'label'>>
+}
+
+interface QualityIssue {
+  level: 'error' | 'warning'
+  message: string
 }
 
 // ── Field palette definition ─────────────────────────────────────
@@ -97,6 +109,98 @@ function makeField(type: FieldType, sortOrder: number): WIField {
     // sortOrder is stored externally in the array index
   }
   void sortOrder  // used externally
+}
+
+const STARTER_TEMPLATES: StarterTemplate[] = [
+  {
+    id: 'routine-pm',
+    name: 'Routine PM',
+    desc: 'Safety, condition, measurement, sign-off',
+    items: [
+      { type: 'heading', label: 'Pre-check' },
+      { type: 'pass_fail', label: 'Asset is isolated or safe to inspect', acceptanceCriteria: 'Inspection can proceed without exposing personnel to active hazards.' },
+      { type: 'pass_fail', label: 'Asset tag and location match the work order', acceptanceCriteria: 'Asset identifier and physical location match the assigned work order.' },
+      { type: 'heading', label: 'Inspection' },
+      { type: 'yes_no', label: 'Any visible damage, leakage, corrosion, or loose parts?', acceptanceCriteria: 'No visible damage, leakage, corrosion, or looseness is present.' },
+      { type: 'measurement', label: 'Record critical operating reading', acceptanceCriteria: 'Reading is within the approved operating range.', unit: 'mm', minValue: '', maxValue: '' },
+      { type: 'photo', label: 'Attach photo evidence for abnormal findings', required: false },
+      { type: 'textarea', label: 'Corrective action or follow-up required', required: false, placeholder: 'Enter action taken, parts required, or escalation notes' },
+    ],
+  },
+  {
+    id: 'safety-compliance',
+    name: 'Safety Check',
+    desc: 'Guards, labels, emergency stops, housekeeping',
+    items: [
+      { type: 'heading', label: 'Safety controls' },
+      { type: 'pass_fail', label: 'Guards and covers are installed and secure', acceptanceCriteria: 'All guards are present, secured, and free from damage.' },
+      { type: 'pass_fail', label: 'Emergency stop or isolation control is accessible', acceptanceCriteria: 'Control is visible, reachable, labelled, and unobstructed.' },
+      { type: 'pass_fail', label: 'Warning labels and instruction plates are legible', acceptanceCriteria: 'Required labels are readable and fixed in place.' },
+      { type: 'heading', label: 'Work area' },
+      { type: 'yes_no', label: 'Any unsafe obstruction, spill, sharp edge, or trip hazard?', acceptanceCriteria: 'No unsafe site condition is present around the asset.' },
+      { type: 'photo', label: 'Capture evidence for any unsafe condition', required: false },
+    ],
+  },
+  {
+    id: 'defect-triage',
+    name: 'Defect Triage',
+    desc: 'Failure observation, severity, action owner',
+    items: [
+      { type: 'heading', label: 'Failure details' },
+      { type: 'dropdown', label: 'Observed defect type', optionsText: 'Mechanical damage\nElectrical fault\nLeakage\nCorrosion\nAbnormal noise\nOut of tolerance' },
+      { type: 'textarea', label: 'Describe exact failure location and symptom', placeholder: 'Component, location, visible symptom, operating condition' },
+      { type: 'photo', label: 'Attach close-up photo of defect' },
+      { type: 'heading', label: 'Disposition' },
+      { type: 'dropdown', label: 'Operational risk level', optionsText: 'Critical - stop work\nMajor - repair before release\nMinor - monitor and plan repair' },
+      { type: 'textarea', label: 'Immediate containment or corrective action', acceptanceCriteria: 'Action is specific enough for supervisor review.' },
+    ],
+  },
+]
+
+function buildTemplateFields(template: StarterTemplate): WIField[] {
+  return template.items.map((item, idx) => ({
+    ...makeField(item.type, idx),
+    ...item,
+    id: crypto.randomUUID(),
+    required: item.required ?? (item.type !== 'heading'),
+    acceptanceCriteria: item.acceptanceCriteria ?? '',
+    placeholder: item.placeholder ?? '',
+    optionsText: item.optionsText ?? '',
+    unit: item.unit ?? (item.type === 'measurement' ? 'mm' : ''),
+    minValue: item.minValue ?? '',
+    maxValue: item.maxValue ?? '',
+  }))
+}
+
+function getChecklistQuality(fields: WIField[]): QualityIssue[] {
+  const issues: QualityIssue[] = []
+  const checkable = fields.filter(f => f.type !== 'heading')
+
+  if (checkable.length === 0) {
+    issues.push({ level: 'error', message: 'Add at least one checkable inspection item before publishing.' })
+  }
+
+  fields.forEach((field, idx) => {
+    const label = field.label.trim()
+    if (!label) {
+      issues.push({ level: 'error', message: `Item ${idx + 1} needs an inspection question or heading.` })
+    }
+    if (['dropdown', 'multiselect'].includes(field.type) && field.optionsText.split('\n').map(s => s.trim()).filter(Boolean).length < 2) {
+      issues.push({ level: 'error', message: `${label || `Item ${idx + 1}`} needs at least two selectable options.` })
+    }
+    if (['number', 'measurement'].includes(field.type) && field.minValue !== '' && field.maxValue !== '') {
+      const min = Number(field.minValue)
+      const max = Number(field.maxValue)
+      if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
+        issues.push({ level: 'error', message: `${label || `Item ${idx + 1}`} has a minimum greater than maximum.` })
+      }
+    }
+    if (!['heading', 'photo', 'signature', 'textarea', 'text'].includes(field.type) && !field.acceptanceCriteria.trim()) {
+      issues.push({ level: 'warning', message: `${label || `Item ${idx + 1}`} should define clear pass criteria.` })
+    }
+  })
+
+  return issues.slice(0, 8)
 }
 
 // ── Main component ───────────────────────────────────────────────
@@ -189,6 +293,13 @@ export default function WIBuilder() {
     })
   }, [])
 
+  const addTemplate = useCallback((template: StarterTemplate) => {
+    const nextFields = buildTemplateFields(template)
+    setFields(prev => [...prev, ...nextFields])
+    setSelectedId(nextFields.find(f => f.type !== 'heading')?.id ?? nextFields[0]?.id ?? null)
+    toast(`Added ${template.name} starter checklist`, 'success')
+  }, [toast])
+
   // ── Drag handlers ─────────────────────────────────────────────
   const handleCanvasDragOver = (e: React.DragEvent, idx: number) => {
     e.preventDefault()
@@ -225,6 +336,12 @@ export default function WIBuilder() {
   const handleSave = async (publish: boolean) => {
     if (!meta.wiNumber.trim()) { toast('WI number is required', 'error'); return }
     if (!meta.title.trim())    { toast('Title is required', 'error'); return }
+    const qualityIssues = getChecklistQuality(fields)
+    const blockingIssue = qualityIssues.find(issue => issue.level === 'error')
+    if (publish && blockingIssue) {
+      toast(blockingIssue.message, 'error')
+      return
+    }
 
     const checklistItems = fields.map((f, i) => ({
       itemNo:              String(i + 1),
@@ -266,6 +383,7 @@ export default function WIBuilder() {
 
   const selectedField = fields.find(f => f.id === selectedId) ?? null
   const requiredCount = fields.filter(f => f.required && f.type !== 'heading').length
+  const qualityIssues = getChecklistQuality(fields)
 
   if (loadingExisting) {
     return (
@@ -342,6 +460,22 @@ export default function WIBuilder() {
 
           {/* LEFT — Palette */}
           <div className="w-[220px] flex-shrink-0 border-r border-border bg-bg-2 overflow-y-auto">
+            <div className="px-3 pt-3 pb-3 border-b border-border">
+              <p className="text-[9px] font-semibold text-text-3 uppercase tracking-[0.12em] mb-2">Starter checklists</p>
+              <div className="flex flex-col gap-1.5">
+                {STARTER_TEMPLATES.map(template => (
+                  <button key={template.id}
+                    onClick={() => addTemplate(template)}
+                    className="w-full text-left rounded-[8px] border border-border bg-bg hover:border-accent hover:bg-accent-bg px-3 py-2 transition-colors">
+                    <span className="flex items-center gap-2 text-[12px] font-medium text-text">
+                      <CheckSquare size={13} className="text-accent flex-shrink-0" />
+                      {template.name}
+                    </span>
+                    <span className="block pl-5 text-[10px] text-text-3 leading-snug mt-0.5">{template.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="px-3 pt-3 pb-1">
               <p className="text-[9px] font-semibold text-text-3 uppercase tracking-[0.12em]">Field types</p>
             </div>
@@ -445,10 +579,7 @@ export default function WIBuilder() {
             {selectedField
               ? <PropertiesPanel field={selectedField} allFields={fields} onChange={updateField} onDelete={deleteField} />
               : (
-                <div className="flex flex-col items-center justify-center h-full py-16 text-center px-4">
-                  <ChevronRight size={24} className="text-border-2 mb-3 rotate-180" />
-                  <p className="text-[12px] text-text-3">Select a field to configure it</p>
-                </div>
+                <ChecklistQualityPanel fields={fields} issues={qualityIssues} onAddTemplate={addTemplate} />
               )
             }
           </div>
@@ -576,6 +707,90 @@ function CanvasFieldRow({
 }
 
 // ── Properties panel ─────────────────────────────────────────────
+function ChecklistQualityPanel({
+  fields, issues, onAddTemplate,
+}: {
+  fields: WIField[]
+  issues: QualityIssue[]
+  onAddTemplate: (template: StarterTemplate) => void
+}) {
+  const checkableCount = fields.filter(f => f.type !== 'heading').length
+  const errors = issues.filter(i => i.level === 'error')
+  const warnings = issues.filter(i => i.level === 'warning')
+  const ready = fields.length > 0 && errors.length === 0
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-3 border-b border-border">
+        <p className="text-[11px] font-semibold text-text">Checklist quality</p>
+        <p className="text-[10px] text-text-3 mt-0.5">{checkableCount} checkable item{checkableCount === 1 ? '' : 's'}</p>
+      </div>
+
+      <div className="px-4 py-3 border-b border-border">
+        <div className={cn(
+          'flex items-start gap-2 rounded-[8px] border px-3 py-2',
+          ready
+            ? 'border-success-border bg-success-bg/20 text-success'
+            : errors.length > 0
+            ? 'border-warning-border bg-warning-bg/20 text-warning'
+            : 'border-border bg-bg text-text-2'
+        )}>
+          <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+          <p className="text-[12px] leading-relaxed">
+            {ready
+              ? 'Ready to publish.'
+              : fields.length === 0
+              ? 'Start with a template or add checklist items.'
+              : `${errors.length} blocker${errors.length === 1 ? '' : 's'} before publish.`}
+          </p>
+        </div>
+      </div>
+
+      {fields.length === 0 && (
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-[10px] font-semibold text-text-3 uppercase tracking-[0.09em] mb-2">Quick start</p>
+          <div className="flex flex-col gap-1.5">
+            {STARTER_TEMPLATES.map(template => (
+              <button key={template.id}
+                onClick={() => onAddTemplate(template)}
+                className="w-full text-left rounded-[8px] border border-border bg-bg hover:border-accent hover:bg-accent-bg px-3 py-2 transition-colors">
+                <span className="flex items-center gap-2 text-[12px] font-medium text-text">
+                  <CheckSquare size={13} className="text-accent flex-shrink-0" />
+                  {template.name}
+                </span>
+                <span className="block pl-5 text-[10px] text-text-3 leading-snug mt-0.5">{template.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="px-4 py-3">
+        {issues.length === 0 ? (
+          <p className="text-[12px] text-text-3">Select any field to tune labels, pass criteria, options, and required state.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {[...errors, ...warnings].map((issue, idx) => (
+              <div key={idx} className="flex items-start gap-2">
+                <span className={cn(
+                  'mt-1 h-1.5 w-1.5 rounded-full flex-shrink-0',
+                  issue.level === 'error' ? 'bg-danger' : 'bg-warning'
+                )} />
+                <p className={cn(
+                  'text-[11px] leading-relaxed',
+                  issue.level === 'error' ? 'text-danger' : 'text-text-2'
+                )}>
+                  {issue.message}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PropertiesPanel({
   field, allFields, onChange, onDelete,
 }: {
@@ -639,7 +854,7 @@ function PropertiesPanel({
 
       {/* Label */}
       <div className={SECTION}>
-        <label className={LABEL}>Label</label>
+        <label className={LABEL}>Inspection question</label>
         <input
           autoFocus
           value={field.label}
@@ -647,7 +862,7 @@ function PropertiesPanel({
           className={INPUT}
           placeholder="Field label…"
         />
-        <p className="text-[10px] text-text-3 mt-1">Shown to inspector during inspection</p>
+        <p className="text-[10px] text-text-3 mt-1">Shown as the checklist step during inspection</p>
       </div>
 
       {/* Acceptance criteria (not for heading, photo, signature) */}

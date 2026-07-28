@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AlertCircle, ClipboardList, Plus } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -34,6 +35,7 @@ export default function Inspections() {
   const { data: wis  = [] }            = useWorkInstructions()
   const { data: users = [] }           = useUsers()
   const createWO                       = useCreateWorkOrder()
+  const usableWis = wis.filter(w => (w.checkableItemCount ?? w.checklistItemCount ?? 0) > 0)
 
   const filtered = filter === 'all' ? wos : wos.filter(w => w.status === filter)
 
@@ -51,11 +53,14 @@ export default function Inspections() {
 
   const handleCreate = async () => {
     if (!form.assetName.trim()) { toast('Asset name is required', 'error'); return }
+    if (!form.workInstructionId) { toast('Attach a work instruction checklist first', 'error'); return }
+    const selectedWI = usableWis.find(w => w.dbId === form.workInstructionId)
+    if (!selectedWI) { toast('Selected work instruction has no checklist items', 'error'); return }
     try {
       await createWO.mutateAsync({
         assetName: form.assetName, location: form.location,
         priority: form.priority, dueDate: form.dueDate,
-        assignedTo: form.assignedTo, workInstructionId: form.workInstructionId || undefined,
+        assignedTo: form.assignedTo, workInstructionId: form.workInstructionId,
         notes: form.notes || undefined,
       })
       toast('Work order created', 'success')
@@ -73,7 +78,9 @@ export default function Inspections() {
           <h1 className="text-[22px] font-semibold tracking-[-0.3px]">Inspections</h1>
           <p className="text-[13px] text-text-2 mt-1">Manage and execute work order inspections</p>
         </div>
-        <Button variant="primary" onClick={() => setShowModal(true)}>+ New Work Order</Button>
+        <Button variant="primary" onClick={() => setShowModal(true)}>
+          <Plus size={15} /> New Work Order
+        </Button>
       </div>
 
       {/* KPI row */}
@@ -132,7 +139,13 @@ export default function Inspections() {
                 <span className="font-mono text-[12px] text-accent w-20 flex-shrink-0">{wo.id}</span>
                 <span className="text-[13px] text-text flex-1 truncate group-hover:text-accent transition-colors">{wo.asset}</span>
                 <span className="text-[12px] text-text-2 flex-1 truncate hidden md:block">{wo.location}</span>
-                <span className="font-mono text-[11px] text-text-3 flex-1 hidden lg:block">{wo.wiRef}</span>
+                <span className="font-mono text-[11px] text-text-3 flex-1 hidden lg:block">
+                  {wo.wiRef === '-' || (wo.checklistItemCount ?? 0) < 1 ? (
+                    <span className="inline-flex items-center gap-1 text-warning">
+                      <AlertCircle size={12} /> Missing checklist
+                    </span>
+                  ) : wo.wiRef}
+                </span>
                 <span className="flex-1"><Badge variant={PRIORITY_BADGE[wo.priority]}>{wo.priority}</Badge></span>
                 <span className="flex-1"><Badge variant={STATUS_BADGE[wo.status]}>{wo.status}</Badge></span>
                 <span className="text-[12px] text-text-2 flex-1 hidden md:block truncate">{wo.assignedTo}</span>
@@ -151,7 +164,7 @@ export default function Inspections() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-            <Button variant="primary" loading={createWO.isPending} onClick={handleCreate}>
+            <Button variant="primary" loading={createWO.isPending} disabled={usableWis.length === 0} onClick={handleCreate}>
               Create Work Order
             </Button>
           </>
@@ -190,13 +203,36 @@ export default function Inspections() {
               </select>
             </div>
             <div className="col-span-2">
-              <label className={LABEL}>Work Instruction</label>
-              <select value={form.workInstructionId} onChange={set('workInstructionId')} className={INPUT}>
-                <option value="">— No WI linked —</option>
-                {wis.map(w => (
+              <label className={LABEL}>Work Instruction Checklist <span className="text-danger">*</span></label>
+              <select value={form.workInstructionId} onChange={set('workInstructionId')} required className={INPUT}>
+                <option value="" disabled>Select checklist...</option>
+                {wis.map(w => {
+                  const count = w.checkableItemCount ?? w.checklistItemCount ?? 0
+                  return (
+                    <option key={w.dbId} value={w.dbId} disabled={count < 1}>
+                      {w.id} - {w.title} ({count} item{count === 1 ? '' : 's'})
+                    </option>
+                  )
+                })}
+                {/*
                   <option key={w.dbId} value={w.dbId}>{w.id} — {w.title}</option>
-                ))}
+                */}
               </select>
+              {usableWis.length === 0 ? (
+                <div className="mt-2 flex items-start gap-2 rounded-[8px] border border-warning-border bg-warning-bg/20 px-3 py-2 text-warning">
+                  <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+                  <p className="text-[12px] leading-relaxed">
+                    Create or publish a work instruction with checklist items before opening work orders.
+                  </p>
+                </div>
+              ) : form.workInstructionId ? (
+                <div className="mt-2 flex items-center gap-2 text-[12px] text-text-3">
+                  <ClipboardList size={14} />
+                  <span>
+                    {usableWis.find(w => w.dbId === form.workInstructionId)?.checkableItemCount ?? 0} checklist items will be attached.
+                  </span>
+                </div>
+              ) : null}
             </div>
             <div className="col-span-2">
               <label className={LABEL}>Notes</label>

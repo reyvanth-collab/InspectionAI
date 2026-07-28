@@ -31,7 +31,14 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
       `SELECT wo.id, wo.wo_number, wo.asset_name, wo.location, wo.type,
               wo.priority, wo.status, wo.due_date, wo.completed_at, wo.notes,
               u.name  AS assigned_to_name,
-              wi.wi_number AS wi_number, wi.title AS wi_title
+              wi.wi_number AS wi_number, wi.title AS wi_title,
+              (
+                SELECT COUNT(*)::int
+                FROM public.wi_checklist_items ci
+                WHERE ci.work_instruction_id = wo.work_instruction_id
+                  AND ci.tenant_id = wo.tenant_id
+                  AND COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+              ) AS checklist_item_count
        FROM   public.work_orders wo
        LEFT JOIN public.users u  ON u.id = wo.assigned_to
        LEFT JOIN public.work_instructions wi ON wi.id = wo.work_instruction_id
@@ -134,14 +141,28 @@ router.post('/', requireAuth, async (req: AuthRequest, res, next) => {
         res.status(400).json({ error: 'Assigned user must be active in your tenant' }); return
       }
     }
-    if (workInstructionId) {
-      const wiRes = await query(
-        `SELECT id FROM public.work_instructions WHERE id = $1 AND tenant_id = $2`,
-        [workInstructionId, req.user!.tenantId]
-      )
-      if (wiRes.rows.length === 0) {
-        res.status(400).json({ error: 'Work instruction must belong to your tenant' }); return
-      }
+    if (!workInstructionId) {
+      res.status(400).json({ error: 'Work instruction is required for every work order' }); return
+    }
+    const wiRes = await query(
+      `SELECT wi.id,
+              COUNT(ci.id) FILTER (
+                WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+              )::int AS checkable_item_count
+       FROM public.work_instructions wi
+       LEFT JOIN public.wi_checklist_items ci
+         ON ci.work_instruction_id = wi.id
+        AND ci.tenant_id = wi.tenant_id
+       WHERE wi.id = $1
+         AND wi.tenant_id = $2
+       GROUP BY wi.id`,
+      [workInstructionId, req.user!.tenantId]
+    )
+    if (wiRes.rows.length === 0) {
+      res.status(400).json({ error: 'Work instruction must belong to your tenant' }); return
+    }
+    if ((wiRes.rows[0].checkable_item_count ?? 0) < 1) {
+      res.status(400).json({ error: 'Selected work instruction has no checklist items' }); return
     }
 
     const countRes = await query('SELECT COUNT(*) FROM public.work_orders WHERE tenant_id = $1', [req.user!.tenantId])
@@ -154,7 +175,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res, next) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open',$10)
        RETURNING *`,
       [woNumber, req.user!.tenantId, assetNameText, location, normalizedPriority, dueDate || null,
-       assignedTo || null, workInstructionId || null, notes || null, req.user!.id]
+       assignedTo || null, workInstructionId, notes || null, req.user!.id]
     )
     const workOrder = result.rows[0]
 
@@ -179,6 +200,74 @@ router.post('/', requireAuth, async (req: AuthRequest, res, next) => {
     }
 
     res.status(201).json({ data: workOrder })
+  } catch (err) { next(err) }
+})
+
+// PATCH /api/inspections/:id/work-instruction - attach or replace the inspection checklist
+router.patch('/:id/work-instruction', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const { workInstructionId } = req.body as { workInstructionId?: string }
+    if (!workInstructionId) {
+      res.status(400).json({ error: 'Work instruction is required' }); return
+    }
+
+    const [woRes, wiRes] = await Promise.all([
+      query(
+        `SELECT id, wo_number, status
+         FROM public.work_orders
+         WHERE id = $1 AND tenant_id = $2`,
+        [req.params.id, req.user!.tenantId]
+      ),
+      query(
+        `SELECT wi.id, wi.wi_number,
+                COUNT(ci.id) FILTER (
+                  WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+                )::int AS checkable_item_count
+         FROM public.work_instructions wi
+         LEFT JOIN public.wi_checklist_items ci
+           ON ci.work_instruction_id = wi.id
+          AND ci.tenant_id = wi.tenant_id
+         WHERE wi.id = $1
+           AND wi.tenant_id = $2
+         GROUP BY wi.id, wi.wi_number`,
+        [workInstructionId, req.user!.tenantId]
+      ),
+    ])
+
+    if (woRes.rows.length === 0) {
+      res.status(404).json({ error: 'Work order not found' }); return
+    }
+    if (woRes.rows[0].status === 'complete') {
+      res.status(409).json({ error: 'Completed work orders cannot be reassigned' }); return
+    }
+    if (wiRes.rows.length === 0) {
+      res.status(400).json({ error: 'Work instruction must belong to your tenant' }); return
+    }
+    if ((wiRes.rows[0].checkable_item_count ?? 0) < 1) {
+      res.status(400).json({ error: 'Selected work instruction has no checklist items' }); return
+    }
+
+    const result = await query(
+      `UPDATE public.work_orders
+       SET work_instruction_id = $1, updated_at = NOW()
+       WHERE id = $2 AND tenant_id = $3
+       RETURNING *`,
+      [workInstructionId, req.params.id, req.user!.tenantId]
+    )
+
+    await auditLog({
+      tenantId: req.user!.tenantId,
+      userId: req.user!.id,
+      action: 'work_order.work_instruction.assigned',
+      entityType: 'work_orders',
+      entityId: req.params.id,
+      detail: {
+        wo_number: woRes.rows[0].wo_number,
+        wi_number: wiRes.rows[0].wi_number,
+      },
+    })
+
+    res.json({ data: result.rows[0] })
   } catch (err) { next(err) }
 })
 
@@ -219,7 +308,7 @@ router.post('/:id/start', requireAuth, async (req: AuthRequest, res, next) => {
     await client.query('BEGIN')
 
     const woRes = await client.query(
-      `SELECT id, wo_number, asset_name, status
+      `SELECT id, wo_number, asset_name, status, work_instruction_id
        FROM public.work_orders
        WHERE id = $1 AND tenant_id = $2
        FOR UPDATE`,
@@ -228,6 +317,10 @@ router.post('/:id/start', requireAuth, async (req: AuthRequest, res, next) => {
     if (woRes.rows.length === 0) {
       await client.query('ROLLBACK')
       res.status(404).json({ error: 'Work order not found' }); return
+    }
+    if (!woRes.rows[0].work_instruction_id) {
+      await client.query('ROLLBACK')
+      res.status(409).json({ error: 'Assign a work instruction with checklist items before starting this inspection' }); return
     }
     const totalRes = await client.query(
       `SELECT COUNT(*)::int AS total_items
@@ -240,6 +333,10 @@ router.post('/:id/start', requireAuth, async (req: AuthRequest, res, next) => {
       [req.params.id, req.user!.tenantId]
     )
     const serverTotalItems = totalRes.rows[0]?.total_items ?? totalItems ?? 0
+    if (serverTotalItems < 1) {
+      await client.query('ROLLBACK')
+      res.status(409).json({ error: 'The linked work instruction has no checklist items' }); return
+    }
 
     const existingRes = await client.query(
       `SELECT *

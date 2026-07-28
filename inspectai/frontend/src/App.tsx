@@ -7,6 +7,7 @@ import type { ReactNode } from 'react'
 // Pages
 import Login         from '@/pages/Login'
 import Dashboard     from '@/pages/Dashboard'
+import Assets        from '@/pages/Assets'
 import Inspections   from '@/pages/Inspections'
 import MasterLibrary from '@/pages/MasterLibrary'
 import Approvals     from '@/pages/Approvals'
@@ -50,6 +51,7 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
 
       <Route path="/dashboard"     element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/assets"        element={<ProtectedRoute><Assets /></ProtectedRoute>} />
       <Route path="/inspections"    element={<ProtectedRoute><Inspections /></ProtectedRoute>} />
       <Route path="/inspections/:id" element={<ProtectedRoute><InspectionExecution /></ProtectedRoute>} />
       <Route path="/library"            element={<ProtectedRoute><MasterLibrary /></ProtectedRoute>} />

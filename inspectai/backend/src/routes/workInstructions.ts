@@ -33,9 +33,16 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
     let sql = `
       SELECT wi.id, wi.wi_number, wi.title, wi.category, wi.revision,
              wi.status, wi.effective_date, wi.expiry_date,
-             u.name AS owner_name
+             u.name AS owner_name,
+             COUNT(ci.id)::int AS checklist_item_count,
+             COUNT(ci.id) FILTER (
+               WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+             )::int AS checkable_item_count
       FROM   public.work_instructions wi
       LEFT JOIN public.users u ON u.id = wi.owner_id
+      LEFT JOIN public.wi_checklist_items ci
+        ON ci.work_instruction_id = wi.id
+       AND ci.tenant_id = wi.tenant_id
       WHERE  wi.tenant_id = $1`
     const params: unknown[] = [req.user!.tenantId]
 
@@ -43,7 +50,11 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
       params.push(`%${search}%`)
       sql += ` AND (wi.title ILIKE $${params.length} OR wi.wi_number ILIKE $${params.length})`
     }
-    sql += ` ORDER BY wi.expiry_date ASC NULLS LAST LIMIT 200`
+    sql += `
+      GROUP BY wi.id, wi.wi_number, wi.title, wi.category, wi.revision,
+               wi.status, wi.effective_date, wi.expiry_date, u.name
+      ORDER BY wi.expiry_date ASC NULLS LAST
+      LIMIT 200`
 
     const result = await query(sql, params)
     res.json({ data: result.rows })

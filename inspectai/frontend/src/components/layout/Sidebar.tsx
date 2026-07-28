@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardCheck, BookOpen, CheckSquare,
-  BarChart2, TrendingUp, FileText, Bell, Shield, BookMarked, LogOut,
+  BarChart2, TrendingUp, FileText, Bell, Shield, BookMarked, LogOut, Boxes,
   LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -24,6 +24,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { path: '/dashboard',     label: 'Dashboard',      Icon: LayoutDashboard },
+  { path: '/assets',        label: 'Assets',         Icon: Boxes           },
   { path: '/inspections',   label: 'Inspections',    Icon: ClipboardCheck  },
   { path: '/library',       label: 'Master Library', Icon: BookOpen        },
   { path: '/approvals',     label: 'Approvals',      Icon: CheckSquare,    roles: ['admin', 'approver'] },

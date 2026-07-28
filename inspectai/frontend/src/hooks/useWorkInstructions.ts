@@ -13,6 +13,8 @@ interface DBWorkInstruction {
   effective_date: string | null
   expiry_date:    string | null
   owner_name:     string | null
+  checklist_item_count?: number | string | null
+  checkable_item_count?: number | string | null
 }
 
 function toWorkInstruction(row: DBWorkInstruction): WorkInstruction {
@@ -23,12 +25,15 @@ function toWorkInstruction(row: DBWorkInstruction): WorkInstruction {
     id:            row.wi_number,
     dbId:          row.id,
     title:         row.title,
+    category:      row.category ?? undefined,
     revision:      row.revision,
     status:        row.status as WorkInstruction['status'],
-    owner:         row.owner_name ?? '—',
+    owner:         row.owner_name ?? '-',
     effectiveDate: row.effective_date ?? '',
     expiryDate:    row.expiry_date ?? '',
     daysRemaining,
+    checklistItemCount: Number(row.checklist_item_count ?? 0),
+    checkableItemCount: Number(row.checkable_item_count ?? row.checklist_item_count ?? 0),
     checklistItems: [],
   }
 }

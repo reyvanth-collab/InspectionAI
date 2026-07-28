@@ -127,6 +127,9 @@ function deterministicValidation(input: ValidateFindingInput): ValidationResult 
 const AnalyseSchema = z.object({
   itemDescription:        z.string().min(1),
   acceptanceCriteria:     z.string().optional(),
+  fieldType:              z.string().optional(),
+  selectedResult:         z.enum(['pass', 'fail', 'na']).optional(),
+  capturedValue:          z.string().optional(),
   assetName:              z.string().optional(),
   location:               z.string().optional(),
   inspectorNotes:         z.string().optional(),
@@ -138,7 +141,7 @@ router.post('/analyse-failure', requireAuth, async (req: AuthRequest, res: Respo
   const parsed = AnalyseSchema.safeParse(req.body)
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return }
 
-  const { itemDescription, acceptanceCriteria, assetName, location,
+  const { itemDescription, acceptanceCriteria, fieldType, selectedResult, capturedValue, assetName, location,
           inspectorNotes, momsHistoricalNokRate, momsHistoricalTotal } = parsed.data
 
   const historicalContext = (momsHistoricalNokRate !== undefined && momsHistoricalTotal !== undefined)
@@ -147,19 +150,28 @@ router.post('/analyse-failure', requireAuth, async (req: AuthRequest, res: Respo
 
   const prompt = `You are an expert maintenance engineer AI embedded in an inspection management system.
 
-A checklist item has been marked FAILED. Analyse the failure and provide structured, actionable recommendations.
+A checklist item has been marked FAILED. Give a checklist-specific initial suggestion first, then ask only for extra evidence that would materially improve accuracy.
 
 ## Inspection Context
 - Asset: ${assetName ?? 'Not specified'}
 - Location: ${location ?? 'Not specified'}
 - Failed Item: ${itemDescription}
 - Acceptance Criteria: ${acceptanceCriteria ?? 'Not specified'}${historicalContext}
+- Field Type: ${fieldType ?? 'pass_fail'}
+- Selected Result: ${selectedResult ?? 'fail'}
+- Captured Value: ${capturedValue ?? 'None'}
 ${inspectorNotes ? `- Inspector Notes: ${inspectorNotes}` : ''}
+
+Accuracy rules:
+- Anchor every recommendation to the failed item and acceptance criteria.
+- If notes, photos, or measurements are missing, do not invent details; state the most likely issue from the checklist context and list the exact evidence needed next.
+- Treat "No" on a yes/no checklist as the failed condition unless the acceptance criteria says otherwise.
+- Keep the response useful before asking for more detail.
 
 ## Respond EXACTLY in this format (use these exact bold headings, no extra text):
 
 **Root Cause**
-One concise sentence identifying the most likely root cause.
+One concise sentence identifying the most likely root cause from the checklist context.
 
 **Failure Class**
 One of: Wear & Tear | Corrosion | Electrical Fault | Mechanical Failure | Calibration Error | Human Error | Environmental | Manufacturing Defect
@@ -170,6 +182,9 @@ Short alphanumeric code (e.g. EL-OC-001 for electrical open circuit).
 **Recommended Action**
 2–3 specific, numbered steps to rectify this failure.
 
+**Need More Detail**
+One sentence naming the most valuable note, measurement, or photo to capture next.
+
 **Urgency**
 One of: Immediate shutdown required | Within 24 hours | Within 7 days | Schedule at next maintenance window`
 
@@ -177,6 +192,34 @@ One of: Immediate shutdown required | Within 24 hours | Within 7 days | Schedule
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
   res.flushHeaders()
+
+  if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY.includes('your-')) {
+    const fallback = [
+      '**Root Cause**',
+      `The failed condition is most likely related to the checklist requirement: ${acceptanceCriteria ?? itemDescription}.`,
+      '',
+      '**Failure Class**',
+      'Mechanical Failure',
+      '',
+      '**Failure Code**',
+      'CHK-FAIL-001',
+      '',
+      '**Recommended Action**',
+      '1. Re-check the item against the acceptance criteria.',
+      '2. Isolate or tag the asset if the failed condition creates an operational or safety risk.',
+      '3. Record the corrective action and supervisor review outcome.',
+      '',
+      '**Need More Detail**',
+      'Capture a short defect note, one close-up photo, or the exact measurement that proves why this checklist item failed.',
+      '',
+      '**Urgency**',
+      'Within 24 hours',
+    ].join('\n')
+    res.write(`data: ${JSON.stringify({ text: fallback })}\n\n`)
+    res.write('data: [DONE]\n\n')
+    res.end()
+    return
+  }
 
   try {
     const stream = client.messages.stream({

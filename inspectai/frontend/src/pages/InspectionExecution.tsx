@@ -4,7 +4,8 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { useWorkOrder } from '@/hooks/useWorkOrders'
+import { useAssignWorkInstruction, useWorkOrder } from '@/hooks/useWorkOrders'
+import { useWorkInstructions } from '@/hooks/useWorkInstructions'
 import {
   useInspectionRecord,
   useStartInspection,
@@ -209,11 +210,12 @@ function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, lo
 
 // ── Field input renderers ─────────────────────────────────────────
 function FieldInput({
-  item, value, onChange,
+  item, value, onChange, onResultChange,
 }: {
   item: ChecklistItemRow
   value: string
   onChange: (v: string) => void
+  onResultChange?: (result: FindingResult, capturedValue: string) => void
 }) {
   const type = item.field_type ?? 'pass_fail'
   const CLS  = 'w-full px-3 py-2 bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors'
@@ -290,11 +292,16 @@ function FieldInput({
     return <input type="date" value={value} onChange={e => onChange(e.target.value)} className={CLS} />
   }
   if (type === 'yes_no') {
+    const select = (choice: 'yes' | 'no') => {
+      const nextValue = value === choice ? '' : choice
+      onChange(nextValue)
+      onResultChange?.(choice === 'yes' ? 'pass' : 'fail', nextValue)
+    }
     return (
       <div className="flex gap-2 mt-1">
         {[{ v: 'yes', label: 'Yes', cls: value === 'yes' ? 'bg-success-bg border-success-border text-success' : 'border-border-2 text-text-3 hover:border-success/50' },
           { v: 'no',  label: 'No',  cls: value === 'no'  ? 'bg-danger-bg border-danger-border text-danger'   : 'border-border-2 text-text-3 hover:border-danger/50' }].map(b => (
-          <button key={b.v} onClick={() => onChange(value === b.v ? '' : b.v)}
+          <button key={b.v} onClick={() => select(b.v as 'yes' | 'no')}
             className={`flex-1 h-11 rounded-[8px] border text-[13px] font-semibold bg-transparent cursor-pointer transition-all active:scale-[0.98] ${b.cls}`}>
             {b.label}
           </button>
@@ -342,6 +349,7 @@ export default function InspectionExecution() {
 
   const { data: wo, isLoading: woLoading }      = useWorkOrder(workOrderDbId)
   const { data: record, isLoading: recLoading } = useInspectionRecord(workOrderDbId)
+  const { data: availableWis = [] }             = useWorkInstructions()
 
   // Hoist WI number before any early returns (hook order must be constant)
   const wi       = (wo as any)?.work_instructions
@@ -352,6 +360,7 @@ export default function InspectionExecution() {
   const recordFinding      = useRecordFinding()
   const attachPhoto        = useAttachFindingPhoto()
   const completeInspection = useCompleteInspection()
+  const assignWI           = useAssignWorkInstruction()
   const { analyses, analyse, clear: clearAi } = useAiAnalysis()
   const { validations, validate: validateFinding, clear: clearValidation } = useAiValidation()
   const { data: momsData }                    = useMomsWiSummary(wiNumber)
@@ -361,6 +370,7 @@ export default function InspectionExecution() {
   const [localNotes,    setLocalNotes]    = useState<Record<string, string>>({})
   const [saving,        setSaving]        = useState<Record<string, boolean>>({})
   const [activeNote,    setActiveNote]    = useState<string | null>(null)
+  const [selectedWIId,  setSelectedWIId]  = useState('')
   const [showSignature, setShowSignature] = useState(false)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [completionSummary, setCompletionSummary] = useState<CompletionSummary | null>(null)
@@ -437,6 +447,8 @@ export default function InspectionExecution() {
   // Exclude headings from completion tracking
   const checkableItems = items.filter(i => (i.field_type ?? 'pass_fail') !== 'heading')
   const requiredItems  = checkableItems.filter(i => i.required !== false)
+  const hasLinkedChecklist = !!wi && checkableItems.length > 0
+  const attachableWis = availableWis.filter(w => (w.checkableItemCount ?? w.checklistItemCount ?? 0) > 0)
 
   const isStarted  = !!record
   const isComplete = record?.overall_result != null
@@ -461,7 +473,23 @@ export default function InspectionExecution() {
     } catch (e) { toast(e instanceof Error ? e.message : 'Failed to start', 'error') }
   }
 
-  const handleResult = async (itemId: string, result: FindingResult, item: ChecklistItemRow) => {
+  const handleAttachChecklist = async () => {
+    if (!selectedWIId) { toast('Select a work instruction checklist first', 'error'); return }
+    try {
+      await assignWI.mutateAsync({ dbId: workOrderDbId, workInstructionId: selectedWIId })
+      toast('Checklist attached to work order', 'success')
+      setSelectedWIId('')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to attach checklist', 'error')
+    }
+  }
+
+  const handleResult = async (
+    itemId: string,
+    result: FindingResult,
+    item: ChecklistItemRow,
+    evidenceOverride?: { capturedValue?: string; inspectorNotes?: string },
+  ) => {
     if (!record) return
     const next = results[itemId] === result ? undefined : result
     if (!next) {
@@ -472,10 +500,12 @@ export default function InspectionExecution() {
     }
     setLocalResults(prev => ({ ...prev, [itemId]: next }))
     setSaving(prev => ({ ...prev, [itemId]: true }))
+    const capturedValue = evidenceOverride?.capturedValue ?? localValues[itemId]
+    const inspectorNotes = evidenceOverride?.inspectorNotes ?? localNotes[itemId]
+    const notesForItem = capturedValue
+      ? `${capturedValue}${inspectorNotes ? '\n' + inspectorNotes : ''}`
+      : inspectorNotes
     try {
-      const notesForItem = localValues[itemId]
-        ? `${localValues[itemId]}${localNotes[itemId] ? '\n' + localNotes[itemId] : ''}`
-        : localNotes[itemId]
       await recordFinding.mutateAsync({
         workOrderDbId,
         inspectionRecordId: record.id,
@@ -500,8 +530,8 @@ export default function InspectionExecution() {
         required: item.required !== false,
         minValue: item.min_value ?? null,
         maxValue: item.max_value ?? null,
-        capturedValue: localValues[itemId],
-        inspectorNotes: localNotes[itemId],
+        capturedValue,
+        inspectorNotes,
         assetName: woData.asset_name as string | undefined,
         location: woData.location as string | undefined,
         photoCount: record.inspection_findings?.find(f => f.checklist_item_id === item.id)?.photo_urls?.length ?? 0,
@@ -518,9 +548,12 @@ export default function InspectionExecution() {
           itemId,
           itemDescription:       item.description,
           acceptanceCriteria:    item.acceptance_criteria ?? undefined,
+          fieldType:             item.field_type ?? 'pass_fail',
+          selectedResult:        next,
+          capturedValue,
           assetName:             woData.asset_name as string | undefined,
           location:              woData.location as string | undefined,
-          inspectorNotes:        localNotes[itemId],
+          inspectorNotes,
           momsHistoricalNokRate: momsMatch ? parseFloat(momsMatch.nok_rate) : momsData?.nokRate,
           momsHistoricalTotal:   momsMatch ? parseInt(momsMatch.total) : momsData?.totalInspections,
         })
@@ -534,9 +567,7 @@ export default function InspectionExecution() {
             inspectionRecordId: record!.id,
             checklistItemId:    itemId,
             result:             next,
-            notes:              localValues[itemId]
-              ? `${localValues[itemId]}${localNotes[itemId] ? '\n' + localNotes[itemId] : ''}`
-              : localNotes[itemId],
+            notes:              notesForItem,
           },
           label: `${item.item_no} — ${next}`,
         })
@@ -630,7 +661,7 @@ export default function InspectionExecution() {
           </div>
           <h1 className="text-[20px] font-semibold tracking-[-0.3px]">{woData.asset_name as string}</h1>
           <p className="text-[13px] text-text-2 mt-0.5">
-            {woData.location as string} · {wi?.title ?? 'No WI linked'} · {wi?.revision}
+            {woData.location as string} · {wi?.title ?? 'Checklist not assigned'}{wi?.revision ? ` · ${wi.revision}` : ''}
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -654,11 +685,37 @@ export default function InspectionExecution() {
           <CardBody className="flex flex-col items-center py-10 gap-4 text-center">
             <p className="text-[14px] text-text-2">
               This inspection has not been started yet.<br />
-              {checkableItems.length} checklist items from{' '}
-              <span className="text-text font-mono">{wi?.wi_number}</span>.
+              {hasLinkedChecklist ? (
+                <>
+                  {checkableItems.length} checklist items from{' '}
+                  <span className="text-text font-mono">{wi?.wi_number}</span>.
+                </>
+              ) : (
+                'No inspection checklist is attached to this work order.'
+              )}
             </p>
-            {checkableItems.length === 0 ? (
-              <p className="text-[13px] text-warning">No checklist items on the linked work instruction.</p>
+            {!hasLinkedChecklist ? (
+              <div className="w-full max-w-md flex flex-col gap-3">
+                <p className="text-[13px] text-warning">Attach a work instruction with checklist items before starting.</p>
+                <select
+                  value={selectedWIId}
+                  onChange={e => setSelectedWIId(e.target.value)}
+                  className="w-full px-3 py-2 bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent"
+                >
+                  <option value="">Select checklist...</option>
+                  {attachableWis.map(w => {
+                    const count = w.checkableItemCount ?? w.checklistItemCount ?? 0
+                    return (
+                      <option key={w.dbId} value={w.dbId}>
+                        {w.id} - {w.title} ({count} item{count === 1 ? '' : 's'})
+                      </option>
+                    )
+                  })}
+                </select>
+                <Button variant="primary" loading={assignWI.isPending} disabled={attachableWis.length === 0} onClick={handleAttachChecklist}>
+                  Attach Checklist
+                </Button>
+              </div>
             ) : (
               <Button variant="primary" size="lg" loading={startInspection.isPending} onClick={handleStart}>
                 Start Inspection
@@ -738,7 +795,24 @@ export default function InspectionExecution() {
                     {!isComplete && !['pass_fail'].includes(ft) && (
                       <div className="mb-3">
                         <FieldInput item={item} value={fieldVal}
-                          onChange={v => setLocalValues(prev => ({ ...prev, [item.id]: v }))} />
+                          onChange={v => setLocalValues(prev => ({ ...prev, [item.id]: v }))}
+                          onResultChange={(nextResult, capturedValue) => handleResult(item.id, nextResult, item, { capturedValue })} />
+                      </div>
+                    )}
+
+                    {/* AI suggestion */}
+                    {(ai?.text || ai?.loading || ai?.error) && (
+                      <div className="mt-3 p-3 bg-accent-bg border border-accent-bd rounded-[8px]">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[10px] font-semibold text-accent uppercase tracking-[0.08em]">AI suggestion</span>
+                          {ai.loading && <span className="w-3 h-3 border border-accent border-t-transparent rounded-full animate-spin" />}
+                        </div>
+                        {ai.error
+                          ? <p className="text-[12px] text-danger">{ai.error}</p>
+                          : <pre className="text-[12px] text-text leading-relaxed whitespace-pre-wrap font-sans">
+                              {ai.text}{ai.loading && <span className="animate-pulse">|</span>}
+                            </pre>
+                        }
                       </div>
                     )}
 
@@ -846,7 +920,7 @@ export default function InspectionExecution() {
                     )}
 
                     {/* AI analysis */}
-                    {(ai?.text || ai?.loading || ai?.error) && (
+                    {false && (ai?.text || ai?.loading || ai?.error) && (
                       <div className="mt-3 p-3 bg-accent-bg border border-accent-bd rounded-[8px]">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-[10px] font-semibold text-accent uppercase tracking-[0.08em]">✦ AI Analysis</span>
@@ -865,7 +939,7 @@ export default function InspectionExecution() {
                   {/* Pass / Fail / NA buttons */}
                   {!isComplete && (
                     <div className="flex flex-col gap-1 flex-shrink-0 pt-0.5">
-                      {(['pass', 'fail', 'na'] as FindingResult[]).map(r => (
+                      {((ft === 'yes_no' ? ['na'] : ['pass', 'fail', 'na']) as FindingResult[]).map(r => (
                         <button key={r}
                           disabled={isSaving}
                           onClick={() => handleResult(item.id, r, item)}

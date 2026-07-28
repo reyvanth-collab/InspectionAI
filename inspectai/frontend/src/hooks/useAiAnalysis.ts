@@ -27,6 +27,9 @@ interface AnalyseParams {
   itemId:                  string
   itemDescription:         string
   acceptanceCriteria?:     string
+  fieldType?:              string
+  selectedResult?:         'pass' | 'fail' | 'na'
+  capturedValue?:          string
   assetName?:              string
   location?:               string
   inspectorNotes?:         string

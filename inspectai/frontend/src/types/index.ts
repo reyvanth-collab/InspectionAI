@@ -19,12 +19,15 @@ export interface WorkInstruction {
   id: string        // wi_number e.g. "WI-EL-042"
   dbId: string      // uuid from DB
   title: string
+  category?: string
   revision: string
   status: WIStatus
   owner: string
   effectiveDate: string
   expiryDate: string
   daysRemaining: number
+  checklistItemCount?: number
+  checkableItemCount?: number
   checklistItems: ChecklistItem[]
 }
 
@@ -53,7 +56,30 @@ export interface WorkOrder {
   assignedTo: string
   dueDate: string
   wiRef: string
+  checklistItemCount?: number
   progress?: number
+}
+
+export type AssetStatus = 'active' | 'maintenance' | 'retired'
+export type AssetCriticality = 'low' | 'medium' | 'high' | 'critical'
+
+export interface Asset {
+  id: string
+  assetNumber: string
+  name: string
+  category: string
+  location: string
+  status: AssetStatus
+  criticality: AssetCriticality
+  manufacturer: string
+  model: string
+  serialNumber: string
+  installDate: string
+  nextPmDate: string
+  notes: string
+  openWorkOrders: number
+  completedInspections: number
+  lastInspectedAt: string
 }
 
 // ── Approvals ────────────────────────────────────────────────
