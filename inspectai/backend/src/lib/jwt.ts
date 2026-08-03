@@ -20,5 +20,11 @@ export function signToken(payload: JWTPayload): string {
 }
 
 export function verifyToken(token: string): JWTPayload {
-  return jwt.verify(token, SECRET) as JWTPayload
+  const decoded = jwt.verify(token, SECRET)
+  if (typeof decoded !== 'object' || decoded === null) throw new Error('Invalid token payload')
+  const payload = decoded as Partial<JWTPayload>
+  if (!payload.id || !payload.email || !payload.role || !payload.tenantId) {
+    throw new Error('Invalid token payload')
+  }
+  return payload as JWTPayload
 }

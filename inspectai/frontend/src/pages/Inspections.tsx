@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, ClipboardList, Plus } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { useWorkOrders, useCreateWorkOrder } from '@/hooks/useWorkOrders'
 import { useWorkInstructions } from '@/hooks/useWorkInstructions'
+import { useAssets } from '@/hooks/useAssets'
 import { useUsers } from '@/hooks/useUsers'
 import { useToast } from '@/components/ui/Toast'
 import type { WorkOrder, WOStatus, WOPriority } from '@/types'
@@ -30,12 +31,18 @@ export default function Inspections() {
   const { toast }     = useToast()
   const [filter, setFilter]     = useState<FilterStatus>('all')
   const [showModal, setShowModal] = useState(false)
+  const [page, setPage] = useState(1)
 
-  const { data: wos  = [], isLoading } = useWorkOrders()
+  const { data: woPage, isLoading } = useWorkOrders(undefined, page)
+  const wos = woPage?.items ?? []
   const { data: wis  = [] }            = useWorkInstructions()
   const { data: users = [] }           = useUsers()
+  const { data: assetPage }            = useAssets()
+  const assets = assetPage?.items ?? []
   const createWO                       = useCreateWorkOrder()
   const usableWis = wis.filter(w => (w.checkableItemCount ?? w.checklistItemCount ?? 0) > 0)
+
+  useEffect(() => { setPage(1) }, [filter])
 
   const filtered = filter === 'all' ? wos : wos.filter(w => w.status === filter)
 
@@ -44,7 +51,7 @@ export default function Inspections() {
   const complete   = wos.filter(w => w.status === 'complete').length
 
   const [form, setForm] = useState({
-    assetName: '', location: '', priority: 'medium',
+    assetId: '', priority: 'medium',
     dueDate: '', assignedTo: '', workInstructionId: '', notes: '',
   })
   const set = (k: keyof typeof form) =>
@@ -52,20 +59,20 @@ export default function Inspections() {
       setForm(p => ({ ...p, [k]: e.target.value }))
 
   const handleCreate = async () => {
-    if (!form.assetName.trim()) { toast('Asset name is required', 'error'); return }
+    if (!form.assetId) { toast('Select an asset', 'error'); return }
     if (!form.workInstructionId) { toast('Attach a work instruction checklist first', 'error'); return }
     const selectedWI = usableWis.find(w => w.dbId === form.workInstructionId)
     if (!selectedWI) { toast('Selected work instruction has no checklist items', 'error'); return }
     try {
       await createWO.mutateAsync({
-        assetName: form.assetName, location: form.location,
+        assetId: form.assetId,
         priority: form.priority, dueDate: form.dueDate,
         assignedTo: form.assignedTo, workInstructionId: form.workInstructionId,
         notes: form.notes || undefined,
       })
       toast('Work order created', 'success')
       setShowModal(false)
-      setForm({ assetName: '', location: '', priority: 'medium', dueDate: '', assignedTo: '', workInstructionId: '', notes: '' })
+      setForm({ assetId: '', priority: 'medium', dueDate: '', assignedTo: '', workInstructionId: '', notes: '' })
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Failed to create', 'error')
     }
@@ -152,6 +159,13 @@ export default function Inspections() {
                 <span className="font-mono text-[11px] text-text-3 w-24 flex-shrink-0 text-right">{wo.dueDate || '—'}</span>
               </div>
             ))}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <span className="text-[11px] text-text-3">Page {page}</span>
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
+                <Button variant="secondary" size="sm" disabled={!woPage?.hasMore} onClick={() => setPage(p => p + 1)}>Next</Button>
+              </div>
+            </div>
           </>
         )}
       </Card>
@@ -173,12 +187,17 @@ export default function Inspections() {
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className={LABEL}>Asset Name <span className="text-danger">*</span></label>
-              <input value={form.assetName} onChange={set('assetName')} placeholder="e.g. Escalator E-01" className={INPUT} />
+              <label className={LABEL}>Asset <span className="text-danger">*</span></label>
+              <select value={form.assetId} onChange={set('assetId')} className={INPUT} required>
+                <option value="" disabled>Select registered asset...</option>
+                {assets.map(asset => (
+                  <option key={asset.id} value={asset.id}>{asset.assetNumber} — {asset.name}{asset.location ? ` (${asset.location})` : ''}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className={LABEL}>Location</label>
-              <input value={form.location} onChange={set('location')} placeholder="e.g. Bishan MRT" className={INPUT} />
+              <input value={assets.find(asset => asset.id === form.assetId)?.location ?? ''} readOnly placeholder="Selected asset location" className={INPUT + ' opacity-70'} />
             </div>
             <div>
               <label className={LABEL}>Priority</label>

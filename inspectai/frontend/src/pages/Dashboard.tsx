@@ -3,7 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useAuth } from '@/context/AuthContext'
-import { useWorkOrders } from '@/hooks/useWorkOrders'
+import { useWorkOrders, useWorkOrderSummary } from '@/hooks/useWorkOrders'
 import { useWorkInstructions } from '@/hooks/useWorkInstructions'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useAuditLogs } from '@/hooks/useAuditLogs'
@@ -38,13 +38,15 @@ export default function Dashboard() {
   const { user }   = useAuth()
   const navigate   = useNavigate()
 
-  const { data: wos   = [], isLoading: wosLoading }  = useWorkOrders()
+  const { data: woPage, isLoading: wosLoading }  = useWorkOrders()
+  const { data: woSummary } = useWorkOrderSummary()
+  const wos = woPage?.items ?? []
   const { data: wis   = [], isLoading: wisLoading }  = useWorkInstructions()
   const { data: notifs = [] }                        = useNotifications()
   const { data: logs  = [], isLoading: logsLoading } = useAuditLogs(5)
 
-  const total    = wos.length
-  const complete = wos.filter(w => w.status === 'complete').length
+  const total    = woSummary?.total ?? 0
+  const complete = woSummary?.complete ?? 0
   const expiring = wis.filter(w => w.daysRemaining >= 0 && w.daysRemaining <= 30).length
   const unread   = notifs.filter(n => !n.read).length
   const recent   = wos.slice(0, 5)

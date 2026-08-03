@@ -34,18 +34,45 @@ function toWorkOrder(row: DBWorkOrderRow): WorkOrder {
   }
 }
 
-export function useWorkOrders(statusFilter?: string) {
+export interface WorkOrderPage {
+  items: WorkOrder[]
+  page: number
+  pageSize: number
+  hasMore: boolean
+}
+
+export function useWorkOrders(statusFilter?: string, page = 1) {
   const { user } = useAuth()
   return useQuery({
     queryKey:        ['work-orders', statusFilter],
     enabled:         !!user,
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const params = statusFilter && statusFilter !== 'all'
-        ? `?status=${encodeURIComponent(statusFilter.replace('-', '_'))}`
-        : ''
-      const res = await api.get<{ data: DBWorkOrderRow[] }>(`/inspections${params}`)
-      return res.data.data.map(toWorkOrder)
+      const params = new URLSearchParams()
+      if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter.replace('-', '_'))
+      params.set('page', String(page))
+      params.set('pageSize', '50')
+      const res = await api.get<{ data: DBWorkOrderRow[]; meta?: { page: number; pageSize: number; hasMore: boolean } }>(`/inspections?${params}`)
+      return {
+        items: res.data.data.map(toWorkOrder),
+        page: res.data.meta?.page ?? page,
+        pageSize: res.data.meta?.pageSize ?? 50,
+        hasMore: res.data.meta?.hasMore ?? false,
+      } satisfies WorkOrderPage
+    },
+  })
+}
+
+export function useWorkOrderSummary() {
+  const { user } = useAuth()
+  return useQuery({
+    queryKey: ['work-orders-summary'],
+    enabled: !!user,
+    queryFn: async () => {
+      const res = await api.get<{ data: Record<string, number | string> }>('/inspections/summary')
+      return Object.fromEntries(Object.entries(res.data.data).map(([key, value]) => [key, Number(value ?? 0)])) as {
+        total: number; open: number; in_progress: number; complete: number; pending: number
+      }
     },
   })
 }
@@ -77,7 +104,10 @@ export function useUpdateWorkOrderStatus() {
     mutationFn: async ({ dbId, status }: { dbId: string; status: string }) => {
       await api.patch(`/inspections/${dbId}/status`, { status })
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['work-orders'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['work-orders'] })
+      qc.invalidateQueries({ queryKey: ['work-orders-summary'] })
+    },
   })
 }
 
@@ -97,8 +127,7 @@ export function useAssignWorkInstruction() {
 }
 
 export interface CreateWorkOrderInput {
-  assetName:          string
-  location:           string
+  assetId:            string
   priority:           string
   dueDate:            string
   assignedTo:         string
@@ -111,8 +140,7 @@ export function useCreateWorkOrder() {
   return useMutation({
     mutationFn: async (input: CreateWorkOrderInput) => {
       const res = await api.post<{ data: Record<string, unknown> }>('/inspections', {
-        assetName:          input.assetName,
-        location:           input.location,
+        assetId:            input.assetId,
         priority:           input.priority,
         dueDate:            input.dueDate || null,
         assignedTo:         input.assignedTo || null,
@@ -121,6 +149,9 @@ export function useCreateWorkOrder() {
       })
       return res.data.data
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['work-orders'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['work-orders'] })
+      qc.invalidateQueries({ queryKey: ['work-orders-summary'] })
+    },
   })
 }

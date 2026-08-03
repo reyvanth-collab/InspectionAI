@@ -66,7 +66,14 @@ function toAsset(row: DBAsset): Asset {
   }
 }
 
-export function useAssets(filters: { search?: string; status?: string; criticality?: string } = {}) {
+export interface AssetPage {
+  items: Asset[]
+  page: number
+  pageSize: number
+  hasMore: boolean
+}
+
+export function useAssets(filters: { search?: string; status?: string; criticality?: string; page?: number } = {}) {
   const { user } = useAuth()
   return useQuery({
     queryKey: ['assets', filters],
@@ -77,9 +84,16 @@ export function useAssets(filters: { search?: string; status?: string; criticali
       if (filters.search) params.set('search', filters.search)
       if (filters.status && filters.status !== 'all') params.set('status', filters.status)
       if (filters.criticality && filters.criticality !== 'all') params.set('criticality', filters.criticality)
+      if (filters.page) params.set('page', String(filters.page))
+      params.set('pageSize', '50')
       const suffix = params.toString() ? `?${params.toString()}` : ''
-      const res = await api.get<{ data: DBAsset[] }>(`/assets${suffix}`)
-      return res.data.data.map(toAsset)
+      const res = await api.get<{ data: DBAsset[]; meta?: { page: number; pageSize: number; hasMore: boolean } }>(`/assets${suffix}`)
+      return {
+        items: res.data.data.map(toAsset),
+        page: res.data.meta?.page ?? filters.page ?? 1,
+        pageSize: res.data.meta?.pageSize ?? 50,
+        hasMore: res.data.meta?.hasMore ?? false,
+      } satisfies AssetPage
     },
   })
 }

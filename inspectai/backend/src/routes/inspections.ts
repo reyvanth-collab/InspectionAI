@@ -24,11 +24,18 @@ const router = Router()
 router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const statusFilter = req.query.status ? String(req.query.status) : null
+    const page = Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1)
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(String(req.query.pageSize ?? '50'), 10) || 50))
     const params: unknown[] = [req.user!.tenantId]
     if (statusFilter) params.push(statusFilter)
+    const limitParam = params.length + 1
+    const offsetParam = params.length + 2
 
     const result = await query(
-      `SELECT wo.id, wo.wo_number, wo.asset_name, wo.location, wo.type,
+      `SELECT wo.id, wo.wo_number,
+              COALESCE(a.name, wo.asset_name) AS asset_name,
+              COALESCE(a.location, wo.location) AS location,
+              wo.type,
               wo.priority, wo.status, wo.due_date, wo.completed_at, wo.notes,
               u.name  AS assigned_to_name,
               wi.wi_number AS wi_number, wi.title AS wi_title,
@@ -40,15 +47,33 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
                   AND COALESCE(ci.field_type, 'pass_fail') <> 'heading'
               ) AS checklist_item_count
        FROM   public.work_orders wo
+       LEFT JOIN public.assets a ON a.id = wo.asset_record_id AND a.tenant_id = wo.tenant_id
        LEFT JOIN public.users u  ON u.id = wo.assigned_to
        LEFT JOIN public.work_instructions wi ON wi.id = wo.work_instruction_id
        WHERE  wo.tenant_id = $1
          ${statusFilter ? 'AND wo.status = $2' : ''}
        ORDER  BY wo.due_date ASC NULLS LAST
-       LIMIT  100`,
-      params
+       LIMIT $${limitParam} OFFSET $${offsetParam}`,
+      [...params, pageSize, (page - 1) * pageSize]
     )
-    res.json({ data: result.rows })
+    res.json({ data: result.rows, meta: { page, pageSize, hasMore: result.rows.length === pageSize } })
+  } catch (err) { next(err) }
+})
+
+// GET /api/inspections/summary - aggregate counts without loading every work order
+router.get('/summary', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const result = await query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE status = 'open')::int AS open,
+              COUNT(*) FILTER (WHERE status = 'in_progress')::int AS in_progress,
+              COUNT(*) FILTER (WHERE status = 'complete')::int AS complete,
+              COUNT(*) FILTER (WHERE status = 'pending')::int AS pending
+       FROM public.work_orders
+       WHERE tenant_id = $1`,
+      [req.user!.tenantId]
+    )
+    res.json({ data: result.rows[0] })
   } catch (err) { next(err) }
 })
 
@@ -122,13 +147,20 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res, next) => {
 // POST /api/inspections - create work order
 router.post('/', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const { assetName, location, priority, dueDate, assignedTo, workInstructionId, notes } = req.body
+    const { assetId, priority, dueDate, assignedTo, workInstructionId, notes } = req.body
     const allowedPriorities = new Set(['low', 'medium', 'high', 'critical'])
     const normalizedPriority = priority || 'medium'
-    const assetNameText = typeof assetName === 'string' ? assetName.trim() : ''
-    if (!assetNameText) {
-      res.status(400).json({ error: 'Asset name is required' }); return
+    if (!assetId || typeof assetId !== 'string') {
+      res.status(400).json({ error: 'A registered asset is required' }); return
     }
+    const assetRes = await query(
+      `SELECT id, name, location FROM public.assets WHERE id = $1 AND tenant_id = $2`,
+      [assetId, req.user!.tenantId]
+    )
+    if (assetRes.rows.length === 0) {
+      res.status(400).json({ error: 'Asset must belong to your tenant' }); return
+    }
+    const asset = assetRes.rows[0]
     if (!allowedPriorities.has(normalizedPriority)) {
       res.status(400).json({ error: 'Invalid work order priority' }); return
     }
@@ -165,19 +197,35 @@ router.post('/', requireAuth, async (req: AuthRequest, res, next) => {
       res.status(400).json({ error: 'Selected work instruction has no checklist items' }); return
     }
 
-    const countRes = await query('SELECT COUNT(*) FROM public.work_orders WHERE tenant_id = $1', [req.user!.tenantId])
-    const count    = parseInt(countRes.rows[0].count)
-    const woNumber = `WO-${String(count + 1).padStart(4, '0')}`
-
-    const result = await query(
-      `INSERT INTO public.work_orders
-         (wo_number, tenant_id, asset_name, location, priority, due_date, assigned_to, work_instruction_id, notes, status, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open',$10)
-       RETURNING *`,
-      [woNumber, req.user!.tenantId, assetNameText, location, normalizedPriority, dueDate || null,
-       assignedTo || null, workInstructionId, notes || null, req.user!.id]
-    )
-    const workOrder = result.rows[0]
+    const client = await pool.connect()
+    let workOrder: Record<string, any>
+    try {
+      await client.query('BEGIN')
+      // Serialize numbering per tenant so concurrent creates cannot receive the same WO number.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [req.user!.tenantId])
+      const numberRes = await client.query(
+        `SELECT COALESCE(MAX((substring(wo_number FROM '[0-9]+'))::int), 0) AS highest
+         FROM public.work_orders WHERE tenant_id = $1`,
+        [req.user!.tenantId]
+      )
+      const nextNumber = Number(numberRes.rows[0].highest) + 1
+      const woNumber = `WO-${String(nextNumber).padStart(4, '0')}`
+      const result = await client.query(
+        `INSERT INTO public.work_orders
+           (wo_number, tenant_id, asset_name, asset_record_id, location, priority, due_date, assigned_to, work_instruction_id, notes, status, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open',$11)
+         RETURNING *`,
+        [woNumber, req.user!.tenantId, asset.name, asset.id, asset.location, normalizedPriority, dueDate || null,
+         assignedTo || null, workInstructionId, notes || null, req.user!.id]
+      )
+      await client.query('COMMIT')
+      workOrder = result.rows[0]
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined)
+      throw err
+    } finally {
+      client.release()
+    }
 
     await auditLog({
       tenantId: req.user!.tenantId,
@@ -185,7 +233,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res, next) => {
       action: 'work_order.created',
       entityType: 'work_orders',
       entityId: workOrder.id,
-      detail: { wo_number: workOrder.wo_number, asset_name: workOrder.asset_name },
+      detail: { wo_number: workOrder.wo_number, asset_name: workOrder.asset_name, asset_id: workOrder.asset_record_id },
     })
     if (assignedTo) {
       await createNotification({

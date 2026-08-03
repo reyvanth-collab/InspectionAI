@@ -2,47 +2,14 @@ import { Router } from 'express'
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth'
 import { query } from '../lib/db'
 import { auditLog } from '../lib/events'
+import { ASSET_STATUSES, CRITICALITIES, validateAssetDates } from '../lib/assetValidation'
 
 const router = Router()
-
-const ASSET_STATUSES = new Set(['active', 'maintenance', 'retired'])
-const CRITICALITIES = new Set(['low', 'medium', 'high', 'critical'])
-
-;(async () => {
-  try {
-    await query(`
-      CREATE TABLE IF NOT EXISTS public.assets (
-        id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id     uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-        asset_number  text NOT NULL,
-        name          text NOT NULL,
-        category      text,
-        location      text,
-        status        text NOT NULL DEFAULT 'active',
-        criticality   text NOT NULL DEFAULT 'medium',
-        manufacturer  text,
-        model         text,
-        serial_number text,
-        install_date  date,
-        next_pm_date  date,
-        notes         text,
-        created_by    uuid REFERENCES public.users(id),
-        created_at    timestamptz NOT NULL DEFAULT now(),
-        updated_at    timestamptz NOT NULL DEFAULT now(),
-        UNIQUE (tenant_id, asset_number)
-      )
-    `)
-    await query(`CREATE INDEX IF NOT EXISTS idx_assets_tenant_status ON public.assets (tenant_id, status)`)
-    await query(`CREATE INDEX IF NOT EXISTS idx_assets_tenant_criticality ON public.assets (tenant_id, criticality)`)
-    await query(`CREATE INDEX IF NOT EXISTS idx_assets_tenant_next_pm ON public.assets (tenant_id, next_pm_date)`)
-  } catch (e) {
-    console.warn('[assets] migration warning:', (e as Error).message)
-  }
-})()
 
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
+
 
 // GET /api/assets
 router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
@@ -50,6 +17,8 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
     const search = normalizeText(req.query.search)
     const status = normalizeText(req.query.status)
     const criticality = normalizeText(req.query.criticality)
+    const page = Math.max(1, Number.parseInt(normalizeText(req.query.page) || '1', 10) || 1)
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(normalizeText(req.query.pageSize) || '50', 10) || 50))
     const params: unknown[] = [req.user!.tenantId]
 
     let where = `WHERE a.tenant_id = $1`
@@ -74,7 +43,8 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
        FROM public.assets a
        LEFT JOIN public.work_orders wo
          ON wo.tenant_id = a.tenant_id
-        AND LOWER(wo.asset_name) IN (LOWER(a.asset_number), LOWER(a.name))
+        AND (wo.asset_record_id = a.id
+          OR (wo.asset_record_id IS NULL AND LOWER(wo.asset_name) IN (LOWER(a.asset_number), LOWER(a.name))))
        LEFT JOIN public.inspection_records ir
          ON ir.tenant_id = a.tenant_id
         AND ir.work_order_id = wo.id
@@ -84,12 +54,14 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
          CASE a.criticality WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
          a.next_pm_date ASC NULLS LAST,
          a.name ASC
-       LIMIT 300`,
-      params
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, pageSize, (page - 1) * pageSize]
     )
 
-    res.json({ data: result.rows })
-  } catch (err) { next(err) }
+    res.json({ data: result.rows, meta: { page, pageSize, hasMore: result.rows.length === pageSize } })
+  } catch (err) {
+    next(err)
+  }
 })
 
 // GET /api/assets/summary
@@ -117,11 +89,15 @@ router.post('/', requireAuth, requireRole('admin', 'approver'), async (req: Auth
     const name = normalizeText(req.body.name)
     const status = normalizeText(req.body.status) || 'active'
     const criticality = normalizeText(req.body.criticality) || 'medium'
+    const installDate = normalizeText(req.body.installDate)
+    const nextPmDate = normalizeText(req.body.nextPmDate)
 
     if (!assetNumber) { res.status(400).json({ error: 'Asset number is required' }); return }
     if (!name) { res.status(400).json({ error: 'Asset name is required' }); return }
     if (!ASSET_STATUSES.has(status)) { res.status(400).json({ error: 'Invalid asset status' }); return }
     if (!CRITICALITIES.has(criticality)) { res.status(400).json({ error: 'Invalid asset criticality' }); return }
+    const dateError = validateAssetDates(installDate, nextPmDate)
+    if (dateError) { res.status(400).json({ error: dateError }); return }
 
     const result = await query(
       `INSERT INTO public.assets
@@ -140,8 +116,8 @@ router.post('/', requireAuth, requireRole('admin', 'approver'), async (req: Auth
         normalizeText(req.body.manufacturer) || null,
         normalizeText(req.body.model) || null,
         normalizeText(req.body.serialNumber) || null,
-        normalizeText(req.body.installDate) || null,
-        normalizeText(req.body.nextPmDate) || null,
+        installDate || null,
+        nextPmDate || null,
         normalizeText(req.body.notes) || null,
         req.user!.id,
       ]
@@ -157,7 +133,12 @@ router.post('/', requireAuth, requireRole('admin', 'approver'), async (req: Auth
     })
 
     res.status(201).json({ data: result.rows[0] })
-  } catch (err) { next(err) }
+  } catch (err) {
+    if ((err as { code?: string }).code === '23505') {
+      res.status(409).json({ error: 'An asset with this number already exists in your tenant' }); return
+    }
+    next(err)
+  }
 })
 
 // PATCH /api/assets/:id
@@ -167,6 +148,10 @@ router.patch('/:id', requireAuth, requireRole('admin', 'approver'), async (req: 
     const criticality = req.body.criticality != null ? normalizeText(req.body.criticality) : null
     if (status && !ASSET_STATUSES.has(status)) { res.status(400).json({ error: 'Invalid asset status' }); return }
     if (criticality && !CRITICALITIES.has(criticality)) { res.status(400).json({ error: 'Invalid asset criticality' }); return }
+    const installDate = req.body.installDate != null ? normalizeText(req.body.installDate) : ''
+    const nextPmDate = req.body.nextPmDate != null ? normalizeText(req.body.nextPmDate) : ''
+    const dateError = validateAssetDates(installDate, nextPmDate)
+    if (dateError) { res.status(400).json({ error: dateError }); return }
 
     const result = await query(
       `UPDATE public.assets
@@ -194,8 +179,8 @@ router.patch('/:id', requireAuth, requireRole('admin', 'approver'), async (req: 
         req.body.manufacturer != null ? normalizeText(req.body.manufacturer) : null,
         req.body.model != null ? normalizeText(req.body.model) : null,
         req.body.serialNumber != null ? normalizeText(req.body.serialNumber) : null,
-        req.body.installDate != null ? normalizeText(req.body.installDate) || null : null,
-        req.body.nextPmDate != null ? normalizeText(req.body.nextPmDate) || null : null,
+        req.body.installDate != null ? installDate || null : null,
+        req.body.nextPmDate != null ? nextPmDate || null : null,
         req.body.notes != null ? normalizeText(req.body.notes) : null,
         req.params.id,
         req.user!.tenantId,
@@ -214,7 +199,12 @@ router.patch('/:id', requireAuth, requireRole('admin', 'approver'), async (req: 
     })
 
     res.json({ data: result.rows[0] })
-  } catch (err) { next(err) }
+  } catch (err) {
+    if ((err as { code?: string }).code === '23505') {
+      res.status(409).json({ error: 'An asset with this number already exists in your tenant' }); return
+    }
+    next(err)
+  }
 })
 
 export default router

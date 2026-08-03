@@ -5,8 +5,10 @@ import { query } from '../lib/db'
 import { signToken } from '../lib/jwt'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { auditLog } from '../lib/events'
+import { createRateLimiter } from '../middleware/rateLimit'
 
 const router = Router()
+const loginRateLimit = createRateLimiter(10, 15 * 60 * 1000)
 
 const LoginSchema = z.object({
   email:    z.string().email(),
@@ -14,7 +16,7 @@ const LoginSchema = z.object({
 })
 
 // POST /api/auth/login
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginRateLimit, async (req, res, next) => {
   try {
     const parsed = LoginSchema.safeParse(req.body)
     if (!parsed.success) {

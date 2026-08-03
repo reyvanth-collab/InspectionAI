@@ -1,25 +1,26 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { OfflineProvider } from '@/context/OfflineContext'
 import { ToastProvider } from '@/components/ui/Toast'
 import type { ReactNode } from 'react'
 
 // Pages
-import Login         from '@/pages/Login'
-import Dashboard     from '@/pages/Dashboard'
-import Assets        from '@/pages/Assets'
-import Inspections   from '@/pages/Inspections'
-import MasterLibrary from '@/pages/MasterLibrary'
-import Approvals     from '@/pages/Approvals'
-import Analytics     from '@/pages/Analytics'
-import Reports       from '@/pages/Reports'
-import Notifications      from '@/pages/Notifications'
-import Settings           from '@/pages/Settings'
-import InspectionExecution from '@/pages/InspectionExecution'
-import WIDetail            from '@/pages/WIDetail'
-import WIBuilder           from '@/pages/WIBuilder'
-import MOMSAnalytics       from '@/pages/MOMSAnalytics'
-import AuditTrail          from '@/pages/AuditTrail'
+const Login = lazy(() => import('@/pages/Login'))
+const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const Assets = lazy(() => import('@/pages/Assets'))
+const Inspections = lazy(() => import('@/pages/Inspections'))
+const MasterLibrary = lazy(() => import('@/pages/MasterLibrary'))
+const Approvals = lazy(() => import('@/pages/Approvals'))
+const Analytics = lazy(() => import('@/pages/Analytics'))
+const Reports = lazy(() => import('@/pages/Reports'))
+const Notifications = lazy(() => import('@/pages/Notifications'))
+const Settings = lazy(() => import('@/pages/Settings'))
+const InspectionExecution = lazy(() => import('@/pages/InspectionExecution'))
+const WIDetail = lazy(() => import('@/pages/WIDetail'))
+const WIBuilder = lazy(() => import('@/pages/WIBuilder'))
+const MOMSAnalytics = lazy(() => import('@/pages/MOMSAnalytics'))
+const AuditTrail = lazy(() => import('@/pages/AuditTrail'))
 
 // Shows nothing while Supabase restores the session — prevents redirect flicker.
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -47,7 +48,8 @@ function FullScreenSpinner() {
 
 function AppRoutes() {
   return (
-    <Routes>
+    <Suspense fallback={<FullScreenSpinner />}>
+      <Routes>
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
 
       <Route path="/dashboard"     element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -66,8 +68,9 @@ function AppRoutes() {
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
       <Route path="/settings"      element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </Suspense>
   )
 }
 

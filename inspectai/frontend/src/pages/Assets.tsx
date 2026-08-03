@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Activity, AlertTriangle, Boxes, CalendarClock, Plus, Search, Wrench, type LucideIcon } from 'lucide-react'
+import { Activity, AlertTriangle, Boxes, CalendarClock, Edit3, Plus, Search, Wrench, type LucideIcon } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -8,7 +8,7 @@ import { Card, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
-import { useAssets, useAssetSummary, useCreateAsset } from '@/hooks/useAssets'
+import { useAssets, useAssetSummary, useCreateAsset, useUpdateAsset } from '@/hooks/useAssets'
 import type { Asset, AssetCriticality, AssetStatus } from '@/types'
 
 const INPUT = 'w-full px-3 py-2 bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors'
@@ -48,27 +48,65 @@ export default function Assets() {
   const [status, setStatus] = useState('all')
   const [criticality, setCriticality] = useState('all')
   const [showModal, setShowModal] = useState(false)
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null)
+  const [page, setPage] = useState(1)
   const [form, setForm] = useState(emptyForm)
 
-  const filters = useMemo(() => ({ search, status, criticality }), [search, status, criticality])
-  const { data: assets = [], isLoading } = useAssets(filters)
+  const filters = useMemo(() => ({ search, status, criticality, page }), [search, status, criticality, page])
+  const { data: assetPage, isLoading } = useAssets(filters)
+  const assets = assetPage?.items ?? []
   const { data: summary } = useAssetSummary()
   const createAsset = useCreateAsset()
+  const updateAsset = useUpdateAsset()
+
+  useEffect(() => { setPage(1) }, [search, status, criticality])
 
   const set = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm(prev => ({ ...prev, [k]: e.target.value }))
 
-  const handleCreate = async () => {
-    if (!form.assetNumber.trim()) { toast('Asset number is required', 'error'); return }
+  const openEdit = (asset: Asset) => {
+    setEditingAsset(asset)
+    setForm({
+      assetNumber: asset.assetNumber,
+      name: asset.name,
+      category: asset.category,
+      location: asset.location,
+      status: asset.status,
+      criticality: asset.criticality,
+      manufacturer: asset.manufacturer,
+      model: asset.model,
+      serialNumber: asset.serialNumber,
+      installDate: asset.installDate,
+      nextPmDate: asset.nextPmDate,
+      notes: asset.notes,
+    })
+    setShowModal(true)
+  }
+
+  const closeModal = () => {
+    setShowModal(false)
+    setEditingAsset(null)
+    setForm(emptyForm)
+  }
+
+  const handleSave = async () => {
     if (!form.name.trim()) { toast('Asset name is required', 'error'); return }
+    if (form.installDate && form.nextPmDate && form.nextPmDate < form.installDate) {
+      toast('Next PM date cannot be before install date', 'error'); return
+    }
     try {
-      await createAsset.mutateAsync(form)
-      toast('Asset created', 'success')
-      setForm(emptyForm)
-      setShowModal(false)
+      if (editingAsset) {
+        await updateAsset.mutateAsync({ id: editingAsset.id, ...form })
+        toast('Asset updated', 'success')
+      } else {
+        if (!form.assetNumber.trim()) { toast('Asset number is required', 'error'); return }
+        await createAsset.mutateAsync(form)
+        toast('Asset created', 'success')
+      }
+      closeModal()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Failed to create asset', 'error')
+      toast(e instanceof Error ? e.message : `Failed to ${editingAsset ? 'update' : 'create'} asset`, 'error')
     }
   }
 
@@ -79,7 +117,7 @@ export default function Assets() {
           <h1 className="text-[22px] font-semibold tracking-[-0.3px]">Assets</h1>
           <p className="text-[13px] text-text-2 mt-1">Asset registry, risk, and inspection readiness</p>
         </div>
-        <Button variant="primary" onClick={() => setShowModal(true)}>
+        <Button variant="primary" onClick={() => { setEditingAsset(null); setForm(emptyForm); setShowModal(true) }}>
           <Plus size={15} /> New Asset
         </Button>
       </div>
@@ -130,30 +168,39 @@ export default function Assets() {
           </CardBody>
         ) : (
           <>
-            <div className="grid grid-cols-[130px_1.2fr_1fr_110px_110px_100px_120px] gap-3 px-4 py-2 border-b border-border bg-bg-3">
-              {['Asset #', 'Name', 'Location', 'Status', 'Risk', 'Open WO', 'Next PM'].map(h => (
+            <div className="grid grid-cols-[130px_1.2fr_1fr_110px_110px_100px_120px_34px] gap-3 px-4 py-2 border-b border-border bg-bg-3">
+            {['Asset #', 'Name', 'Location', 'Status', 'Risk', 'Open WO', 'Next PM', ''].map(h => (
                 <span key={h} className="text-[10px] font-semibold text-text-3 uppercase tracking-[0.07em]">{h}</span>
               ))}
             </div>
-            {assets.map(asset => <AssetRow key={asset.id} asset={asset} />)}
+            {assets.map(asset => <AssetRow key={asset.id} asset={asset} onEdit={() => openEdit(asset)} />)}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <span className="text-[11px] text-text-3">Page {page}</span>
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
+                <Button variant="secondary" size="sm" disabled={!assetPage?.hasMore} onClick={() => setPage(p => p + 1)}>Next</Button>
+              </div>
+            </div>
           </>
         )}
       </Card>
 
       <Modal
         open={showModal}
-        onClose={() => setShowModal(false)}
-        title="New Asset"
+        onClose={closeModal}
+        title={editingAsset ? 'Edit Asset' : 'New Asset'}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-            <Button variant="primary" loading={createAsset.isPending} onClick={handleCreate}>Create Asset</Button>
+            <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+            <Button variant="primary" loading={createAsset.isPending || updateAsset.isPending} onClick={handleSave}>
+              {editingAsset ? 'Save Changes' : 'Create Asset'}
+            </Button>
           </>
         }
       >
         <div className="grid grid-cols-2 gap-4">
           <Field label="Asset Number" required>
-            <input value={form.assetNumber} onChange={set('assetNumber')} placeholder="e.g. ESC-NSL-001" className={INPUT} />
+            <input value={form.assetNumber} onChange={set('assetNumber')} disabled={!!editingAsset} placeholder="e.g. ESC-NSL-001" className={INPUT + (editingAsset ? ' opacity-60' : '')} />
           </Field>
           <Field label="Asset Name" required>
             <input value={form.name} onChange={set('name')} placeholder="e.g. Escalator E-01" className={INPUT} />
@@ -188,6 +235,9 @@ export default function Assets() {
           <Field label="Serial Number">
             <input value={form.serialNumber} onChange={set('serialNumber')} className={INPUT} />
           </Field>
+          <Field label="Install Date">
+            <input type="date" value={form.installDate} onChange={set('installDate')} className={INPUT} />
+          </Field>
           <Field label="Next PM Date">
             <input type="date" value={form.nextPmDate} onChange={set('nextPmDate')} className={INPUT} />
           </Field>
@@ -201,9 +251,9 @@ export default function Assets() {
   )
 }
 
-function AssetRow({ asset }: { asset: Asset }) {
+function AssetRow({ asset, onEdit }: { asset: Asset; onEdit: () => void }) {
   return (
-    <div className="grid grid-cols-[130px_1.2fr_1fr_110px_110px_100px_120px] gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-bg-3 transition-colors">
+    <div className="grid grid-cols-[130px_1.2fr_1fr_110px_110px_100px_120px_34px] gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-bg-3 transition-colors">
       <span className="font-mono text-[12px] text-accent truncate">{asset.assetNumber}</span>
       <span className="text-[13px] text-text truncate">
         {asset.name}
@@ -214,6 +264,9 @@ function AssetRow({ asset }: { asset: Asset }) {
       <span><Badge variant={CRITICALITY_BADGE[asset.criticality]}>{asset.criticality}</Badge></span>
       <span className="font-mono text-[12px] text-text-2">{asset.openWorkOrders}</span>
       <span className="font-mono text-[11px] text-text-3">{asset.nextPmDate || '-'}</span>
+      <button type="button" onClick={onEdit} title="Edit asset" className="text-text-3 hover:text-accent transition-colors">
+        <Edit3 size={14} />
+      </button>
     </div>
   )
 }

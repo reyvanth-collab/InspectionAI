@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
+    "test": "npm run build && node test/assetValidation.test.mjs",
+    "load-test": "node scripts/load-test.mjs",
+    "verify:staging": "node scripts/verify-staging.mjs",
+    "worker": "npm run build && node dist/worker.js",
     "start": "node dist/index.js"
   },
   "dependencies": {

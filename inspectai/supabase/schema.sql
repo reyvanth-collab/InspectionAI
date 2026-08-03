@@ -43,6 +43,25 @@ CREATE TABLE public.tenants (
   updated_at     timestamptz NOT NULL DEFAULT now()
 );
 
+-- ── 1a. job_queue ────────────────────────────────────────────
+-- Durable queue for work that should not block API requests.
+CREATE TABLE public.job_queue (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id     uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  user_id       uuid,
+  job_type      text NOT NULL CHECK (job_type IN ('ai_analysis', 'report_generation', 'moms_import', 'notification')),
+  status        text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
+  payload       jsonb NOT NULL DEFAULT '{}'::jsonb,
+  attempts      integer NOT NULL DEFAULT 0,
+  max_attempts  integer NOT NULL DEFAULT 3,
+  available_at  timestamptz NOT NULL DEFAULT now(),
+  locked_at     timestamptz,
+  completed_at  timestamptz,
+  last_error    text,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
 COMMENT ON TABLE public.tenants IS 'Top-level organisations. Every other table is scoped to a tenant.';
 
 
@@ -169,6 +188,37 @@ CREATE TABLE public.work_orders (
 );
 
 COMMENT ON TABLE public.work_orders IS 'Work orders that drive inspection execution.';
+
+
+-- ── 6a. assets ───────────────────────────────────────────────
+-- Canonical asset register used by work orders and inspections.
+CREATE TABLE public.assets (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id     uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  asset_number  text NOT NULL,
+  name          text NOT NULL,
+  category      text,
+  location      text,
+  status        text NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'maintenance', 'retired')),
+  criticality   text NOT NULL DEFAULT 'medium'
+                CHECK (criticality IN ('low', 'medium', 'high', 'critical')),
+  manufacturer  text,
+  model         text,
+  serial_number text,
+  install_date  date,
+  next_pm_date  date,
+  notes         text,
+  created_by    uuid REFERENCES public.users(id),
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, asset_number)
+);
+
+COMMENT ON TABLE public.assets IS 'Tenant-scoped canonical asset register.';
+
+ALTER TABLE public.work_orders
+  ADD COLUMN asset_record_id uuid REFERENCES public.assets(id) ON DELETE SET NULL;
 
 
 -- ── 7. inspection_records ───────────────────────────────────
@@ -426,6 +476,7 @@ CREATE TABLE public.moms_checklist_steps (
 -- users
 CREATE INDEX idx_users_tenant          ON public.users(tenant_id);
 CREATE INDEX idx_users_role            ON public.users(tenant_id, role);
+CREATE INDEX idx_job_queue_claim       ON public.job_queue(status, available_at, created_at);
 
 -- work_instructions
 CREATE INDEX idx_wi_tenant             ON public.work_instructions(tenant_id);
@@ -440,6 +491,10 @@ CREATE INDEX idx_wo_tenant             ON public.work_orders(tenant_id);
 CREATE INDEX idx_wo_status             ON public.work_orders(tenant_id, status);
 CREATE INDEX idx_wo_assigned           ON public.work_orders(assigned_to);
 CREATE INDEX idx_wo_due                ON public.work_orders(due_date);
+CREATE INDEX idx_wo_asset_record       ON public.work_orders(tenant_id, asset_record_id);
+CREATE INDEX idx_assets_tenant_status  ON public.assets(tenant_id, status);
+CREATE INDEX idx_assets_tenant_criticality ON public.assets(tenant_id, criticality);
+CREATE INDEX idx_assets_tenant_next_pm ON public.assets(tenant_id, next_pm_date);
 
 -- inspection_records
 CREATE INDEX idx_ir_tenant             ON public.inspection_records(tenant_id);
@@ -486,7 +541,9 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 AS $$
-  SELECT tenant_id FROM public.users WHERE id = auth.uid()
+  SELECT tenant_id
+  FROM public.users
+  WHERE id = NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;
 
 -- Returns the role for the currently authenticated user.
@@ -496,7 +553,9 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 AS $$
-  SELECT role FROM public.users WHERE id = auth.uid()
+  SELECT role
+  FROM public.users
+  WHERE id = NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;
 
 -- Auto-set updated_at trigger function.
@@ -529,6 +588,10 @@ CREATE TRIGGER trg_wi_updated_at
 
 CREATE TRIGGER trg_wo_updated_at
   BEFORE UPDATE ON public.work_orders
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER trg_assets_updated_at
+  BEFORE UPDATE ON public.assets
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 CREATE TRIGGER trg_ir_updated_at
@@ -625,6 +688,10 @@ CREATE POLICY "users: admins can delete"
   USING (tenant_id = public.current_tenant_id()
     AND public.current_user_role() = 'admin');
 
+-- ── job_queue ─────────────────────────────────────────────────
+-- Internal worker table. No client-facing policies are intentional.
+ALTER TABLE public.job_queue ENABLE ROW LEVEL SECURITY;
+
 -- ── work_instructions ────────────────────────────────────────
 ALTER TABLE public.work_instructions ENABLE ROW LEVEL SECURITY;
 
@@ -697,6 +764,35 @@ CREATE POLICY "wo: admin only delete"
   ON public.work_orders FOR DELETE
   USING (tenant_id = public.current_tenant_id()
     AND public.current_user_role() = 'admin');
+
+-- ── assets ───────────────────────────────────────────────────
+ALTER TABLE public.assets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "assets: all roles see own tenant"
+  ON public.assets FOR SELECT
+  USING (tenant_id = public.current_tenant_id());
+
+CREATE POLICY "assets: admin/approver can insert"
+  ON public.assets FOR INSERT
+  WITH CHECK (
+    tenant_id = public.current_tenant_id()
+    AND public.current_user_role() IN ('admin', 'approver')
+  );
+
+CREATE POLICY "assets: admin/approver can update"
+  ON public.assets FOR UPDATE
+  USING (
+    tenant_id = public.current_tenant_id()
+    AND public.current_user_role() IN ('admin', 'approver')
+  )
+  WITH CHECK (tenant_id = public.current_tenant_id());
+
+CREATE POLICY "assets: admin only delete"
+  ON public.assets FOR DELETE
+  USING (
+    tenant_id = public.current_tenant_id()
+    AND public.current_user_role() = 'admin'
+  );
 
 -- ── inspection_records ───────────────────────────────────────
 ALTER TABLE public.inspection_records ENABLE ROW LEVEL SECURITY;

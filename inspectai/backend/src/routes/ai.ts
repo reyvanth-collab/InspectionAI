@@ -241,7 +241,7 @@ One of: Immediate shutdown required | Within 24 hours | Within 7 days | Schedule
 // ── POST /api/ai/analyse-photo ───────────────────────────────────
 // Accepts a base64 image + inspection context, returns Claude Vision analysis as SSE.
 const PhotoSchema = z.object({
-  imageBase64:         z.string().min(1),
+  imageBase64:         z.string().min(1).max(28_000_000, 'Image is too large; maximum supported size is 20 MB'),
   mediaType:           z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
   itemDescription:     z.string().min(1),
   acceptanceCriteria:  z.string().optional(),

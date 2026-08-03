@@ -9,7 +9,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max:              10,
+  max:              Math.max(5, Math.min(50, Number(process.env.DB_POOL_MAX ?? 20))),
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
 })
