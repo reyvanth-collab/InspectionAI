@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardCheck, BookOpen, CheckSquare,
-  BarChart2, TrendingUp, FileText, Bell, Shield, BookMarked, LogOut, Boxes,
+  BarChart2, TrendingUp, FileText, Shield, BookMarked, LogOut, Boxes,
   LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -31,7 +31,6 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/analytics',     label: 'Analytics',      Icon: BarChart2       },
   { path: '/moms',          label: 'MOMS Analytics', Icon: TrendingUp,     roles: ['admin', 'approver'] },
   { path: '/reports',       label: 'Reports',        Icon: FileText        },
-  { path: '/notifications', label: 'Notifications',  Icon: Bell            },
   { path: '/audit-trail',   label: 'Audit Trail',    Icon: BookMarked,     roles: ['admin'] },
   { path: '/settings',      label: 'Settings',       Icon: Shield,         roles: ['admin'] },
 ]

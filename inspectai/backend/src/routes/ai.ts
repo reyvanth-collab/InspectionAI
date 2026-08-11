@@ -5,6 +5,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { z } from 'zod'
 import { query } from '../lib/db'
 import { auditLog } from '../lib/events'
+import { createAiProvider } from '../lib/ai/provider'
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -222,6 +223,14 @@ One of: Immediate shutdown required | Within 24 hours | Within 7 days | Schedule
   }
 
   try {
+    if ((process.env.AI_PROVIDER ?? 'anthropic').toLowerCase() === 'openai') {
+      const provider = createAiProvider()
+      const text = await provider.completeText(prompt, 600)
+      res.write(`data: ${JSON.stringify({ text })}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+      return
+    }
     const stream = client.messages.stream({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 600,
@@ -261,6 +270,19 @@ router.post('/analyse-photo', requireAuth, async (req: AuthRequest, res: Respons
   res.flushHeaders()
 
   try {
+    const provider = createAiProvider()
+    if (provider.name === 'openai') {
+      const text = await provider.analyzeImage({
+        imageBase64,
+        mediaType,
+        maxTokens: 800,
+        prompt: `You are an expert maintenance engineer. Analyse this inspection photo for the checklist item "${itemDescription}". Acceptance criteria: ${acceptanceCriteria ?? 'Not specified'}. Asset: ${assetName ?? 'Not specified'}. Location: ${location ?? 'Not specified'}. Describe visible defects, severity (Critical, Major, or Minor), likely cause, and 2-3 recommended actions. Do not invent details not visible in the image.`,
+      })
+      res.write(`data: ${JSON.stringify({ text })}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+      return
+    }
     const stream = client.messages.stream({
       model:      'claude-sonnet-4-6',
       max_tokens: 800,
@@ -336,9 +358,32 @@ router.post('/validate-finding', requireAuth, async (req: AuthRequest, res: Resp
 
   const input = parsed.data
   let validation = deterministicValidation(input)
-  const model = 'claude-haiku-4-5-20251001'
+  const model = (process.env.AI_PROVIDER ?? 'anthropic').toLowerCase() === 'openai'
+    ? process.env.OPENAI_MODEL ?? 'gpt-4o'
+    : 'claude-haiku-4-5-20251001'
 
-  if (process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY.includes('your-')) {
+  if ((process.env.AI_PROVIDER ?? 'anthropic').toLowerCase() === 'openai') {
+    try {
+      const provider = createAiProvider()
+      const raw = stripJsonFences(await provider.completeText(`Validate this industrial inspection result. Return only JSON with status (aligned, review_required, or uncertain), recommendedResult (pass, fail, na, or keep), confidence from 0 to 1, reason, evidence array, riskLevel (low, medium, or high), and requiredAction.
+Checklist item: ${input.itemDescription}
+Acceptance criteria: ${input.acceptanceCriteria ?? 'Not specified'}
+Selected result: ${input.selectedResult}; captured value: ${input.capturedValue ?? 'None'}; notes: ${input.inspectorNotes ?? 'None'}
+Deterministic pre-check: ${JSON.stringify(validation)}`, 900))
+      const ai = JSON.parse(raw) as Partial<ValidationResult>
+      validation = {
+        status: ['aligned', 'review_required', 'uncertain'].includes(String(ai.status)) ? ai.status as ValidationStatus : validation.status,
+        recommendedResult: ['pass', 'fail', 'na', 'keep'].includes(String(ai.recommendedResult)) ? ai.recommendedResult as FindingResult | 'keep' : validation.recommendedResult,
+        confidence: clampConfidence(ai.confidence, validation.confidence),
+        reason: typeof ai.reason === 'string' && ai.reason.trim() ? ai.reason : validation.reason,
+        evidence: Array.isArray(ai.evidence) ? ai.evidence.map(String).slice(0, 8) : validation.evidence,
+        riskLevel: ['low', 'medium', 'high'].includes(String(ai.riskLevel)) ? ai.riskLevel as 'low' | 'medium' | 'high' : validation.riskLevel,
+        requiredAction: typeof ai.requiredAction === 'string' && ai.requiredAction.trim() ? ai.requiredAction : validation.requiredAction,
+      }
+    } catch {
+      // Keep deterministic result when the selected provider is unavailable or returns malformed JSON.
+    }
+  } else if (process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY.includes('your-')) {
     try {
       const message = await client.messages.create({
         model,
@@ -514,6 +559,16 @@ Generate a single JSON object following the Maximo 7.6 REST API schema for a Wor
 Return ONLY the JSON object, no markdown, no explanation.`
 
   try {
+    if ((process.env.AI_PROVIDER ?? 'anthropic').toLowerCase() === 'openai') {
+      const provider = createAiProvider()
+      const json = (await provider.completeText(prompt, 1500)).replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim()
+      try {
+        res.json({ data: JSON.parse(json) })
+      } catch {
+        res.json({ data: json, raw: true })
+      }
+      return
+    }
     const message = await client.messages.create({
       model:      'claude-sonnet-4-6',
       max_tokens: 1500,
@@ -550,6 +605,21 @@ router.post('/import-wi-pdf', requireAuth, upload.single('pdf'), async (req: Aut
   const pdfBase64 = file.buffer.toString('base64')
 
   try {
+    const provider = createAiProvider()
+    if (provider.name === 'openai') {
+      const raw = await provider.extractPdf({
+        pdfBase64,
+        filename: file.originalname,
+        maxTokens: 8000,
+        prompt: `Extract every checklist row from this work-instruction PDF. Return only JSON with wiTitle, wiNumber, revision, and items. Each item must include itemNo, description, fieldType, acceptanceCriteria, required, sourcePage, sourceText, confidence, and warnings. Preserve document order. Exclude headers, footers, signatures, and column headings. Use fieldType heading, pass_fail, text, measurement, or textarea. Do not add markdown.`,
+      })
+      try {
+        res.json({ data: JSON.parse(raw.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim()) })
+      } catch {
+        res.status(500).json({ error: 'AI returned invalid JSON — please try again', raw })
+      }
+      return
+    }
     const message = await client.messages.create({
       model:      'claude-sonnet-4-6',
       max_tokens: 8000,
@@ -637,7 +707,7 @@ Important:
           item_count: parsed.items.length,
           low_confidence_count: parsed.items.filter(item => (item.confidence ?? 1) < 0.75).length,
           warning_count: parsed.items.reduce((sum, item) => sum + (item.warnings?.length ?? 0), 0),
-          model: 'claude-sonnet-4-6',
+          model: provider.model,
           prompt_version: 'wi-pdf-extraction-v2',
         },
       })

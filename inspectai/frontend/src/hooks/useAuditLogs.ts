@@ -6,6 +6,14 @@ export interface AuditLog {
   id:                  string
   action:              string
   table_name:          string
+  entity_id:           string | null
+  severity:            'info' | 'warning' | 'critical' | null
+  detail:              Record<string, unknown> | null
+  wi_id:               string | null
+  wi_number:           string | null
+  wi_title:            string | null
+  wi_revision:         string | null
+  wi_status:           string | null
   performed_by_name:   string | null
   created_at:          string
   // legacy compat

@@ -84,9 +84,14 @@ router.get('/audit-logs', requireAuth, async (req: AuthRequest, res, next) => {
     const params: unknown[] = [req.user!.tenantId, limit]
     if (table) params.push(table)
     const result = await query(
-      `SELECT al.id, al.action, al.entity_type AS table_name, al.created_at, u.name AS performed_by_name
+      `SELECT al.id, al.action, al.entity_type AS table_name, al.entity_id, al.severity, al.detail, al.created_at,
+              u.name AS performed_by_name,
+              wi.id AS wi_id, wi.wi_number, wi.title AS wi_title, wi.revision AS wi_revision, wi.status AS wi_status
        FROM   public.audit_logs al
        LEFT JOIN public.users u ON u.id = al.user_id
+       LEFT JOIN public.work_instructions wi
+         ON wi.id = al.entity_id
+        AND al.entity_type IN ('work_instruction', 'work_instructions')
        WHERE  al.tenant_id = $1
          ${table ? 'AND al.entity_type = $3' : ''}
        ORDER  BY al.created_at DESC
