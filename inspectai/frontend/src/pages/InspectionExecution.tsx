@@ -1,5 +1,20 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import {
+  Activity,
+  AlertTriangle,
+  Camera,
+  CheckCircle2,
+  ClipboardCheck,
+  Clock3,
+  FileCheck2,
+  Gauge,
+  MapPin,
+  ShieldCheck,
+  Sparkles,
+  Timer,
+  Wrench,
+} from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -20,13 +35,14 @@ import { useToast } from '@/components/ui/Toast'
 import { SignaturePad } from '@/components/ui/SignaturePad'
 import { useAuth } from '@/context/AuthContext'
 import { useOffline } from '@/context/OfflineContext'
+import { useAssignableUsers } from '@/hooks/useUsers'
 import { JWT_KEY } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
 type FindingResult = 'pass' | 'fail' | 'na'
 type FieldType = 'pass_fail' | 'text' | 'number' | 'dropdown' | 'yes_no' |
                  'multiselect' | 'date' | 'measurement' | 'photo' | 'textarea' |
-                 'signature' | 'heading'
+                 'signature' | 'heading' | 'table'
 
 interface ChecklistItemRow {
   id:                  string
@@ -42,10 +58,12 @@ interface ChecklistItemRow {
   min_value?:          number | null
   max_value?:          number | null
   conditional_json?:   string | null
+  layout_json?:        string | null
 }
 
 interface CompletionSummary {
   overallResult: FindingResult; passed: number; failed: number; na: number; total: number
+  items: Array<{ item_no: string; description: string; result: FindingResult; note?: string }>
   failedItems: Array<{ item_no: string; description: string; note?: string }>
   completedAt: string; signatureDataUrl: string; inspectorName: string
   woNumber: string; assetName: string; wiNumber: string; wiTitle: string; location: string
@@ -183,7 +201,8 @@ function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, lo
         onChange={e => { const f = e.target.files?.[0]; if (f) analysePhoto(f); e.target.value = '' }} />
       {!state && (
         <button onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-1.5 text-[11px] text-text-3 hover:text-accent bg-transparent border-none cursor-pointer p-0 transition-colors">
+          className="inline-flex items-center gap-2 rounded-[8px] border border-border-2 bg-bg px-3 py-2 text-[12px] text-text-2 hover:border-accent hover:text-accent cursor-pointer transition-colors">
+          <Camera size={14} />
           📷 Attach photo for AI Vision analysis
         </button>
       )}
@@ -209,12 +228,29 @@ function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, lo
 }
 
 // ── Field input renderers ─────────────────────────────────────────
+function parseTableLayout(value?: string | null) {
+  const fallback = { tableColumns: ['Item', 'Acceptance criteria', 'Result', 'Remarks'], tableRows: 4 }
+  if (!value) return fallback
+  try {
+    const parsed = JSON.parse(value) as Partial<typeof fallback>
+    return {
+      tableColumns: Array.isArray(parsed.tableColumns) && parsed.tableColumns.length
+        ? parsed.tableColumns.map(String)
+        : fallback.tableColumns,
+      tableRows: typeof parsed.tableRows === 'number' ? Math.max(1, Math.min(20, parsed.tableRows)) : fallback.tableRows,
+    }
+  } catch {
+    return fallback
+  }
+}
+
 function FieldInput({
-  item, value, onChange, onResultChange,
+  item, value, onChange, onCommit, onResultChange,
 }: {
   item: ChecklistItemRow
   value: string
   onChange: (v: string) => void
+  onCommit?: (v: string) => void
   onResultChange?: (result: FindingResult, capturedValue: string) => void
 }) {
   const type = item.field_type ?? 'pass_fail'
@@ -223,19 +259,64 @@ function FieldInput({
   if (type === 'text') {
     return (
       <input value={value} onChange={e => onChange(e.target.value)}
+        onBlur={e => onCommit?.(e.target.value)}
         placeholder={item.placeholder ?? 'Enter text…'} className={CLS} />
     )
   }
   if (type === 'textarea') {
     return (
       <textarea value={value} onChange={e => onChange(e.target.value)} rows={3}
+        onBlur={e => onCommit?.(e.target.value)}
         placeholder={item.placeholder ?? 'Enter notes…'} className={CLS + ' resize-none'} />
+    )
+  }
+  if (type === 'table') {
+    const layout = parseTableLayout(item.layout_json)
+    let tableValue: string[][] = []
+    try {
+      tableValue = value ? JSON.parse(value) as string[][] : []
+    } catch {
+      tableValue = []
+    }
+    const updateCell = (row: number, col: number, nextValue: string) => {
+      const next = Array.from({ length: layout.tableRows }, (_, r) =>
+        Array.from({ length: layout.tableColumns.length }, (_, c) => tableValue[r]?.[c] ?? '')
+      )
+      next[row][col] = nextValue
+      const serialized = JSON.stringify(next)
+      onChange(serialized)
+      return serialized
+    }
+    return (
+      <div className="overflow-auto rounded-[8px] border border-border">
+        <div className="grid min-w-[520px]" style={{ gridTemplateColumns: `repeat(${layout.tableColumns.length}, minmax(120px, 1fr))` }}>
+          {layout.tableColumns.map((col, i) => (
+            <div key={i} className="border-r border-border last:border-r-0 bg-bg-3 px-3 py-2 text-[11px] font-semibold text-text-2">
+              {col}
+            </div>
+          ))}
+        </div>
+        {Array.from({ length: layout.tableRows }).map((_, row) => (
+          <div key={row} className="grid min-w-[520px] border-t border-border" style={{ gridTemplateColumns: `repeat(${layout.tableColumns.length}, minmax(120px, 1fr))` }}>
+            {layout.tableColumns.map((_, col) => (
+              <input
+                key={col}
+                value={tableValue[row]?.[col] ?? ''}
+                onChange={e => updateCell(row, col, e.target.value)}
+                onBlur={e => onCommit?.(updateCell(row, col, e.target.value))}
+                className="h-10 min-w-0 border-0 border-r border-border last:border-r-0 bg-bg px-3 text-[12px] text-text outline-none focus:bg-bg-2"
+              />
+            ))}
+          </div>
+        ))}
+      </div>
     )
   }
   if (type === 'number') {
     return (
       <div className="flex items-center gap-2">
         <input type="number" value={value} onChange={e => onChange(e.target.value)}
+          onBlur={e => onCommit?.(e.target.value)}
           min={item.min_value ?? undefined} max={item.max_value ?? undefined}
           placeholder="0" className={CLS} />
         {(item.min_value != null || item.max_value != null) && (
@@ -252,6 +333,7 @@ function FieldInput({
     return (
       <div className="flex items-center gap-2">
         <input type="number" value={value} onChange={e => onChange(e.target.value)}
+          onBlur={e => onCommit?.(e.target.value)}
           min={item.min_value ?? undefined} max={item.max_value ?? undefined}
           placeholder="0.0" className={CLS} />
         <span className="px-3 py-2 bg-bg-3 border border-border rounded-[8px] text-[12px] font-mono text-text-2 flex-shrink-0">
@@ -263,7 +345,7 @@ function FieldInput({
   if (type === 'dropdown') {
     const opts = item.options_json ? (JSON.parse(item.options_json) as string[]) : []
     return (
-      <select value={value} onChange={e => onChange(e.target.value)} className={CLS}>
+      <select value={value} onChange={e => { onChange(e.target.value); onCommit?.(e.target.value) }} className={CLS}>
         <option value="">Select…</option>
         {opts.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
       </select>
@@ -274,7 +356,9 @@ function FieldInput({
     const selected = value ? (value.split(',') as string[]) : []
     const toggle   = (opt: string) => {
       const next = selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt]
-      onChange(next.join(','))
+      const serialized = next.join(',')
+      onChange(serialized)
+      onCommit?.(serialized)
     }
     return (
       <div className="flex flex-col gap-1.5 mt-1">
@@ -289,7 +373,15 @@ function FieldInput({
     )
   }
   if (type === 'date') {
-    return <input type="date" value={value} onChange={e => onChange(e.target.value)} className={CLS} />
+    return (
+      <input
+        type="date"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={e => onCommit?.(e.target.value)}
+        className={CLS}
+      />
+    )
   }
   if (type === 'yes_no') {
     const select = (choice: 'yes' | 'no') => {
@@ -340,6 +432,70 @@ function validationLabel(status?: AiValidation['status']) {
   return 'Aligned'
 }
 
+function getResultTone(result?: FindingResult) {
+  if (result === 'pass') return 'border-success-border bg-success-bg/25'
+  if (result === 'fail') return 'border-danger-border bg-danger-bg/20'
+  if (result === 'na') return 'border-border-2 bg-bg-3/70'
+  return 'border-border bg-bg-2'
+}
+
+function usesResultButtons(fieldType?: FieldType | null) {
+  return (fieldType ?? 'pass_fail') === 'pass_fail'
+}
+
+function valueResult(item: ChecklistItemRow, capturedValue: string): FindingResult {
+  const type = item.field_type ?? 'pass_fail'
+  if ((type === 'number' || type === 'measurement') && capturedValue.trim() !== '') {
+    const numeric = Number(capturedValue)
+    if (Number.isFinite(numeric)) {
+      if (item.min_value != null && numeric < item.min_value) return 'fail'
+      if (item.max_value != null && numeric > item.max_value) return 'fail'
+    }
+  }
+  return 'pass'
+}
+
+function parseSignatureValue(value: string) {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as { signerName?: string; signedAt?: string; signatureDataUrl?: string }
+    return parsed.signatureDataUrl ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function InspectionMetric({
+  icon: Icon,
+  label,
+  value,
+  tone = 'text-text',
+}: {
+  icon: typeof Activity
+  label: string
+  value: string | number
+  tone?: string
+}) {
+  return (
+    <div className="rounded-[8px] border border-border bg-bg-2 px-3 py-3">
+      <div className="flex items-center gap-2 text-text-3">
+        <Icon size={14} />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.07em]">{label}</span>
+      </div>
+      <p className={cn('mt-2 font-mono text-[22px] font-semibold leading-none', tone)}>{value}</p>
+    </div>
+  )
+}
+
 export default function InspectionExecution() {
   const { id: workOrderDbId = '' } = useParams()
   const navigate = useNavigate()
@@ -350,6 +506,7 @@ export default function InspectionExecution() {
   const { data: wo, isLoading: woLoading }      = useWorkOrder(workOrderDbId)
   const { data: record, isLoading: recLoading } = useInspectionRecord(workOrderDbId)
   const { data: availableWis = [] }             = useWorkInstructions()
+  const { data: signerOptions = [] }            = useAssignableUsers()
 
   // Hoist WI number before any early returns (hook order must be constant)
   const wi       = (wo as any)?.work_instructions
@@ -373,6 +530,9 @@ export default function InspectionExecution() {
   const [selectedWIId,  setSelectedWIId]  = useState('')
   const [showSignature, setShowSignature] = useState(false)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
+  const [selectedSignerId, setSelectedSignerId] = useState(user?.id ?? '')
+  const [itemSignatureTarget, setItemSignatureTarget] = useState<string | null>(null)
+  const [itemSignerIds, setItemSignerIds] = useState<Record<string, string>>({})
   const [completionSummary, setCompletionSummary] = useState<CompletionSummary | null>(null)
 
   const timerLabel = useTimer(!!record && !completionSummary)
@@ -421,6 +581,10 @@ export default function InspectionExecution() {
 
   useEffect(() => { saveDraft() }, [saveDraft])
 
+  useEffect(() => {
+    if (!selectedSignerId && user?.id) setSelectedSignerId(user.id)
+  }, [selectedSignerId, user?.id])
+
   // ── Loading / not-found ───────────────────────────────────────
   if (woLoading || recLoading) {
     return (
@@ -464,6 +628,15 @@ export default function InspectionExecution() {
   const passed   = Object.values(results).filter(r => r === 'pass').length
   const failed   = Object.values(results).filter(r => r === 'fail').length
   const pct      = checkableItems.length > 0 ? Math.round((answered / checkableItems.length) * 100) : 0
+  const remaining = Math.max(0, checkableItems.length - answered)
+  const requiredRemaining = requiredItems.filter(i => results[i.id] == null).length
+  const riskTone = failed > 0
+    ? 'border-danger-border bg-danger-bg/25 text-danger'
+    : pct === 100
+    ? 'border-success-border bg-success-bg/25 text-success'
+    : 'border-accent-bd bg-accent-bg text-accent'
+  const selectedSignerName = signerOptions.find(option => option.id === selectedSignerId)?.name ?? user?.name
+  const signedByName = signerOptions.find(option => option.id === record?.signed_by)?.name ?? user?.name ?? '-'
 
   // ── Handlers ─────────────────────────────────────────────────
   const handleStart = async () => {
@@ -581,6 +754,31 @@ export default function InspectionExecution() {
     }
   }
 
+  const handleSaveValueEntry = async (item: ChecklistItemRow, capturedValue = localValues[item.id] ?? '') => {
+    if (!capturedValue.trim()) {
+      toast('Enter a value before saving this checklist item', 'error')
+      return
+    }
+    await handleResult(item.id, valueResult(item, capturedValue), item, { capturedValue })
+  }
+
+  const handleItemSignatureApplied = async (dataUrl: string, signerId?: string) => {
+    if (!itemSignatureTarget) return
+    const item = checkableItems.find(i => i.id === itemSignatureTarget)
+    if (!item) return
+    const finalSignerId = signerId || itemSignerIds[item.id] || selectedSignerId || user?.id
+    const signer = signerOptions.find(option => option.id === finalSignerId)
+    const capturedValue = JSON.stringify({
+      signerId: finalSignerId,
+      signerName: signer?.name ?? user?.name ?? '-',
+      signedAt: new Date().toISOString(),
+      signatureDataUrl: dataUrl,
+    })
+    setLocalValues(prev => ({ ...prev, [item.id]: capturedValue }))
+    setItemSignatureTarget(null)
+    await handleResult(item.id, 'pass', item, { capturedValue })
+  }
+
   const handleCompleteClick = () => {
     if (!record) return
     const missing = requiredItems.filter(i => results[i.id] == null)
@@ -594,23 +792,32 @@ export default function InspectionExecution() {
     setShowSignature(true)
   }
 
-  const handleSignatureApplied = async (dataUrl: string) => {
+  const handleSignatureApplied = async (dataUrl: string, signerId?: string) => {
     setSignatureDataUrl(dataUrl)
     setShowSignature(false)
     if (!record) return
+    const finalSignerId = signerId || selectedSignerId || user?.id
+    const signer = signerOptions.find(option => option.id === finalSignerId)
+    const signerName = signer?.name ?? user?.name ?? '-'
     try {
-      const completed = await completeInspection.mutateAsync({ inspectionRecordId: record.id, workOrderDbId, signatureDataUrl: dataUrl })
+      const completed = await completeInspection.mutateAsync({ inspectionRecordId: record.id, workOrderDbId, signatureDataUrl: dataUrl, signedBy: finalSignerId })
       localStorage.removeItem(draftKey(workOrderDbId))
       toast('Inspection completed and signed', 'success')
       setCompletionSummary({
         overallResult: completed.overallResult,
         passed: completed.passed, failed: completed.failed, na: completed.na, total: checkableItems.length,
+        items: checkableItems.filter(i => results[i.id] != null).map(i => ({
+          item_no: i.item_no,
+          description: i.description,
+          result: results[i.id],
+          note: localNotes[i.id],
+        })),
         failedItems: checkableItems.filter(i => results[i.id] === 'fail').map(i => ({
           item_no: i.item_no, description: i.description, note: localNotes[i.id],
         })),
         completedAt:      new Date().toISOString(),
         signatureDataUrl: dataUrl,
-        inspectorName:    user?.name ?? '—',
+        inspectorName:    signerName,
         woNumber:         (woData.wo_number as string) ?? '',
         assetName:        (woData.asset_name as string) ?? '',
         wiNumber:         wi?.wi_number ?? '',
@@ -626,6 +833,41 @@ export default function InspectionExecution() {
   // ── Completion screen ─────────────────────────────────────────
   if (completionSummary) {
     return <CompletionSummaryScreen summary={completionSummary} onBack={() => navigate('/inspections')} />
+  }
+  if (isComplete && record?.completed_at && record.signature_data_url) {
+    const persistedSummary: CompletionSummary = {
+      overallResult: record.overall_result ?? 'na',
+      passed: record.passed_items,
+      failed: record.failed_items,
+      na: record.na_items,
+      total: record.total_items || checkableItems.length,
+      items: checkableItems.filter(i => results[i.id] != null).map(i => {
+        const finding = record.inspection_findings?.find(f => f.checklist_item_id === i.id)
+        return {
+          item_no: i.item_no,
+          description: i.description,
+          result: results[i.id],
+          note: localNotes[i.id] ?? finding?.notes ?? undefined,
+        }
+      }),
+      failedItems: checkableItems.filter(i => results[i.id] === 'fail').map(i => {
+        const finding = record.inspection_findings?.find(f => f.checklist_item_id === i.id)
+        return {
+          item_no: i.item_no,
+          description: i.description,
+          note: localNotes[i.id] ?? finding?.notes ?? undefined,
+        }
+      }),
+      completedAt: record.completed_at,
+      signatureDataUrl: record.signature_data_url,
+      inspectorName: signedByName,
+      woNumber: (woData.wo_number as string) ?? '',
+      assetName: (woData.asset_name as string) ?? '',
+      wiNumber: wi?.wi_number ?? '',
+      wiTitle: wi?.title ?? '',
+      location: (woData.location as string) ?? '',
+    }
+    return <CompletionSummaryScreen summary={persistedSummary} onBack={() => navigate('/inspections')} />
   }
 
   // ── Progress bar ──────────────────────────────────────────────
@@ -648,33 +890,75 @@ export default function InspectionExecution() {
       { label: (woData.wo_number as string) ?? workOrderDbId },
     ]}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-mono text-[12px] text-accent">{woData.wo_number as string}</span>
+      <div className="relative mb-5 overflow-hidden rounded-[12px] border border-border bg-bg-2">
+        <div className="absolute inset-y-0 left-0 w-1 bg-accent" />
+        <div className="grid gap-5 p-5 lg:grid-cols-[1fr_360px]">
+        <div className="min-w-0">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-[8px] border border-accent-bd bg-accent-bg px-2.5 py-1 font-mono text-[12px] text-accent">
+              <ClipboardCheck size={14} /> {woData.wo_number as string}
+            </span>
             <Badge variant={(woData.status as string) === 'complete' ? 'complete' : 'open'}>
-              {woData.status as string}
+              {String(woData.status ?? '').replace('_', ' ')}
             </Badge>
-            {isStarted && !isComplete && (
-              <span className="font-mono text-[11px] text-text-3">{timerLabel}</span>
-            )}
+            <span className={cn('inline-flex items-center gap-1.5 rounded-[8px] border px-2.5 py-1 text-[11px] font-medium', riskTone)}>
+              <ShieldCheck size={13} />
+              {failed > 0 ? `${failed} exception${failed === 1 ? '' : 's'}` : pct === 100 ? 'Ready for sign-off' : 'Inspection in progress'}
+            </span>
           </div>
-          <h1 className="text-[20px] font-semibold tracking-[-0.3px]">{woData.asset_name as string}</h1>
-          <p className="text-[13px] text-text-2 mt-0.5">
+          <h1 className="truncate text-[26px] font-semibold leading-tight tracking-[-0.3px] text-text">{woData.asset_name as string}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-text-2">
+            <span className="inline-flex items-center gap-1.5">
+              <MapPin size={14} className="text-text-3" /> {(woData.location as string) || 'No location'}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <FileCheck2 size={14} className="text-text-3" /> {wi?.wi_number ?? 'No WI'}{wi?.revision ? ` / ${wi.revision}` : ''}
+            </span>
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <Wrench size={14} className="text-text-3" />
+              <span className="truncate">{wi?.title ?? 'Checklist not assigned'}</span>
+            </span>
+          </div>
+          <p className="hidden">
             {woData.location as string} · {wi?.title ?? 'Checklist not assigned'}{wi?.revision ? ` · ${wi.revision}` : ''}
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="grid grid-cols-[88px_1fr] items-center gap-4 rounded-[10px] border border-border bg-bg px-4 py-3">
           <ProgressRing pct={pct} />
-          <div className="text-right text-[12px] leading-relaxed">
-            <p className="text-text-2">{answered}/{checkableItems.length} answered</p>
-            <p className="text-success">{passed} pass</p>
-            <p className="text-danger">{failed} fail</p>
+          <div className="grid grid-cols-2 gap-2">
+            <InspectionMetric icon={Gauge} label="Answered" value={`${answered}/${checkableItems.length}`} />
+            <InspectionMetric icon={CheckCircle2} label="Pass" value={passed} tone="text-success" />
+            <InspectionMetric icon={AlertTriangle} label="Fail" value={failed} tone={failed > 0 ? 'text-danger' : 'text-text-3'} />
+            <InspectionMetric icon={Timer} label="Elapsed" value={isStarted && !isComplete ? timerLabel : '--'} tone="text-accent" />
           </div>
+        </div>
         </div>
       </div>
 
       {isStarted && <ProgressBar />}
+
+      {isStarted && !isComplete && (
+        <div className="sticky top-4 z-10 mb-5 rounded-[10px] border border-border bg-bg/95 p-3 shadow-sm backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-[8px] border border-border-2 bg-bg-2 px-3 py-2 text-[12px] text-text-2">
+                <Clock3 size={14} className="text-accent" /> {timerLabel}
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-[8px] border border-border-2 bg-bg-2 px-3 py-2 text-[12px] text-text-2">
+                <Gauge size={14} className="text-accent" /> {remaining} item{remaining === 1 ? '' : 's'} remaining
+              </span>
+              {failed > 0 && (
+                <span className="inline-flex items-center gap-2 rounded-[8px] border border-danger-border bg-danger-bg/25 px-3 py-2 text-[12px] text-danger">
+                  <AlertTriangle size={14} /> Review {failed} exception{failed === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
+            <Button variant="primary" loading={completeInspection.isPending} onClick={handleCompleteClick}>
+              {requiredRemaining > 0 ? `${requiredRemaining} required remaining` : 'Complete & Sign'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* MOMS historical context */}
       {momsData && <MomsBanner data={momsData} />}
@@ -682,8 +966,13 @@ export default function InspectionExecution() {
       {/* Not started */}
       {!isStarted && (
         <Card>
-          <CardBody className="flex flex-col items-center py-10 gap-4 text-center">
-            <p className="text-[14px] text-text-2">
+          <CardBody className="grid gap-6 p-6 md:grid-cols-[1fr_320px] md:items-center">
+            <div>
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-[10px] border border-accent-bd bg-accent-bg text-accent">
+                <ClipboardCheck size={24} />
+              </div>
+              <h2 className="text-[20px] font-semibold tracking-[-0.2px] text-text">Ready to start inspection</h2>
+              <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-text-2">
               This inspection has not been started yet.<br />
               {hasLinkedChecklist ? (
                 <>
@@ -694,8 +983,14 @@ export default function InspectionExecution() {
                 'No inspection checklist is attached to this work order.'
               )}
             </p>
+              <div className="mt-5 grid max-w-xl grid-cols-3 gap-3">
+                <InspectionMetric icon={FileCheck2} label="Checklist" value={checkableItems.length} />
+                <InspectionMetric icon={Sparkles} label="AI review" value={hasLinkedChecklist ? 'On' : '--'} tone="text-accent" />
+                <InspectionMetric icon={Camera} label="Evidence" value="Photo" tone="text-text-2" />
+              </div>
+            </div>
             {!hasLinkedChecklist ? (
-              <div className="w-full max-w-md flex flex-col gap-3">
+              <div className="w-full flex flex-col gap-3 rounded-[10px] border border-warning-border bg-warning-bg/15 p-4">
                 <p className="text-[13px] text-warning">Attach a work instruction with checklist items before starting.</p>
                 <select
                   value={selectedWIId}
@@ -717,9 +1012,14 @@ export default function InspectionExecution() {
                 </Button>
               </div>
             ) : (
-              <Button variant="primary" size="lg" loading={startInspection.isPending} onClick={handleStart}>
-                Start Inspection
-              </Button>
+              <div className="rounded-[10px] border border-border bg-bg-2 p-4">
+                <p className="mb-3 text-[12px] leading-relaxed text-text-2">
+                  Start creates the inspection record, enables offline draft saving, and opens AI result review for every checklist response.
+                </p>
+                <Button variant="primary" size="lg" loading={startInspection.isPending} onClick={handleStart} className="w-full">
+                  <ClipboardCheck size={16} /> Start Inspection
+                </Button>
+              </div>
             )}
           </CardBody>
         </Card>
@@ -743,7 +1043,7 @@ export default function InspectionExecution() {
       {/* Checklist */}
       {isStarted && items.length > 0 && (
         <Card>
-          <div className="px-[18px] py-3 border-b border-border flex items-center justify-between">
+          <div className="px-[18px] py-4 border-b border-border flex flex-wrap items-center justify-between gap-3 bg-bg-2">
             <span className="text-[13px] font-semibold">Checklist — {wi?.title}</span>
             <span className="text-[11px] text-text-3 font-mono">{wi?.revision}</span>
           </div>
@@ -759,6 +1059,7 @@ export default function InspectionExecution() {
             const validationLoading = validations[item.id]?.loading
             const validationError = validations[item.id]?.error
             const fieldVal = localValues[item.id] ?? ''
+            const signatureValue = ft === 'signature' ? parseSignatureValue(fieldVal || finding?.notes || '') : null
 
             // Section heading
             if (ft === 'heading') {
@@ -774,11 +1075,15 @@ export default function InspectionExecution() {
               <div key={item.id} id={`item-${item.id}`}
                 className={cn(
                   'border-b border-border last:border-0 transition-colors',
-                  result === 'pass' ? 'bg-success-bg/20' :
-                  result === 'fail' ? 'bg-danger-bg/15'  : ''
+                  getResultTone(result)
                 )}>
                 <div className="flex items-start gap-4 px-[18px] py-4">
-                  <span className="font-mono text-[11px] text-text-3 w-8 pt-0.5 flex-shrink-0">{item.item_no}</span>
+                  <span className={cn(
+                    'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[8px] border font-mono text-[11px]',
+                    result === 'pass' ? 'border-success-border bg-success-bg text-success' :
+                    result === 'fail' ? 'border-danger-border bg-danger-bg text-danger' :
+                    'border-border-2 bg-bg text-text-3'
+                  )}>{item.item_no}</span>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-1.5 mb-1">
@@ -791,11 +1096,53 @@ export default function InspectionExecution() {
                       <p className="text-[12px] text-text-2 italic mb-2">{item.acceptance_criteria}</p>
                     )}
 
-                    {/* Field-type specific input (for non pass_fail types) */}
-                    {!isComplete && !['pass_fail'].includes(ft) && (
+                    {/* Field-type specific input */}
+                    {!isComplete && ft === 'signature' && (
+                      <div className="mb-3 rounded-[8px] border border-border-2 bg-bg p-3">
+                        <label className="mb-1 block text-[11px] font-medium uppercase tracking-[0.07em] text-text-2">
+                          Signer
+                        </label>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <select
+                            value={itemSignerIds[item.id] ?? selectedSignerId}
+                            onChange={e => setItemSignerIds(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            className="min-w-0 flex-1 rounded-[8px] border border-border-2 bg-bg px-3 py-2 text-[13px] text-text outline-none focus:border-accent"
+                          >
+                            <option value="">Select signer...</option>
+                            {signerOptions.map(option => (
+                              <option key={option.id} value={option.id}>
+                                {option.name}{option.staffId ? ` (${option.staffId})` : ''}{option.role ? ` - ${option.role}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            variant="primary"
+                            disabled={!(itemSignerIds[item.id] ?? selectedSignerId)}
+                            onClick={() => setItemSignatureTarget(item.id)}
+                          >
+                            Sign Item
+                          </Button>
+                        </div>
+                        {signatureValue && (
+                          <div className="mt-3 rounded-[8px] border border-success-border bg-success-bg/20 p-3">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <img src={signatureValue.signatureDataUrl} alt="Signature" className="h-14 rounded border border-border bg-white px-2" />
+                              <div>
+                                <p className="text-[12px] font-medium text-success">Signed by {signatureValue.signerName ?? 'selected signer'}</p>
+                                <p className="mt-0.5 font-mono text-[11px] text-text-3">
+                                  {signatureValue.signedAt ? new Date(signatureValue.signedAt).toLocaleString('en-SG') : ''}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!isComplete && ft !== 'signature' && !['pass_fail'].includes(ft) && (
                       <div className="mb-3">
                         <FieldInput item={item} value={fieldVal}
                           onChange={v => setLocalValues(prev => ({ ...prev, [item.id]: v }))}
+                          onCommit={v => { if (v.trim()) void handleSaveValueEntry(item, v) }}
                           onResultChange={(nextResult, capturedValue) => handleResult(item.id, nextResult, item, { capturedValue })} />
                       </div>
                     )}
@@ -937,19 +1284,19 @@ export default function InspectionExecution() {
                   </div>
 
                   {/* Pass / Fail / NA buttons */}
-                  {!isComplete && (
-                    <div className="flex flex-col gap-1 flex-shrink-0 pt-0.5">
+                  {!isComplete && usesResultButtons(ft) && (
+                    <div className="flex flex-col gap-1.5 flex-shrink-0 pt-0.5">
                       {((ft === 'yes_no' ? ['na'] : ['pass', 'fail', 'na']) as FindingResult[]).map(r => (
                         <button key={r}
                           disabled={isSaving}
                           onClick={() => handleResult(item.id, r, item)}
                           className={cn(
-                            'w-10 h-10 rounded-[7px] border text-[11px] font-semibold transition-all cursor-pointer disabled:opacity-40 active:scale-[0.96]',
+                            'w-11 h-11 rounded-[9px] border text-[12px] font-semibold shadow-sm transition-all cursor-pointer disabled:opacity-40 active:scale-[0.96]',
                             result === r
-                              ? r === 'pass' ? 'bg-success-bg border-success-border text-success'
-                              : r === 'fail' ? 'bg-danger-bg  border-danger-border  text-danger'
-                              :                'bg-bg-3       border-border-2        text-text-2'
-                              : 'bg-transparent border-border-2 text-text-3 hover:border-border-3 hover:text-text'
+                              ? r === 'pass' ? 'bg-success text-white border-success'
+                              : r === 'fail' ? 'bg-danger text-white border-danger'
+                              :                'bg-bg-3 border-border-2 text-text'
+                              : 'bg-bg border-border-2 text-text-3 hover:border-accent hover:text-text'
                           )}>
                           {r === 'pass' ? '✓' : r === 'fail' ? '✕' : 'NA'}
                         </button>
@@ -993,15 +1340,30 @@ export default function InspectionExecution() {
       {signatureDataUrl && (
         <div className="mt-3 flex items-center gap-3 p-3 bg-success-bg border border-success-border rounded-[8px]">
           <img src={signatureDataUrl} alt="Signature" className="h-10 border border-border rounded" />
-          <p className="text-[12px] text-success">Signed by {user?.name}</p>
+          <p className="text-[12px] text-success">Signed by {selectedSignerName}</p>
         </div>
       )}
 
       {showSignature && (
         <SignaturePad
           signerName={user?.name}
+          signerOptions={signerOptions}
+          selectedSignerId={selectedSignerId}
+          onSignerChange={setSelectedSignerId}
+          requireSigner
           onSave={handleSignatureApplied}
           onClose={() => setShowSignature(false)}
+        />
+      )}
+
+      {itemSignatureTarget && (
+        <SignaturePad
+          signerOptions={signerOptions}
+          selectedSignerId={itemSignerIds[itemSignatureTarget] ?? selectedSignerId}
+          onSignerChange={signerId => setItemSignerIds(prev => ({ ...prev, [itemSignatureTarget]: signerId }))}
+          requireSigner
+          onSave={handleItemSignatureApplied}
+          onClose={() => setItemSignatureTarget(null)}
         />
       )}
     </AppLayout>
@@ -1015,6 +1377,251 @@ function CompletionSummaryScreen({ summary: s, onBack }: { summary: CompletionSu
   const [maxError,   setMaxError]   = useState<string | null>(null)
   const [copied,     setCopied]     = useState(false)
   const isPassed = s.overallResult === 'pass'
+
+  const printReport = () => {
+    const win = window.open('about:blank', '_blank', 'width=900,height=1100')
+    if (!win) return
+    const completedAt = new Date(s.completedAt).toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' })
+    const generatedAt = new Date().toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' })
+    const passRate = s.total > 0 ? Math.round((s.passed / s.total) * 100) : 0
+    const allRows = s.items.length
+      ? s.items.map(item => `
+          <tr>
+            <td class="mono item-no">${escapeHtml(item.item_no)}</td>
+            <td>
+              <div class="item-title">${escapeHtml(item.description)}</div>
+              ${item.note ? `<div class="item-note">${escapeHtml(item.note)}</div>` : ''}
+            </td>
+            <td class="center"><span class="result ${item.result}">${escapeHtml(item.result.toUpperCase())}</span></td>
+          </tr>
+        `).join('')
+      : '<tr><td colspan="3" class="muted center">No checklist results recorded.</td></tr>'
+    const failedRows = s.failedItems.length
+      ? s.failedItems.map(item => `
+          <tr>
+            <td class="mono item-no">${escapeHtml(item.item_no)}</td>
+            <td>
+              <div class="item-title">${escapeHtml(item.description)}</div>
+              ${item.note ? `<div class="item-note">${escapeHtml(item.note)}</div>` : '<div class="item-note muted">No additional note recorded.</div>'}
+            </td>
+          </tr>
+        `).join('')
+      : '<tr><td colspan="2" class="muted center">No failed items recorded.</td></tr>'
+    win.document.open()
+    win.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapeHtml(s.woNumber)} Inspection Report</title>
+          <style>
+            * { box-sizing: border-box; }
+            :root {
+              --ink: #111827;
+              --muted: #64748b;
+              --line: #dbe3ef;
+              --paper: #ffffff;
+              --soft: #f6f8fb;
+              --brand: #1d4ed8;
+              --brand-2: #0f766e;
+              --danger: #b91c1c;
+              --success: #047857;
+            }
+            body {
+              margin: 0;
+              padding: 28px;
+              font-family: Inter, "Segoe UI", Arial, sans-serif;
+              color: var(--ink);
+              background: #eef2f7;
+            }
+            .report {
+              max-width: 920px;
+              margin: 0 auto;
+              background: var(--paper);
+              border: 1px solid var(--line);
+              box-shadow: 0 24px 70px rgba(15, 23, 42, .14);
+            }
+            .cover {
+              position: relative;
+              overflow: hidden;
+              padding: 34px 38px 30px;
+              color: #fff;
+              background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 58%, #0f766e 100%);
+            }
+            .cover:after {
+              content: "";
+              position: absolute;
+              right: -110px;
+              top: -130px;
+              width: 360px;
+              height: 360px;
+              border-radius: 50%;
+              background: rgba(255,255,255,.12);
+            }
+            .brand-row { position: relative; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; }
+            .brand { display: flex; align-items: center; gap: 12px; }
+            .mark { width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.26); display: grid; place-items: center; font-weight: 800; letter-spacing: -.04em; }
+            .brand-name { font-size: 12px; opacity: .82; text-transform: uppercase; letter-spacing: .16em; }
+            .doc-type { margin-top: 2px; font-size: 18px; font-weight: 750; }
+            .doc-meta { text-align: right; font-size: 11px; opacity: .78; line-height: 1.7; }
+            .hero { position: relative; z-index: 1; margin-top: 34px; display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: end; }
+            h1 { margin: 0; font-size: 31px; line-height: 1.06; letter-spacing: -.03em; }
+            .subtitle { margin-top: 10px; color: rgba(255,255,255,.78); font-size: 13px; line-height: 1.5; }
+            .status-card { min-width: 190px; border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.12); border-radius: 14px; padding: 16px; backdrop-filter: blur(8px); }
+            .status-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: .14em; opacity: .72; }
+            .status-card .value { margin-top: 7px; font-size: 22px; font-weight: 800; }
+            .status-card .rate { margin-top: 9px; height: 7px; border-radius: 999px; background: rgba(255,255,255,.22); overflow: hidden; }
+            .status-card .rate span { display:block; height: 100%; background: #fff; width: ${passRate}%; }
+            .content { padding: 28px 38px 36px; }
+            .muted { color: var(--muted); }
+            .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+            .center { text-align: center; }
+            .status-pill { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 7px 11px; font-weight: 800; font-size: 11px; letter-spacing: .06em; }
+            .status-pill.pass { background: #dcfce7; color: #166534; }
+            .status-pill.fail { background: #fee2e2; color: #991b1b; }
+            .section { margin-top: 24px; }
+            .section-title { display:flex; align-items:center; justify-content:space-between; gap: 16px; margin-bottom: 11px; }
+            .section-title h2 { margin:0; font-size: 15px; letter-spacing: -.01em; }
+            .section-title span { color: var(--muted); font-size: 11px; }
+            .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 22px; }
+            .info-card { border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; background: linear-gradient(180deg, #fff, #f8fafc); min-height: 76px; }
+            .info-card b { display:block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 7px; }
+            .info-card div { font-size: 12px; line-height: 1.35; font-weight: 650; }
+            .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 22px; }
+            .kpi { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; padding: 16px 15px; background: var(--soft); }
+            .kpi:before { content:""; position:absolute; inset:0 auto 0 0; width: 4px; background: var(--brand); }
+            .kpi.pass:before { background: var(--success); }
+            .kpi.fail:before { background: var(--danger); }
+            .kpi strong { display:block; font-size: 30px; line-height: 1; letter-spacing: -.04em; }
+            .kpi span { display:block; margin-top: 7px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .12em; }
+            .narrative { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; background: #fbfdff; font-size: 12.5px; line-height: 1.55; }
+            table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 11.5px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+            th, td { padding: 10px 11px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--line); }
+            tr:last-child td { border-bottom: 0; }
+            th { background: #f1f5f9; color: #475569; font-size: 9px; text-transform: uppercase; letter-spacing: .12em; }
+            tbody tr:nth-child(even) td { background: #fbfdff; }
+            .item-no { width: 72px; color: #475569; font-weight: 700; }
+            .item-title { font-weight: 650; line-height: 1.35; }
+            .item-note { margin-top: 5px; color: #64748b; font-size: 10.5px; line-height: 1.4; }
+            .result { display: inline-block; min-width: 52px; text-align: center; border-radius: 999px; padding: 4px 9px; font-weight: 800; font-size: 9.5px; letter-spacing: .06em; }
+            .result.pass { background: #dcfce7; color: #166534; }
+            .result.fail { background: #fee2e2; color: #991b1b; }
+            .result.na { background: #f1f5f9; color: #475569; }
+            .exception-panel { border: 1px solid ${s.failed > 0 ? '#fecaca' : '#bbf7d0'}; border-radius: 14px; overflow:hidden; }
+            .exception-panel .panel-head { padding: 13px 15px; background: ${s.failed > 0 ? '#fff1f2' : '#f0fdf4'}; display:flex; justify-content:space-between; align-items:center; }
+            .exception-panel .panel-head strong { color: ${s.failed > 0 ? '#b91c1c' : '#047857'}; }
+            .signature { margin-top: 28px; display: grid; grid-template-columns: 1fr 310px; gap: 24px; align-items: end; }
+            .assurance { border: 1px solid var(--line); border-radius: 12px; padding: 14px; color: var(--muted); font-size: 11px; line-height: 1.5; background: #f8fafc; }
+            .signature-box { border: 1px solid var(--line); border-radius: 12px; padding: 14px; text-align: right; background: #fff; }
+            .signature img { max-height: 74px; max-width: 260px; display: block; margin-left: auto; margin-bottom: 10px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 4px 10px; }
+            .footer { margin-top: 26px; border-top: 1px solid var(--line); padding-top: 13px; display:flex; justify-content:space-between; gap: 18px; color: var(--muted); font-size: 10.5px; }
+            .actions { margin: 16px auto 0; max-width: 920px; color: #6b7280; font-size: 11px; text-align: center; }
+            @media print {
+              @page { size: A4; margin: 12mm; }
+              body { padding: 0; background: #fff; }
+              .report { max-width: none; border: 0; box-shadow: none; }
+              .cover { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+              .section, .signature { break-inside: avoid; }
+              .actions { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <main class="report">
+            <section class="cover">
+              <div class="brand-row">
+                <div class="brand">
+                  <div class="mark">IA</div>
+                  <div>
+                    <div class="brand-name">InspectionAI</div>
+                    <div class="doc-type">Inspection Completion Report</div>
+                  </div>
+                </div>
+                <div class="doc-meta">
+                  <div>Report generated ${escapeHtml(generatedAt)}</div>
+                  <div class="mono">${escapeHtml(s.woNumber)}</div>
+                </div>
+              </div>
+              <div class="hero">
+                <div>
+                  <h1>${escapeHtml(s.assetName)}</h1>
+                  <div class="subtitle">${escapeHtml(s.location || 'No location recorded')} &middot; ${escapeHtml(s.wiTitle || 'No work instruction title')}</div>
+                </div>
+                <div class="status-card">
+                  <div class="label">Overall Result</div>
+                  <div class="value">${s.overallResult === 'pass' ? 'PASSED' : 'FAILED'}</div>
+                  <div class="label" style="margin-top:8px;">Pass Rate ${passRate}%</div>
+                  <div class="rate"><span></span></div>
+                </div>
+              </div>
+            </section>
+            <div class="content">
+              <section class="meta">
+                <div class="info-card"><b>Work Order</b><div class="mono">${escapeHtml(s.woNumber)}</div></div>
+                <div class="info-card"><b>Completed</b><div>${escapeHtml(completedAt)}</div></div>
+                <div class="info-card"><b>Work Instruction</b><div class="mono">${escapeHtml(s.wiNumber || '-')}</div></div>
+                <div class="info-card"><b>Location</b><div>${escapeHtml(s.location || '-')}</div></div>
+              </section>
+              <section class="kpis">
+                <div class="kpi"><strong>${s.total}</strong><span>Total Items</span></div>
+                <div class="kpi pass"><strong>${s.passed}</strong><span>Passed</span></div>
+                <div class="kpi fail"><strong>${s.failed}</strong><span>Failed</span></div>
+                <div class="kpi"><strong>${s.na}</strong><span>N/A</span></div>
+              </section>
+              <section class="section">
+                <div class="section-title"><h2>Executive Summary</h2><span class="status-pill ${s.overallResult === 'pass' ? 'pass' : 'fail'}">${s.overallResult === 'pass' ? 'PASSED' : 'FAILED'}</span></div>
+                <div class="narrative">
+                  Inspection ${escapeHtml(s.woNumber)} was completed for <strong>${escapeHtml(s.assetName)}</strong> using
+                  <strong>${escapeHtml(s.wiNumber || 'the assigned work instruction')}</strong>. The inspection recorded
+                  <strong>${s.passed}</strong> passed item${s.passed === 1 ? '' : 's'}, <strong>${s.failed}</strong> failed item${s.failed === 1 ? '' : 's'},
+                  and <strong>${s.na}</strong> item${s.na === 1 ? '' : 's'} marked N/A.
+                </div>
+              </section>
+              <section class="section exception-panel">
+                <div class="panel-head">
+                  <strong>${s.failed > 0 ? `Exceptions Requiring Attention (${s.failedItems.length})` : 'No Exceptions Recorded'}</strong>
+                  <span class="muted">${s.failed > 0 ? 'Review and corrective action required' : 'No failed checklist items'}</span>
+                </div>
+                <table style="border:0;border-radius:0;margin-top:0;">
+                  <thead><tr><th style="width:80px;">Item</th><th>Description and Notes</th></tr></thead>
+                  <tbody>${failedRows}</tbody>
+                </table>
+              </section>
+              <section class="section">
+                <div class="section-title"><h2>Checklist Results Register</h2><span>${s.items.length} recorded result${s.items.length === 1 ? '' : 's'}</span></div>
+                <table>
+                  <thead><tr><th style="width:80px;">Item</th><th>Description and Evidence Notes</th><th style="width:90px;text-align:center;">Result</th></tr></thead>
+                  <tbody>${allRows}</tbody>
+                </table>
+              </section>
+              <section class="signature">
+                <div class="assurance">
+                  This report was generated from the InspectionAI electronic inspection record. The signature shown confirms inspection completion and sign-off by the listed person at the recorded completion time.
+                </div>
+                <div class="signature-box">
+                  <img src="${s.signatureDataUrl}" alt="Signature" />
+                  <strong>${escapeHtml(s.inspectorName)}</strong>
+                  <div class="muted">Electronic signature</div>
+                </div>
+              </section>
+              <section class="footer">
+                <div>InspectionAI &middot; Controlled inspection record</div>
+                <div class="mono">${escapeHtml(s.woNumber)} &middot; ${escapeHtml(generatedAt)}</div>
+              </section>
+            </div>
+          </main>
+          <p class="actions">Use your browser print dialog and choose "Save as PDF".</p>
+          <script>
+            window.onload = () => {
+              window.focus();
+              setTimeout(() => window.print(), 250);
+            };
+          </script>
+        </body>
+      </html>
+    `)
+    win.document.close()
+  }
 
   const generateMaximo = async () => {
     setMaxLoading(true); setMaxError(null); setMaxPayload(null)
@@ -1109,6 +1716,29 @@ function CompletionSummaryScreen({ summary: s, onBack }: { summary: CompletionSu
         </Card>
       )}
 
+      <Card className="mt-5">
+        <div className="px-[18px] py-3 border-b border-border flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-text">Checklist Results ({s.items.length})</span>
+          <span className="text-[11px] text-text-3">All recorded items</span>
+        </div>
+        {s.items.length === 0 ? (
+          <div className="px-4 py-6 text-center text-[13px] text-text-3">No checklist results recorded.</div>
+        ) : (
+          s.items.map((item, i) => (
+            <div key={`${item.item_no}-${i}`} className="flex items-start gap-3 px-[18px] py-3 border-b border-border last:border-0">
+              <span className="font-mono text-[11px] text-text-3 w-10 pt-0.5 flex-shrink-0">{item.item_no}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] text-text">{item.description}</p>
+                {item.note && <p className="text-[12px] text-text-2 mt-0.5 italic">"{item.note}"</p>}
+              </div>
+              <Badge variant={item.result === 'pass' ? 'complete' : item.result === 'fail' ? 'rejected' : 'draft'}>
+                {item.result.toUpperCase()}
+              </Badge>
+            </div>
+          ))
+        )}
+      </Card>
+
       {/* Maximo payload */}
       <div className="mt-5 bg-bg-2 border border-border rounded-[12px] overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
@@ -1146,7 +1776,7 @@ function CompletionSummaryScreen({ summary: s, onBack }: { summary: CompletionSu
 
       <div className="flex justify-between mt-5">
         <Button variant="secondary" onClick={onBack}>Back to Inspections</Button>
-        <Button variant="primary" onClick={() => window.print()}>Print / Save PDF</Button>
+        <Button variant="primary" onClick={printReport}>Print / Save PDF</Button>
       </div>
     </AppLayout>
   )

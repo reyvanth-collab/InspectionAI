@@ -41,15 +41,31 @@ export interface WorkOrderPage {
   hasMore: boolean
 }
 
-export function useWorkOrders(statusFilter?: string, page = 1) {
+export interface WorkOrderFilters {
+  woNumber?: string
+  asset?: string
+  location?: string
+  wi?: string
+  inspector?: string
+  dueDate?: string
+}
+
+export function useWorkOrders(statusFilter?: string, page = 1, search = '', filters: WorkOrderFilters = {}) {
   const { user } = useAuth()
   return useQuery({
-    queryKey:        ['work-orders', statusFilter],
+    queryKey:        ['work-orders', statusFilter, page, search, filters],
     enabled:         !!user,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const params = new URLSearchParams()
       if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter.replace('-', '_'))
+      if (search.trim()) params.set('search', search.trim())
+      if (filters.woNumber?.trim()) params.set('woNumber', filters.woNumber.trim())
+      if (filters.asset?.trim()) params.set('asset', filters.asset.trim())
+      if (filters.location?.trim()) params.set('location', filters.location.trim())
+      if (filters.wi?.trim()) params.set('wi', filters.wi.trim())
+      if (filters.inspector?.trim()) params.set('inspector', filters.inspector.trim())
+      if (filters.dueDate?.trim()) params.set('dueDate', filters.dueDate.trim())
       params.set('page', String(page))
       params.set('pageSize', '50')
       const res = await api.get<{ data: DBWorkOrderRow[]; meta?: { page: number; pageSize: number; hasMore: boolean } }>(`/inspections?${params}`)
@@ -71,7 +87,7 @@ export function useWorkOrderSummary() {
     queryFn: async () => {
       const res = await api.get<{ data: Record<string, number | string> }>('/inspections/summary')
       return Object.fromEntries(Object.entries(res.data.data).map(([key, value]) => [key, Number(value ?? 0)])) as {
-        total: number; open: number; in_progress: number; complete: number; pending: number
+        total: number; open: number; in_progress: number; complete: number; cancelled: number
       }
     },
   })

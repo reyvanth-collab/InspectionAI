@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { BarChart3 } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { SkeletonTable } from '@/components/ui/Skeleton'
+import { PageHero } from '@/components/ui/PageHero'
 import {
   useInspectionSummary,
   useWICompliance,
@@ -329,21 +331,27 @@ export default function Reports() {
 
   return (
     <AppLayout breadcrumb={[{ label: 'Reports' }]}>
-      <div className="mb-6">
-        <h1 className="text-[22px] font-semibold tracking-[-0.3px]">Reports</h1>
-        <p className="text-[13px] text-text-2 mt-1">Generate and export inspection data</p>
-      </div>
+      <PageHero
+        eyebrow="Executive Reporting"
+        title="Turn inspections, WI compliance, defects, and audit activity into board-ready intelligence."
+        description="A unified reporting suite for operational performance, controlled document health, defect patterns, and traceable system activity."
+        icon={BarChart3}
+        stats={[
+          { label: 'Suites', value: TABS.length, tone: 'info' },
+          { label: 'Active view', value: TABS.find(tab => tab.id === activeTab)?.label.split(' ')[0] ?? 'Report', tone: 'accent' },
+        ]}
+      />
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-border mb-6">
+      <div className="surface-panel mb-6 flex flex-wrap items-center gap-1 rounded-[14px] p-1.5">
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer -mb-px ${
+            className={`rounded-[10px] px-4 py-2.5 text-[13px] font-medium transition-all cursor-pointer ${
               activeTab === tab.id
-                ? 'border-accent text-accent'
-                : 'border-transparent text-text-2 hover:text-text'
+                ? 'bg-gradient-to-r from-accent to-accent-2 text-white shadow-[0_10px_24px_rgba(45,125,255,0.22)]'
+                : 'text-text-2 hover:bg-bg-3 hover:text-text'
             }`}
           >
             {tab.label}

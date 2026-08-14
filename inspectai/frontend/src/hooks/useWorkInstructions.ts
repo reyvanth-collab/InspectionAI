@@ -3,6 +3,17 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import type { WorkInstruction } from '@/types'
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const EMPTY_DATE_TEXT = /^(n\/a|na|nil|none|null|unknown|not stated|not stated in source|not mentioned|not available|not applicable)$/i
+
+function normalizeDateInput(value?: string) {
+  const text = String(value ?? '').trim()
+  if (!text || EMPTY_DATE_TEXT.test(text)) return undefined
+  if (ISO_DATE_RE.test(text)) return text
+  const parsed = new Date(text)
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString().slice(0, 10)
+}
+
 interface DBWorkInstruction {
   id:             string
   wi_number:      string
@@ -110,11 +121,30 @@ export function useSubmitForApproval() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ wiDbId, approverIds }: { wiDbId: string; approverIds: string[] }) => {
-      await api.post(`/work-instructions/${wiDbId}/submit-approval`, { approverIds })
+      const res = await api.post<{ data: Record<string, unknown> }>(`/work-instructions/${wiDbId}/submit-approval`, { approverIds })
+      return res.data.data
     },
-    onSuccess: () => {
+    onSuccess: (_data, { wiDbId }) => {
       qc.invalidateQueries({ queryKey: ['work-instructions'] })
       qc.invalidateQueries({ queryKey: ['approvals'] })
+      qc.invalidateQueries({ queryKey: ['work-instruction', wiDbId] })
+      qc.invalidateQueries({ queryKey: ['wi-builder', wiDbId] })
+    },
+  })
+}
+
+export function useCreateWIRevision() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ wiDbId, changeSummary }: { wiDbId: string; changeSummary?: string }) => {
+      const res = await api.post<{ data: Record<string, unknown> }>(`/work-instructions/${wiDbId}/revisions`, {
+        changeSummary,
+      })
+      return res.data.data
+    },
+    onSuccess: (_data, { wiDbId }) => {
+      qc.invalidateQueries({ queryKey: ['work-instructions'] })
+      qc.invalidateQueries({ queryKey: ['work-instruction', wiDbId] })
     },
   })
 }
@@ -150,6 +180,7 @@ export interface ChecklistItemInput {
   sourceText?:         string
   aiConfidence?:       number | null
   aiWarnings?:         string[]
+  layoutJson?:         string
   sortOrder:           number
 }
 
@@ -173,7 +204,7 @@ export function useSaveWIWithItems() {
       const body = {
         wiNumber: input.wiNumber, title: input.title, description: input.description,
         category: input.category, revision: input.revision,
-        effectiveDate: input.effectiveDate || undefined, expiryDate: input.expiryDate || undefined,
+        effectiveDate: normalizeDateInput(input.effectiveDate), expiryDate: normalizeDateInput(input.expiryDate),
         status: input.status ?? 'draft', checklistItems: input.checklistItems,
       }
       if (input.dbId) {

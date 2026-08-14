@@ -8,6 +8,8 @@ const router = Router()
 
 ;(async () => {
   try {
+    await query(`ALTER TABLE public.work_orders ADD COLUMN IF NOT EXISTS asset_record_id UUID REFERENCES public.assets(id) ON DELETE SET NULL`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_wo_asset_record ON public.work_orders(tenant_id, asset_record_id)`)
     await query(`ALTER TABLE public.inspection_records ADD COLUMN IF NOT EXISTS signature_data_url TEXT`)
     await query(`ALTER TABLE public.inspection_findings ADD COLUMN IF NOT EXISTS photo_urls TEXT[]`)
     await query(`ALTER TABLE public.inspection_findings ADD COLUMN IF NOT EXISTS ai_validation_status TEXT`)
@@ -24,10 +26,42 @@ const router = Router()
 router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const statusFilter = req.query.status ? String(req.query.status) : null
+    const search = req.query.search ? String(req.query.search).trim() : ''
+    const woNumber = req.query.woNumber ? String(req.query.woNumber).trim() : ''
+    const asset = req.query.asset ? String(req.query.asset).trim() : ''
+    const location = req.query.location ? String(req.query.location).trim() : ''
+    const wi = req.query.wi ? String(req.query.wi).trim() : ''
+    const inspector = req.query.inspector ? String(req.query.inspector).trim() : ''
+    const dueDate = req.query.dueDate ? String(req.query.dueDate).trim() : ''
     const page = Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1)
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(String(req.query.pageSize ?? '50'), 10) || 50))
     const params: unknown[] = [req.user!.tenantId]
     if (statusFilter) params.push(statusFilter)
+    if (search) params.push(`%${search}%`)
+    const statusClause = statusFilter ? `AND wo.status = $2` : ''
+    const searchClause = search ? `AND (
+           wo.wo_number ILIKE $${params.length}
+        OR COALESCE(a.name, wo.asset_name) ILIKE $${params.length}
+        OR COALESCE(a.location, wo.location) ILIKE $${params.length}
+        OR wi.wi_number ILIKE $${params.length}
+        OR wi.title ILIKE $${params.length}
+        OR u.name ILIKE $${params.length}
+      )` : ''
+    const fieldClauses: string[] = []
+    const addLikeFilter = (value: string, clause: (index: number) => string) => {
+      if (!value) return
+      params.push(`%${value}%`)
+      fieldClauses.push(clause(params.length))
+    }
+    addLikeFilter(woNumber, index => `AND wo.wo_number ILIKE $${index}`)
+    addLikeFilter(asset, index => `AND COALESCE(a.name, wo.asset_name) ILIKE $${index}`)
+    addLikeFilter(location, index => `AND COALESCE(a.location, wo.location) ILIKE $${index}`)
+    addLikeFilter(wi, index => `AND (wi.wi_number ILIKE $${index} OR wi.title ILIKE $${index})`)
+    addLikeFilter(inspector, index => `AND u.name ILIKE $${index}`)
+    if (dueDate) {
+      params.push(dueDate)
+      fieldClauses.push(`AND wo.due_date = $${params.length}`)
+    }
     const limitParam = params.length + 1
     const offsetParam = params.length + 2
 
@@ -51,7 +85,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
        LEFT JOIN public.users u  ON u.id = wo.assigned_to
        LEFT JOIN public.work_instructions wi ON wi.id = wo.work_instruction_id
        WHERE  wo.tenant_id = $1
-         ${statusFilter ? 'AND wo.status = $2' : ''}
+         ${statusClause}
+         ${searchClause}
+         ${fieldClauses.join('\n         ')}
        ORDER  BY wo.due_date ASC NULLS LAST
        LIMIT $${limitParam} OFFSET $${offsetParam}`,
       [...params, pageSize, (page - 1) * pageSize]
@@ -68,7 +104,7 @@ router.get('/summary', requireAuth, async (req: AuthRequest, res, next) => {
               COUNT(*) FILTER (WHERE status = 'open')::int AS open,
               COUNT(*) FILTER (WHERE status = 'in_progress')::int AS in_progress,
               COUNT(*) FILTER (WHERE status = 'complete')::int AS complete,
-              COUNT(*) FILTER (WHERE status = 'pending')::int AS pending
+              COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled
        FROM public.work_orders
        WHERE tenant_id = $1`,
       [req.user!.tenantId]
@@ -559,9 +595,10 @@ router.post('/:id/findings/photo', requireAuth, async (req: AuthRequest, res, ne
 router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) => {
   const client = await pool.connect()
   try {
-    const { inspectionRecordId, signatureDataUrl } = req.body as {
+    const { inspectionRecordId, signatureDataUrl, signedBy } = req.body as {
       inspectionRecordId: string
       signatureDataUrl?: string
+      signedBy?: string
     }
     if (!signatureDataUrl?.startsWith('data:image/')) {
       res.status(400).json({ error: 'Signature is required to complete an inspection' }); return
@@ -627,9 +664,21 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
       }); return
     }
     const overallResult = counts.failed > 0 ? 'fail' : 'pass'
+    let signerId = req.user!.id
+    if (signedBy) {
+      const signerRes = await client.query(
+        `SELECT id FROM public.users WHERE id = $1 AND tenant_id = $2 AND active = true`,
+        [signedBy, req.user!.tenantId]
+      )
+      if (signerRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        res.status(400).json({ error: 'Selected signer is not valid for this tenant' }); return
+      }
+      signerId = signedBy
+    }
     const signatureHash = crypto
       .createHash('sha256')
-      .update(`${inspectionRecordId}:${req.user!.id}:${signatureDataUrl}`)
+      .update(`${inspectionRecordId}:${signerId}:${signatureDataUrl}`)
       .digest('hex')
 
     await client.query(
@@ -652,7 +701,7 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
         counts.failed,
         counts.na,
         counts.total_items,
-        req.user!.id,
+        signerId,
         signatureDataUrl,
         signatureHash,
         inspectionRecordId,
@@ -680,6 +729,7 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
         failed: counts.failed,
         na: counts.na,
         signature_hash: signatureHash,
+        signed_by: signerId,
       },
     })
 

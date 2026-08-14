@@ -20,14 +20,14 @@ export function Table<T extends { id: string | number }>({
   columns, rows, onRowClick, emptyMessage = 'No data', className,
 }: TableProps<T>) {
   return (
-    <div className={cn('bg-bg-2 border border-border rounded-[10px] overflow-hidden overflow-x-auto', className)}>
+    <div className={cn('surface-panel rounded-[12px] overflow-hidden overflow-x-auto', className)}>
       <table className="w-full border-collapse min-w-[600px]">
         <thead>
           <tr>
             {columns.map(col => (
               <th
                 key={String(col.key)}
-                className="text-[11px] font-medium text-text-3 uppercase tracking-[0.07em] px-[14px] py-[10px] text-left border-b border-border whitespace-nowrap"
+                className="bg-bg-3/55 text-[10px] font-semibold text-text-3 uppercase tracking-[0.09em] px-[14px] py-[11px] text-left border-b border-border whitespace-nowrap"
               >
                 {col.header}
               </th>
@@ -51,7 +51,7 @@ export function Table<T extends { id: string | number }>({
                 onClick={() => onRowClick?.(row)}
                 className={cn(
                   'border-b border-border last:border-0 text-[13px] transition-colors duration-100',
-                  onRowClick && 'cursor-pointer hover:bg-bg-3'
+                  onRowClick && 'cursor-pointer hover:bg-accent-bg'
                 )}
               >
                 {columns.map(col => (

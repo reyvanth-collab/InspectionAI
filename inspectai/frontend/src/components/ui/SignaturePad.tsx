@@ -2,12 +2,24 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import { Button } from './Button'
 
 interface SignaturePadProps {
-  onSave:  (dataUrl: string) => void
+  onSave:  (dataUrl: string, signerId?: string) => void
   onClose: () => void
   signerName?: string
+  signerOptions?: Array<{ id: string; name: string; role?: string; staffId?: string }>
+  selectedSignerId?: string
+  onSignerChange?: (signerId: string) => void
+  requireSigner?: boolean
 }
 
-export function SignaturePad({ onSave, onClose, signerName }: SignaturePadProps) {
+export function SignaturePad({
+  onSave,
+  onClose,
+  signerName,
+  signerOptions = [],
+  selectedSignerId = '',
+  onSignerChange,
+  requireSigner = false,
+}: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [drawing, setDrawing]   = useState(false)
   const [isEmpty,  setIsEmpty]  = useState(true)
@@ -88,7 +100,7 @@ export function SignaturePad({ onSave, onClose, signerName }: SignaturePadProps)
 
   const save = useCallback(() => {
     const canvas = canvasRef.current
-    if (!canvas || isEmpty) return
+    if (!canvas || isEmpty || (requireSigner && !selectedSignerId)) return
     // Compose onto white bg so PNG is not transparent
     const offscreen = document.createElement('canvas')
     offscreen.width  = canvas.width
@@ -97,8 +109,8 @@ export function SignaturePad({ onSave, onClose, signerName }: SignaturePadProps)
     octx.fillStyle = '#ffffff'
     octx.fillRect(0, 0, offscreen.width, offscreen.height)
     octx.drawImage(canvas, 0, 0)
-    onSave(offscreen.toDataURL('image/png'))
-  }, [isEmpty, onSave])
+    onSave(offscreen.toDataURL('image/png'), selectedSignerId || undefined)
+  }, [isEmpty, onSave, requireSigner, selectedSignerId])
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -108,7 +120,7 @@ export function SignaturePad({ onSave, onClose, signerName }: SignaturePadProps)
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
             <h2 className="text-[15px] font-semibold tracking-[-0.2px]">Digital Signature</h2>
-            {signerName && (
+            {signerName && signerOptions.length === 0 && (
               <p className="text-[12px] text-text-2 mt-0.5">Signing as <span className="text-text font-medium">{signerName}</span></p>
             )}
           </div>
@@ -122,6 +134,25 @@ export function SignaturePad({ onSave, onClose, signerName }: SignaturePadProps)
 
         {/* Canvas area */}
         <div className="px-5 pt-4 pb-2">
+          {signerOptions.length > 0 && (
+            <div className="mb-4">
+              <label className="mb-1 block text-[11px] font-medium uppercase tracking-[0.07em] text-text-2">
+                Signer
+              </label>
+              <select
+                value={selectedSignerId}
+                onChange={e => onSignerChange?.(e.target.value)}
+                className="w-full rounded-[8px] border border-border-2 bg-bg px-3 py-2 text-[13px] text-text outline-none transition-colors focus:border-accent"
+              >
+                <option value="">Select signer...</option>
+                {signerOptions.map(option => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}{option.staffId ? ` (${option.staffId})` : ''}{option.role ? ` - ${option.role}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <p className="text-[11px] text-text-3 mb-2 uppercase tracking-[0.07em]">Sign below</p>
           <div className="relative rounded-[8px] border-2 border-dashed border-border-2 overflow-hidden bg-bg"
                style={{ height: 160 }}>
@@ -168,7 +199,7 @@ export function SignaturePad({ onSave, onClose, signerName }: SignaturePadProps)
           </button>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button variant="primary" disabled={isEmpty} onClick={save}>
+            <Button variant="primary" disabled={isEmpty || (requireSigner && !selectedSignerId)} onClick={save}>
               Apply Signature
             </Button>
           </div>

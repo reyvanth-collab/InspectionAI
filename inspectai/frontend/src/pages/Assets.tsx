@@ -104,6 +104,7 @@ export default function Assets() {
         await createAsset.mutateAsync(form)
         toast('Asset created', 'success')
       }
+      setPage(1)
       closeModal()
     } catch (e) {
       toast(e instanceof Error ? e.message : `Failed to ${editingAsset ? 'update' : 'create'} asset`, 'error')

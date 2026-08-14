@@ -23,18 +23,18 @@ export function Modal({ open, onClose, title, children, footer, maxWidth = 'max-
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-6"
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[300] flex items-center justify-center p-6"
       onClick={onClose}
     >
       <div
         className={cn(
-          'bg-bg-2 border border-border-2 rounded-[12px] w-full max-h-[90vh] overflow-y-auto',
+          'surface-panel rounded-[14px] w-full max-h-[90vh] overflow-y-auto shadow-lg',
           maxWidth
         )}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-[18px] border-b border-border">
+        <div className="flex items-center justify-between px-5 py-[18px] border-b border-border bg-bg-3/45">
           <h2 className="text-[15px] font-semibold text-text">{title}</h2>
           <button
             onClick={onClose}

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Activity, LockKeyhole, RadioTower, ShieldCheck, Sparkles } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/Button'
 import { supabase } from '@/lib/supabase'
@@ -50,32 +51,53 @@ export default function Login() {
   }
 
   return (
-    <div className="fixed inset-0 bg-bg flex items-center justify-center">
-      <div className="w-full max-w-[380px] px-6">
+    <div className="fixed inset-0 bg-bg page-shell flex items-center justify-center p-6">
+      <div className="surface-panel premium-ring w-full max-w-[460px] rounded-[22px] p-8 shadow-lg">
 
         {/* Logo */}
-        <div className="flex items-center gap-2.5 mb-12">
-          <div className="w-9 h-9 rounded-[8px] bg-accent flex items-center justify-center">
+        <div className="flex items-center gap-2.5 mb-9">
+          <div className="w-10 h-10 rounded-[12px] bg-gradient-to-br from-accent to-accent-2 flex items-center justify-center shadow-[0_16px_36px_rgba(45,125,255,0.28)]">
             <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
               <path d="M7 1L2 4v6l5 3 5-3V4L7 1z" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/>
               <circle cx="7" cy="7" r="2" fill="white"/>
             </svg>
           </div>
-          <span className="text-[18px] font-semibold tracking-[-0.3px]">
+          <span className="text-[20px] font-semibold tracking-[-0.5px]">
             Inspect<span className="text-accent">AI</span>
           </span>
         </div>
 
         {/* Status badge */}
-        <div className="inline-flex items-center gap-1.5 bg-success-bg border border-success-border text-success text-[11px] px-[10px] py-1 rounded-full mb-7">
-          <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-dot" />
-          All systems operational
+        <div className="mb-7 flex items-center justify-between gap-3">
+          <div className="inline-flex items-center gap-1.5 bg-success-bg border border-success-border text-success text-[11px] px-[10px] py-1 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-dot" />
+            All systems operational
+          </div>
+          <div className="grid h-9 w-9 place-items-center rounded-[10px] border border-accent-bd bg-accent-bg text-accent">
+            <LockKeyhole size={17} />
+          </div>
         </div>
 
         {mode === 'login' ? (
           <>
-            <h1 className="text-[26px] font-semibold tracking-[-0.5px] mb-1.5">Welcome back</h1>
-            <p className="text-[14px] text-text-2 mb-9">Sign in to your inspection platform</p>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-accent-bd bg-accent-bg px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-accent">
+              <Sparkles size={13} />
+              Enterprise inspection intelligence
+            </div>
+            <h1 className="text-[30px] font-semibold tracking-[-0.8px] mb-1.5">Welcome back</h1>
+            <p className="text-[14px] text-text-2 mb-6">Sign in to your controlled inspection platform</p>
+            <div className="mb-7 grid grid-cols-3 gap-2">
+              {[
+                { label: 'WI control', icon: ShieldCheck },
+                { label: 'Live queue', icon: Activity },
+                { label: 'Audit trail', icon: RadioTower },
+              ].map(item => (
+                <div key={item.label} className="rounded-[11px] border border-border bg-bg-3/55 px-2 py-2 text-center">
+                  <item.icon size={15} className="mx-auto mb-1 text-accent" />
+                  <p className="text-[10px] text-text-3">{item.label}</p>
+                </div>
+              ))}
+            </div>
 
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
               <div>

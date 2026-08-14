@@ -132,6 +132,7 @@ CREATE TABLE public.wi_checklist_items (
   source_text         text,
   ai_confidence       numeric,
   ai_warnings         text[],
+  layout_json         text,
   sort_order          integer NOT NULL DEFAULT 0,
   created_at          timestamptz NOT NULL DEFAULT now()
 );
