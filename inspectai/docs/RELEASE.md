@@ -14,7 +14,7 @@ AI assistance, PDF extraction and historical imports default off. Enabling these
 
 `backend/npm test` compiles TypeScript, runs asset/provider unit tests and a complete Express workflow against PostgreSQL (PGlite), with two tenants and four roles. It checks role/ownership denial, approval bypass, immutable drafts/revisions, measurement limits, invalid signatures, post-sign edits, revision cloning, audit writes and RLS presence. `frontend/npm test` exercises actual React contexts/hooks in jsdom for tenant switching, queue quarantine and split/error SSE. Lint, production build and production-dependency audits are additional gates.
 
-Not verified locally: real browser/camera/touch devices, live Supabase grants/auth/email, provider accuracy, Docker image startup, real backup restore, proxy deployment, multi-user concurrency/load. Embedded PostgreSQL and jsdom do not replace these checks. No production data or paid AI calls are used by tests.
+CI also includes real Chromium login/route/mobile smoke tests and a production Docker image startup check. These must complete successfully on GitHub before deployment. Not verified locally: real browser/camera/touch devices, live Supabase grants/auth/email, provider accuracy, Docker image startup, real backup restore, proxy deployment, multi-user concurrency/load. Embedded PostgreSQL and jsdom do not replace these checks. No production data or paid AI calls are used by tests.
 
 ## Deploy to staging first
 

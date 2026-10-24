@@ -75,4 +75,4 @@ let base;
  const policies=(await db.query("SELECT relrowsecurity FROM pg_class WHERE relname='moms_checklist_steps'")).rows[0];assert(policies.relrowsecurity);checks++;
  console.log(`PASS ${checks} release integration assertions against PostgreSQL (PGlite)`);
  }finally {server.close();await db.close();await dbModule.pool.end();}
-})().catch(e=>{console.error(e);process.exitCode=1});
+})().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)});
