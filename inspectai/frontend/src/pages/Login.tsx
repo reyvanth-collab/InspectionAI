@@ -69,7 +69,7 @@ export default function Login() {
         {/* Status badge */}
         <div className="inline-flex items-center gap-1.5 bg-success-bg border border-success-border text-success text-[11px] px-[10px] py-1 rounded-full mb-7">
           <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-dot" />
-          All systems operational
+          Secure sign-in
         </div>
 
         {mode === 'login' ? (
@@ -133,26 +133,6 @@ export default function Login() {
               </Button>
             </form>
 
-            {/* Demo credentials */}
-            <div className="mt-8 p-3 bg-bg-3 border border-border rounded-[8px]">
-              <p className="text-[11px] font-medium text-text-2 uppercase tracking-[0.06em] mb-2">Demo credentials</p>
-              <div className="flex flex-col gap-1">
-                {[
-                  { email: 'admin@smrt.com.sg',     pass: 'Admin@1234',     role: 'admin'     },
-                  { email: 'james.tan@smrt.com.sg', pass: 'Inspector@1234', role: 'inspector' },
-                  { email: 'sarah.lee@smrt.com.sg', pass: 'Approver@1234',  role: 'approver'  },
-                ].map(u => (
-                  <button
-                    key={u.email}
-                    type="button"
-                    onClick={() => { setEmail(u.email); setPassword(u.pass) }}
-                    className="text-left text-[11px] font-mono text-text-3 hover:text-accent transition-colors bg-transparent border-none cursor-pointer p-0"
-                  >
-                    {u.email} <span className="text-text-3">({u.role})</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </>
         ) : (
           <>

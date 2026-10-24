@@ -1,24 +1,29 @@
 import { Router } from 'express'
 import crypto from 'crypto'
-import { requireAuth, type AuthRequest } from '../middleware/auth'
-import { pool, query } from '../lib/db'
+import { validSignature, canonicalJson } from '../lib/signature'
+import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth'
+import { pool, query, beginActorTransaction } from '../lib/db'
 import { auditLog, createNotification, notifyRoles } from '../lib/events'
 
 const router = Router()
-
-;(async () => {
-  try {
-    await query(`ALTER TABLE public.inspection_records ADD COLUMN IF NOT EXISTS signature_data_url TEXT`)
-    await query(`ALTER TABLE public.inspection_findings ADD COLUMN IF NOT EXISTS photo_urls TEXT[]`)
-    await query(`ALTER TABLE public.inspection_findings ADD COLUMN IF NOT EXISTS ai_validation_status TEXT`)
-    await query(`ALTER TABLE public.inspection_findings ADD COLUMN IF NOT EXISTS ai_validation_confidence NUMERIC`)
-    await query(`ALTER TABLE public.inspection_findings ADD COLUMN IF NOT EXISTS ai_validation_reason TEXT`)
-    await query(`ALTER TABLE public.inspection_findings ADD COLUMN IF NOT EXISTS ai_validation_recommended_result TEXT`)
-    await query(`ALTER TABLE public.inspection_findings ADD COLUMN IF NOT EXISTS ai_validation_evidence JSONB`)
-  } catch (e) {
-    console.warn('[inspections] column migration warning:', (e as Error).message)
+router.use(requireAuth)
+router.use((req: AuthRequest, res, next) => {
+  if (req.method === 'GET') { next(); return }
+  requireRole('admin', 'approver', 'inspector')(req, res, next)
+})
+router.use(async (req: AuthRequest, res, next) => {
+  if (req.method === 'GET') { next(); return }
+  if (req.path === '/') {
+    requireRole('admin', 'approver')(req, res, next); return
   }
-})()
+  const id = req.path.split('/')[1]
+  const result = await query('SELECT assigned_to FROM public.work_orders WHERE id = $1 AND tenant_id = $2', [id, req.user!.tenantId])
+  if (!result.rows.length) { res.status(404).json({ error: 'Work order not found' }); return }
+  if (req.user!.role !== 'admin' && result.rows[0].assigned_to !== req.user!.id) {
+    res.status(403).json({ error: 'Only the assigned inspector or an administrator can change this work order' }); return
+  }
+  next()
+})
 
 // GET /api/inspections - list work orders
 router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
@@ -187,6 +192,8 @@ router.post('/', requireAuth, async (req: AuthRequest, res, next) => {
         AND ci.tenant_id = wi.tenant_id
        WHERE wi.id = $1
          AND wi.tenant_id = $2
+         AND wi.status = 'active'
+         AND (wi.expiry_date IS NULL OR wi.expiry_date >= CURRENT_DATE)
        GROUP BY wi.id`,
       [workInstructionId, req.user!.tenantId]
     )
@@ -200,7 +207,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res, next) => {
     const client = await pool.connect()
     let workOrder: Record<string, any>
     try {
-      await client.query('BEGIN')
+      await beginActorTransaction(client)
       // Serialize numbering per tenant so concurrent creates cannot receive the same WO number.
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [req.user!.tenantId])
       const numberRes = await client.query(
@@ -277,6 +284,8 @@ router.patch('/:id/work-instruction', requireAuth, async (req: AuthRequest, res,
           AND ci.tenant_id = wi.tenant_id
          WHERE wi.id = $1
            AND wi.tenant_id = $2
+           AND wi.status = 'active'
+           AND (wi.expiry_date IS NULL OR wi.expiry_date >= CURRENT_DATE)
          GROUP BY wi.id, wi.wi_number`,
         [workInstructionId, req.user!.tenantId]
       ),
@@ -323,11 +332,11 @@ router.patch('/:id/work-instruction', requireAuth, async (req: AuthRequest, res,
 router.patch('/:id/status', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const { status } = req.body as { status: string }
-    const allowedStatuses = new Set(['open', 'in_progress', 'complete', 'cancelled'])
+    const allowedStatuses = new Set(['cancelled'])
     if (!allowedStatuses.has(status)) {
       res.status(400).json({ error: 'Invalid work order status' }); return
     }
-    const completed  = status === 'complete' ? new Date().toISOString() : null
+    const completed: string | null = null
     const result     = await query(
       `UPDATE public.work_orders
        SET    status = $1, completed_at = $2, updated_at = NOW()
@@ -353,7 +362,7 @@ router.post('/:id/start', requireAuth, async (req: AuthRequest, res, next) => {
   const client = await pool.connect()
   try {
     const { totalItems } = req.body
-    await client.query('BEGIN')
+    await beginActorTransaction(client)
 
     const woRes = await client.query(
       `SELECT id, wo_number, asset_name, status, work_instruction_id
@@ -365,6 +374,9 @@ router.post('/:id/start', requireAuth, async (req: AuthRequest, res, next) => {
     if (woRes.rows.length === 0) {
       await client.query('ROLLBACK')
       res.status(404).json({ error: 'Work order not found' }); return
+    }
+    if (['complete', 'cancelled'].includes(woRes.rows[0].status)) {
+      await client.query('ROLLBACK'); res.status(409).json({ error: 'Closed work orders cannot be started' }); return
     }
     if (!woRes.rows[0].work_instruction_id) {
       await client.query('ROLLBACK')
@@ -448,7 +460,7 @@ router.post('/:id/start', requireAuth, async (req: AuthRequest, res, next) => {
 // POST /api/inspections/:id/findings - upsert a checklist finding
 router.post('/:id/findings', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const { inspectionRecordId, checklistItemId, result: findingResult, notes } = req.body
+    const { inspectionRecordId, checklistItemId, result: findingResult, notes, capturedValue } = req.body
     if (!['pass', 'fail', 'na'].includes(findingResult)) {
       res.status(400).json({ error: 'Invalid finding result' }); return
     }
@@ -475,12 +487,12 @@ router.post('/:id/findings', requireAuth, async (req: AuthRequest, res, next) =>
 
     const result = await query(
       `INSERT INTO public.inspection_findings
-         (inspection_record_id, checklist_item_id, result, notes, tenant_id)
-       VALUES ($1, $2, $3, $4, $5)
+         (inspection_record_id, checklist_item_id, result, notes, tenant_id, captured_value)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (inspection_record_id, checklist_item_id)
-       DO UPDATE SET result = EXCLUDED.result, notes = EXCLUDED.notes, updated_at = NOW()
+       DO UPDATE SET result = EXCLUDED.result, notes = EXCLUDED.notes, captured_value = EXCLUDED.captured_value, updated_at = NOW()
        RETURNING *`,
-      [inspectionRecordId, checklistItemId, findingResult, notes || null, req.user!.tenantId]
+      [inspectionRecordId, checklistItemId, findingResult, notes || null, req.user!.tenantId, capturedValue ?? null]
     )
 
     await recountInspection(inspectionRecordId, req.user!.tenantId)
@@ -506,8 +518,8 @@ router.post('/:id/findings/photo', requireAuth, async (req: AuthRequest, res, ne
       checklistItemId: string
       imageDataUrl: string
     }
-    if (!imageDataUrl?.startsWith('data:image/')) {
-      res.status(400).json({ error: 'A data URL image is required' }); return
+    if (typeof imageDataUrl !== 'string' || imageDataUrl.length > 2_800_000 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(imageDataUrl)) {
+      res.status(400).json({ error: 'A base64 PNG, JPEG or WebP image under 2 MB is required' }); return
     }
 
     const belongsRes = await query(
@@ -563,14 +575,14 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
       inspectionRecordId: string
       signatureDataUrl?: string
     }
-    if (!signatureDataUrl?.startsWith('data:image/')) {
+    if (!validSignature(signatureDataUrl)) {
       res.status(400).json({ error: 'Signature is required to complete an inspection' }); return
     }
 
-    await client.query('BEGIN')
+    await beginActorTransaction(client)
 
     const recordRes = await client.query(
-      `SELECT ir.*, wo.wo_number, wo.asset_name, wo.location, wo.assigned_to
+      `SELECT ir.*, wo.wo_number, wo.asset_name, wo.location, wo.assigned_to, wo.work_instruction_id
        FROM public.inspection_records ir
        JOIN public.work_orders wo ON wo.id = ir.work_order_id
        WHERE ir.id = $1
@@ -620,16 +632,25 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
       [inspectionRecordId, req.params.id, req.user!.tenantId]
     )
     const counts = countRes.rows[0]
-    if (counts.required_answered < counts.required_total) {
+    if (counts.required_answered < counts.required_total || counts.passed + counts.failed + counts.na < 1) {
       await client.query('ROLLBACK')
       res.status(409).json({
         error: `Complete all required checklist items before signing (${counts.required_answered}/${counts.required_total} complete)`,
       }); return
     }
     const overallResult = counts.failed > 0 ? 'fail' : 'pass'
+    const snapshotRes = await client.query(
+      `SELECT ci.id, ci.item_no, ci.description, ci.acceptance_criteria, ci.field_type,
+              ci.min_value, ci.max_value, f.result, f.notes, f.captured_value, f.photo_urls
+       FROM public.work_orders wo
+       JOIN public.wi_checklist_items ci ON ci.work_instruction_id = wo.work_instruction_id AND ci.tenant_id = wo.tenant_id
+       LEFT JOIN public.inspection_findings f ON f.checklist_item_id = ci.id AND f.inspection_record_id = $1
+       WHERE wo.id = $2 AND wo.tenant_id = $3 ORDER BY ci.sort_order, ci.id`,
+      [inspectionRecordId, req.params.id, req.user!.tenantId])
+    const signedPayload = { version: 1, inspectionRecordId, signerId: req.user!.id, workInstructionId: record.work_instruction_id, workOrderNumber: record.wo_number, assetName: record.asset_name, location: record.location, items: snapshotRes.rows, signatureDataUrl }
     const signatureHash = crypto
       .createHash('sha256')
-      .update(`${inspectionRecordId}:${req.user!.id}:${signatureDataUrl}`)
+      .update(canonicalJson(signedPayload))
       .digest('hex')
 
     await client.query(
@@ -644,6 +665,7 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
            signed_at = NOW(),
            signature_data_url = $7,
            signature_hash = $8,
+           signed_payload = $10::jsonb,
            updated_at = NOW()
        WHERE id = $9`,
       [
@@ -656,6 +678,7 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
         signatureDataUrl,
         signatureHash,
         inspectionRecordId,
+        JSON.stringify(signedPayload),
       ]
     )
     await client.query(

@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${SUPABASE_URL:?required}
+        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?required}
+    env_file: .env.production
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    expose: ["4000"]
+  edge:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?required}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [app]
+volumes:
+  caddy_data:
+  caddy_config:

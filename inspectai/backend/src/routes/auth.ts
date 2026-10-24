@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
@@ -59,6 +60,7 @@ router.post('/login', loginRateLimit, async (req, res, next) => {
       staffId:  user.staff_id,
       tenantId: user.tenant_id,
       name:     user.name,
+      authVersion: crypto.createHash('sha256').update(user.password_hash).digest('hex'),
     })
 
     res.json({
@@ -66,6 +68,7 @@ router.post('/login', loginRateLimit, async (req, res, next) => {
       user: {
         id:       user.id,
         name:     user.name,
+      authVersion: crypto.createHash('sha256').update(user.password_hash).digest('hex'),
         email:    user.email,
         role:     user.role,
         staffId:  user.staff_id,

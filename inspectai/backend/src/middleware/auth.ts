@@ -1,6 +1,8 @@
+import crypto from 'node:crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { verifyToken } from '../lib/jwt'
 import { query } from '../lib/db'
+import { actorContext } from '../lib/actor'
 
 export interface AuthRequest extends Request {
   user?: {
@@ -23,9 +25,9 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   try {
     const claims = verifyToken(token)
     const result = await query(
-      `SELECT id, email, name, role, staff_id, tenant_id
-       FROM public.users
-       WHERE id = $1 AND tenant_id = $2 AND active = true
+      `SELECT u.id, u.email, u.name, u.role, u.staff_id, u.tenant_id, au.encrypted_password
+       FROM public.users u JOIN auth.users au ON au.id = u.id
+       WHERE u.id = $1 AND u.tenant_id = $2 AND u.active = true
        LIMIT 1`,
       [claims.id, claims.tenantId]
     )
@@ -34,6 +36,7 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       return
     }
     const user = result.rows[0]
+    if (claims.authVersion !== crypto.createHash('sha256').update(user.encrypted_password).digest('hex')) { res.status(401).json({ error: 'Credentials changed; sign in again' }); return }
     req.user = {
       id: user.id,
       email: user.email,
@@ -42,7 +45,7 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       staffId: user.staff_id,
       tenantId: user.tenant_id,
     }
-    next()
+    actorContext.run(req.user!.id, next)
   } catch {
     res.status(401).json({ error: 'Invalid or expired token — please log in again' })
   }
@@ -55,6 +58,6 @@ export function requireRole(...roles: string[]) {
       res.status(403).json({ error: 'Insufficient permissions' })
       return
     }
-    next()
+    actorContext.run(req.user!.id, next)
   }
 }

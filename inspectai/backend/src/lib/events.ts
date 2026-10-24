@@ -53,7 +53,7 @@ export async function auditLog(input: AuditInput) {
       ]
     )
   } catch (err) {
-    console.warn('[audit] write failed:', err instanceof Error ? err.message : err)
+    console.error('[audit] supplementary event write failed:', err instanceof Error ? err.message : err)
   }
 }
 

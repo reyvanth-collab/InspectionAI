@@ -1,10 +1,11 @@
 import { Router, type Response } from 'express'
 import Anthropic from '@anthropic-ai/sdk'
 import multer from 'multer'
-import { requireAuth, type AuthRequest } from '../middleware/auth'
+import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth'
 import { z } from 'zod'
 import { query } from '../lib/db'
 import { auditLog } from '../lib/events'
+import { createRateLimiter } from '../middleware/rateLimit'
 import { createAiProvider } from '../lib/ai/provider'
 
 const upload = multer({
@@ -13,6 +14,12 @@ const upload = multer({
 })
 
 const router = Router()
+router.use(requireAuth, requireRole('admin', 'approver', 'inspector'), createRateLimiter(30, 60_000))
+router.use((req: AuthRequest, res, next) => {
+  const pdf = req.path === '/import-wi-pdf'
+  if ((pdf ? process.env.ENABLE_PDF_EXTRACTION : process.env.ENABLE_AI_ASSISTANCE) !== 'true') { res.status(503).json({ error: 'This optional AI feature is disabled pending validation' }); return }
+  next()
+})
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -113,13 +120,13 @@ function deterministicValidation(input: ValidateFindingInput): ValidationResult 
   }
 
   return {
-    status: 'aligned',
+    status: 'uncertain',
     recommendedResult: 'keep',
-    confidence: evidence.length > 0 ? 0.72 : 0.82,
-    reason: 'The selected result is consistent with the available structured evidence.',
+    confidence: 0,
+    reason: 'Rules alone cannot establish the condition. Human verification is required.',
     evidence,
     riskLevel: 'low',
-    requiredAction: 'No additional action required beyond normal review.',
+    requiredAction: 'Review the evidence against the approved procedure.',
   }
 }
 
@@ -194,33 +201,6 @@ One of: Immediate shutdown required | Within 24 hours | Within 7 days | Schedule
   res.setHeader('Connection', 'keep-alive')
   res.flushHeaders()
 
-  if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY.includes('your-')) {
-    const fallback = [
-      '**Root Cause**',
-      `The failed condition is most likely related to the checklist requirement: ${acceptanceCriteria ?? itemDescription}.`,
-      '',
-      '**Failure Class**',
-      'Mechanical Failure',
-      '',
-      '**Failure Code**',
-      'CHK-FAIL-001',
-      '',
-      '**Recommended Action**',
-      '1. Re-check the item against the acceptance criteria.',
-      '2. Isolate or tag the asset if the failed condition creates an operational or safety risk.',
-      '3. Record the corrective action and supervisor review outcome.',
-      '',
-      '**Need More Detail**',
-      'Capture a short defect note, one close-up photo, or the exact measurement that proves why this checklist item failed.',
-      '',
-      '**Urgency**',
-      'Within 24 hours',
-    ].join('\n')
-    res.write(`data: ${JSON.stringify({ text: fallback })}\n\n`)
-    res.write('data: [DONE]\n\n')
-    res.end()
-    return
-  }
 
   try {
     if ((process.env.AI_PROVIDER ?? 'anthropic').toLowerCase() === 'openai') {
@@ -596,7 +576,7 @@ Return ONLY the JSON object, no markdown, no explanation.`
 
 // ── POST /api/ai/import-wi-pdf ───────────────────────────────────
 // Accepts a PDF upload, uses Claude to extract all checklist items as structured JSON.
-router.post('/import-wi-pdf', requireAuth, upload.single('pdf'), async (req: AuthRequest, res: Response) => {
+router.post('/import-wi-pdf', requireAuth, requireRole('admin', 'approver'), upload.single('pdf'), async (req: AuthRequest, res: Response) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const file = (req as any).file as Express.Multer.File | undefined
   if (!file) { res.status(400).json({ error: 'No PDF file uploaded' }); return }

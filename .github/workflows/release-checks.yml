@@ -1,0 +1,40 @@
+name: Release checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inspectai/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: inspectai/backend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm audit --omit=dev
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inspectai/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: inspectai/frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://example.invalid
+          VITE_SUPABASE_ANON_KEY: test-build-only
+      - run: npm audit --omit=dev

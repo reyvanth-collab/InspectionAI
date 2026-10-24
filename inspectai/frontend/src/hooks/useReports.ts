@@ -1,3 +1,4 @@
+import { fetchPages } from '@/lib/pages'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
@@ -42,8 +43,7 @@ export function useInspectionSummary(days: ReportDays) {
     queryKey: ['report-inspection-summary', days],
     enabled:  !!user,
     queryFn:  async (): Promise<InspectionSummaryRow[]> => {
-      const res = await api.get<{ data: InspectionSummaryRow[] }>(`/reports/inspection-summary?days=${days}`)
-      return res.data.data
+      return fetchPages<InspectionSummaryRow>(`/reports/inspection-summary?days=${days}`)
     },
   })
 }

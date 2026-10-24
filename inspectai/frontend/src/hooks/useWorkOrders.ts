@@ -44,7 +44,7 @@ export interface WorkOrderPage {
 export function useWorkOrders(statusFilter?: string, page = 1) {
   const { user } = useAuth()
   return useQuery({
-    queryKey:        ['work-orders', statusFilter],
+    queryKey:        ['work-orders', user?.tenantId, statusFilter, page],
     enabled:         !!user,
     placeholderData: keepPreviousData,
     queryFn: async () => {

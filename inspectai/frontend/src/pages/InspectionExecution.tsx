@@ -1,3 +1,4 @@
+import { readSse } from '@/lib/sse'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -52,7 +53,7 @@ interface CompletionSummary {
 }
 
 // ── Draft key ─────────────────────────────────────────────────────
-const draftKey = (woId: string) => `inspection_draft_${woId}`
+const draftKey = (woId: string) => `inspection_draft_${localStorage.getItem(JWT_KEY)?.split('.')[1] ?? 'signed-out'}_${woId}`
 
 // ── Timer hook ────────────────────────────────────────────────────
 function useTimer(running: boolean) {
@@ -144,6 +145,7 @@ function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, lo
       })
       setPreview(dataUrl)
       onPhotoCaptured?.(dataUrl)
+      if (import.meta.env.VITE_ENABLE_AI !== 'true') { setState({ text: 'Photo captured. Confirm the save indicator before signing.', loading: false, error: null }); return }
       const base64 = dataUrl.split(',')[1]
       const mediaType = (file.type as 'image/jpeg' | 'image/png' | 'image/webp') || 'image/jpeg'
       const token = localStorage.getItem(JWT_KEY) ?? ''
@@ -153,23 +155,8 @@ function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, lo
         body: JSON.stringify({ imageBase64: base64, mediaType, itemDescription, acceptanceCriteria, assetName, location }),
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
-      const reader2 = res.body.getReader()
-      const decoder = new TextDecoder()
-      let streamDone = false
-      while (!streamDone) {
-        const { done, value } = await reader2.read()
-        streamDone = done
-        if (streamDone) break
-        for (const line of decoder.decode(value).split('\n').filter(l => l.startsWith('data: '))) {
-          const json = line.slice(6).trim()
-          if (json === '[DONE]') { setState(p => p ? { ...p, loading: false } : p); break }
-          try {
-            const parsed = JSON.parse(json) as { text?: string; error?: string }
-            if (parsed.error) throw new Error(parsed.error)
-            if (parsed.text) setState(p => p ? { ...p, text: p.text + parsed.text } : p)
-          } catch { /* skip */ }
-        }
-      }
+      await readSse(res, text => setState(p => p ? { ...p, text: p.text + text } : p))
+
     } catch (err) {
       setState({ text: '', loading: false, error: err instanceof Error ? err.message : 'Failed' })
     } finally {
@@ -184,13 +171,13 @@ function PhotoAnalysisPanel({ itemDescription, acceptanceCriteria, assetName, lo
       {!state && (
         <button onClick={() => fileRef.current?.click()}
           className="flex items-center gap-1.5 text-[11px] text-text-3 hover:text-accent bg-transparent border-none cursor-pointer p-0 transition-colors">
-          📷 Attach photo for AI Vision analysis
+          📷 Attach evidence photo
         </button>
       )}
       {state && (
         <div className="mt-2 p-3 bg-bg-3 border border-border-2 rounded-[8px]">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] font-semibold text-text-2 uppercase tracking-[0.08em]">📷 Vision Analysis</span>
+            <span className="text-[10px] font-semibold text-text-2 uppercase tracking-[0.08em]">📷 Photo evidence</span>
             {state.loading && <span className="w-3 h-3 border border-text-2 border-t-transparent rounded-full animate-spin" />}
             {preview && <img src={preview} alt="" className="ml-auto h-8 w-8 object-cover rounded border border-border" />}
             <button onClick={() => { setState(null); setPreview(null) }}
@@ -490,6 +477,7 @@ export default function InspectionExecution() {
     item: ChecklistItemRow,
     evidenceOverride?: { capturedValue?: string; inspectorNotes?: string },
   ) => {
+    if (!isOnline) { toast('Reconnect before recording results', 'error'); return }
     if (!record) return
     const next = results[itemId] === result ? undefined : result
     if (!next) {
@@ -512,6 +500,7 @@ export default function InspectionExecution() {
         checklistItemId:    itemId,
         result:             next,
         notes:              notesForItem,
+        capturedValue,
       })
       const momsMatch = momsData?.topNokSteps.find(s =>
         s.step_desc && (
@@ -568,6 +557,7 @@ export default function InspectionExecution() {
             checklistItemId:    itemId,
             result:             next,
             notes:              notesForItem,
+        capturedValue,
           },
           label: `${item.item_no} — ${next}`,
         })
@@ -582,6 +572,7 @@ export default function InspectionExecution() {
   }
 
   const handleCompleteClick = () => {
+    if (!isOnline || Object.values(saving).some(Boolean) || recordFinding.isPending || attachPhoto.isPending) { toast('Wait until all evidence is saved online before signing', 'error'); return }
     if (!record) return
     const missing = requiredItems.filter(i => results[i.id] == null)
     if (missing.length > 0) {
@@ -1109,8 +1100,8 @@ function CompletionSummaryScreen({ summary: s, onBack }: { summary: CompletionSu
         </Card>
       )}
 
-      {/* Maximo payload */}
-      <div className="mt-5 bg-bg-2 border border-border rounded-[12px] overflow-hidden">
+      {/* Optional integration drafting is excluded from the default release. */}
+      {import.meta.env.VITE_ENABLE_AI === 'true' && <div className="mt-5 bg-bg-2 border border-border rounded-[12px] overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div>
             <p className="text-[13px] font-semibold text-text">IBM Maximo Work Order Payload</p>
@@ -1144,6 +1135,7 @@ function CompletionSummaryScreen({ summary: s, onBack }: { summary: CompletionSu
         )}
       </div>
 
+      }
       <div className="flex justify-between mt-5">
         <Button variant="secondary" onClick={onBack}>Back to Inspections</Button>
         <Button variant="primary" onClick={() => window.print()}>Print / Save PDF</Button>

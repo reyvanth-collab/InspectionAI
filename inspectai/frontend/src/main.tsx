@@ -1,24 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { queryClient } from './lib/queryClient'
 import './index.css'
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime:        1000 * 60 * 5,   // data stays fresh for 5 min — no refetch on tab switch
-      gcTime:           1000 * 60 * 30,  // keep unused cache for 30 min — back-navigation is instant
-      retry:            1,
-      refetchOnWindowFocus: false,       // don't refetch just because user switched tabs
-    },
-  },
-})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <ErrorBoundary><App /></ErrorBoundary>
     </QueryClientProvider>
   </React.StrictMode>,
 )

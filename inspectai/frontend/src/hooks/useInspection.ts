@@ -80,19 +80,20 @@ export function useRecordFinding() {
       inspectionRecordId,
       checklistItemId,
       result,
-      notes,
+      notes, capturedValue,
     }: {
       workOrderDbId: string
       inspectionRecordId: string
       checklistItemId:    string
       result:             'pass' | 'fail' | 'na'
+      capturedValue?:     string
       notes?:             string
     }) => {
       const res = await api.post<{ data: InspectionFinding }>(`/inspections/${workOrderDbId}/findings`, {
         inspectionRecordId,
         checklistItemId,
         result,
-        notes,
+        notes, capturedValue,
       })
       return res.data.data
     },

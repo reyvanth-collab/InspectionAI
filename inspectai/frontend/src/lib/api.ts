@@ -16,9 +16,14 @@ api.interceptors.request.use(config => {
 
 // Global error normalisation — 401 clears the stored token
 api.interceptors.response.use(
-  res => res,
+  res => {
+    const sent = res.config.headers.Authorization
+    const current = localStorage.getItem(JWT_KEY)
+    if (sent && sent !== `Bearer ${current}`) return Promise.reject(new Error('Session changed; response discarded'))
+    return res
+  },
   err => {
-    if (err.response?.status === 401) localStorage.removeItem(JWT_KEY)
+    if (err.response?.status === 401 && err.config?.headers?.Authorization === `Bearer ${localStorage.getItem(JWT_KEY)}`) { localStorage.removeItem(JWT_KEY); window.dispatchEvent(new Event('session-expired')) }
     const message = err.response?.data?.error ?? err.message ?? 'Unknown error'
     return Promise.reject(new Error(message))
   }

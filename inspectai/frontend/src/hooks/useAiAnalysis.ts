@@ -1,3 +1,4 @@
+import { readSse } from '@/lib/sse'
 import { useState, useCallback } from 'react'
 import { JWT_KEY } from '@/lib/api'
 
@@ -61,6 +62,7 @@ export function useAiAnalysis() {
   const [analyses, setAnalyses] = useState<Record<string, AiAnalysis>>({})
 
   const analyse = useCallback(async (params: AnalyseParams) => {
+    if (import.meta.env.VITE_ENABLE_AI !== 'true') return
     const { itemId, ...body } = params
 
     setAnalyses(prev => ({
@@ -85,42 +87,8 @@ export function useAiAnalysis() {
         throw new Error(text || `HTTP ${res.status}`)
       }
 
-      const reader  = res.body.getReader()
-      const decoder = new TextDecoder()
+      await readSse(res, text => setAnalyses(prev => ({ ...prev, [itemId]: { ...prev[itemId], text: (prev[itemId]?.text ?? '') + text } })))
 
-      let streamDone = false
-      while (!streamDone) {
-        const { done, value } = await reader.read()
-        streamDone = done
-        if (streamDone) break
-
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n').filter(l => l.startsWith('data: '))
-
-        for (const line of lines) {
-          const json = line.slice(6).trim()
-          if (json === '[DONE]') {
-            setAnalyses(prev => ({
-              ...prev,
-              [itemId]: { ...prev[itemId], loading: false },
-            }))
-            break
-          }
-          try {
-            const parsed = JSON.parse(json) as { text?: string; error?: string }
-            if (parsed.error) throw new Error(parsed.error)
-            if (parsed.text) {
-              setAnalyses(prev => ({
-                ...prev,
-                [itemId]: {
-                  ...prev[itemId],
-                  text: (prev[itemId]?.text ?? '') + parsed.text,
-                },
-              }))
-            }
-          } catch { /* skip malformed chunk */ }
-        }
-      }
     } catch (err) {
       setAnalyses(prev => ({
         ...prev,
@@ -153,6 +121,7 @@ export function useAiValidation() {
   const [validations, setValidations] = useState<Record<string, AiValidationState>>({})
 
   const validate = useCallback(async (params: ValidateParams) => {
+    if (import.meta.env.VITE_ENABLE_AI !== 'true') return
     const { itemId, ...body } = params
     setValidations(prev => ({
       ...prev,

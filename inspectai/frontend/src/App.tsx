@@ -6,6 +6,7 @@ import { ToastProvider } from '@/components/ui/Toast'
 import type { ReactNode } from 'react'
 
 // Pages
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'))
 const Login = lazy(() => import('@/pages/Login'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Assets = lazy(() => import('@/pages/Assets'))
@@ -50,6 +51,7 @@ function AppRoutes() {
   return (
     <Suspense fallback={<FullScreenSpinner />}>
       <Routes>
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
 
       <Route path="/dashboard"     element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

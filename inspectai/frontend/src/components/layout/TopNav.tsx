@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Sun, Moon, ChevronRight, Bell } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/cn'
@@ -17,13 +17,21 @@ interface TopNavProps {
 }
 
 export function TopNav({ title, breadcrumb }: TopNavProps) {
-  const { user, theme, toggleTheme } = useAuth()
+  const navigate = useNavigate()
+  const { user, theme, toggleTheme, logout } = useAuth()
   const { data: notifs = [] } = useNotifications()
   const unread = notifs.filter((n: { read: boolean }) => !n.read).length
 
   return (
     <header className="h-[52px] bg-bg border-b border-border flex items-center px-5 gap-3 flex-shrink-0 sticky top-0 z-[100]">
 
+      <select aria-label="Navigate" defaultValue="" onChange={e => { if (e.target.value === 'logout') logout(); else navigate(e.target.value); e.target.value = '' }} className="md:hidden max-w-[100px] bg-bg text-text text-xs rounded border border-border p-2">
+        <option value="" disabled>Menu</option>
+        <option value="/dashboard">Dashboard</option><option value="/assets">Assets</option><option value="/inspections">Inspections</option><option value="/library">Library</option><option value="/reports">Reports</option>
+        {(user?.role === 'admin' || user?.role === 'approver') && <option value="/approvals">Approvals</option>}
+        {user?.role === 'admin' && <option value="/settings">Settings</option>}
+        <option value="logout">Sign out</option>
+      </select>
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 flex-1 min-w-0">
         {breadcrumb ? (

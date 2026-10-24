@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth'
-import { pool, query } from '../lib/db'
+import { pool, query, beginActorTransaction } from '../lib/db'
 import { auditLog, notifyUsers } from '../lib/events'
 
 const router = Router()
@@ -8,28 +8,11 @@ const WI_STATUSES = new Set(['draft', 'pending_approval', 'active', 'expiring', 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 // ── Auto-migrate: add field-builder columns to wi_checklist_items ──
-;(async () => {
-  try {
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS field_type     TEXT    DEFAULT 'pass_fail'`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS placeholder    TEXT`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS options_json   TEXT`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS unit           TEXT`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS min_value      NUMERIC`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS max_value      NUMERIC`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS conditional_json TEXT`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS source_page INTEGER`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS source_text TEXT`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS ai_confidence NUMERIC`)
-    await query(`ALTER TABLE public.wi_checklist_items ADD COLUMN IF NOT EXISTS ai_warnings TEXT[]`)
-  } catch (e) {
-    console.warn('[wi] column migration warning:', (e as Error).message)
-  }
-})()
-
 // ── GET /api/work-instructions ───────────────────────────────────
 router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const { search } = req.query
+    const page = Math.max(1, Math.min(10000, Number.parseInt(String(req.query.page ?? 1), 10) || 1))
     let sql = `
       SELECT wi.id, wi.wi_number, wi.title, wi.category, wi.revision,
              wi.status, wi.effective_date, wi.expiry_date,
@@ -54,10 +37,10 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
       GROUP BY wi.id, wi.wi_number, wi.title, wi.category, wi.revision,
                wi.status, wi.effective_date, wi.expiry_date, u.name
       ORDER BY wi.expiry_date ASC NULLS LAST
-      LIMIT 200`
+      LIMIT 200 OFFSET $${params.length + 1}`
 
-    const result = await query(sql, params)
-    res.json({ data: result.rows })
+    const result = await query(sql, [...params, (page - 1) * 200])
+    res.json({ data: result.rows, meta: { page, hasMore: result.rows.length === 200 } })
   } catch (err) { next(err) }
 })
 
@@ -123,7 +106,9 @@ router.get('/:id/items', requireAuth, async (req: AuthRequest, res, next) => {
 // ── POST /api/work-instructions ─────────────────────────────────
 // Creates a new WI and optionally inserts checklist items in the same request.
 router.post('/', requireAuth, requireRole('admin', 'approver'), async (req: AuthRequest, res, next) => {
+  const client = await pool.connect()
   try {
+    await beginActorTransaction(client)
     const {
       wiNumber, title, description, category, revision,
       effectiveDate, expiryDate, status, checklistItems,
@@ -133,12 +118,13 @@ router.post('/', requireAuth, requireRole('admin', 'approver'), async (req: Auth
       status?: string
       checklistItems?: ChecklistItemInput[]
     }
-    const normalizedStatus = status || 'draft'
+    const normalizedStatus = 'draft'
+    if (status && status !== 'draft') { await client.query('ROLLBACK'); res.status(409).json({ error: 'Only the approval workflow can activate an instruction' }); return }
     if (!WI_STATUSES.has(normalizedStatus)) {
       res.status(400).json({ error: 'Invalid work instruction status' }); return
     }
 
-    const wiResult = await query(
+    const wiResult = await client.query(
       `INSERT INTO public.work_instructions
          (wi_number, title, description, category, revision, status, effective_date, expiry_date, owner_id, tenant_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
@@ -153,9 +139,10 @@ router.post('/', requireAuth, requireRole('admin', 'approver'), async (req: Auth
     const wi = wiResult.rows[0]
 
     if (checklistItems?.length) {
-      await insertItems(wi.id, req.user!.tenantId, checklistItems)
+      await insertItems(wi.id, req.user!.tenantId, checklistItems, client.query.bind(client))
     }
 
+    await client.query('COMMIT')
     await auditLog({
       tenantId: req.user!.tenantId,
       userId: req.user!.id,
@@ -166,13 +153,18 @@ router.post('/', requireAuth, requireRole('admin', 'approver'), async (req: Auth
     })
 
     res.status(201).json({ data: wi })
-  } catch (err) { next(err) }
+  } catch (err) { await client.query('ROLLBACK').catch(() => undefined); next(err) } finally { client.release() }
 })
 
 // ── PUT /api/work-instructions/:id ──────────────────────────────
 // Full replacement: update metadata + delete-all + re-insert items.
 router.put('/:id', requireAuth, requireRole('admin', 'approver'), async (req: AuthRequest, res, next) => {
+  const client = await pool.connect()
   try {
+    await beginActorTransaction(client)
+    const locked = await client.query('SELECT status FROM public.work_instructions WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [req.params.id, req.user!.tenantId])
+    if (!locked.rows.length) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Not found' }); return }
+    if (locked.rows[0].status !== 'draft') { await client.query('ROLLBACK'); res.status(409).json({ error: 'Approved or submitted instructions are immutable. Create a new draft revision.' }); return }
     const {
       wiNumber, title, description, category, revision,
       effectiveDate, expiryDate, status, checklistItems,
@@ -182,12 +174,13 @@ router.put('/:id', requireAuth, requireRole('admin', 'approver'), async (req: Au
       status?: string
       checklistItems?: ChecklistItemInput[]
     }
-    const normalizedStatus = status || 'draft'
+    const normalizedStatus = 'draft'
+    if (status && status !== 'draft') { await client.query('ROLLBACK'); res.status(409).json({ error: 'Only the approval workflow can activate an instruction' }); return }
     if (!WI_STATUSES.has(normalizedStatus)) {
       res.status(400).json({ error: 'Invalid work instruction status' }); return
     }
 
-    const wiResult = await query(
+    const wiResult = await client.query(
       `UPDATE public.work_instructions
        SET    wi_number=$1, title=$2, description=$3, category=$4, revision=$5,
               status=$6, effective_date=$7, expiry_date=$8, updated_at=NOW()
@@ -203,14 +196,15 @@ router.put('/:id', requireAuth, requireRole('admin', 'approver'), async (req: Au
     if (wiResult.rows.length === 0) { res.status(404).json({ error: 'Not found' }); return }
 
     // Replace all checklist items
-    await query(
+    await client.query(
       `DELETE FROM public.wi_checklist_items WHERE work_instruction_id = $1 AND tenant_id = $2`,
       [req.params.id, req.user!.tenantId]
     )
     if (checklistItems?.length) {
-      await insertItems(req.params.id, req.user!.tenantId, checklistItems)
+      await insertItems(req.params.id, req.user!.tenantId, checklistItems, client.query.bind(client))
     }
 
+    await client.query('COMMIT')
     await auditLog({
       tenantId: req.user!.tenantId,
       userId: req.user!.id,
@@ -225,61 +219,15 @@ router.put('/:id', requireAuth, requireRole('admin', 'approver'), async (req: Au
     })
 
     res.json({ data: wiResult.rows[0] })
-  } catch (err) { next(err) }
+  } catch (err) { await client.query('ROLLBACK'); next(err) } finally { client.release() }
 })
 
 // ── PATCH /api/work-instructions/:id ────────────────────────────
-router.patch('/:id', requireAuth, requireRole('admin', 'approver'), async (req: AuthRequest, res, next) => {
-  try {
-    const { title, description, category, revision, effectiveDate, expiryDate } = req.body
-    const result = await query(
-      `UPDATE public.work_instructions
-       SET    title=$1, description=$2, category=$3, revision=$4,
-              effective_date=$5, expiry_date=$6, updated_at=NOW()
-       WHERE  id=$7 AND tenant_id=$8
-       RETURNING *`,
-      [title, description || null, category || null, revision,
-       effectiveDate || null, expiryDate || null, req.params.id, req.user!.tenantId]
-    )
-    if (result.rows.length === 0) { res.status(404).json({ error: 'Not found' }); return }
-    await auditLog({
-      tenantId: req.user!.tenantId,
-      userId: req.user!.id,
-      action: 'wi.updated',
-      entityType: 'work_instructions',
-      entityId: req.params.id,
-      detail: { title, category, revision },
-    })
-    res.json({ data: result.rows[0] })
-  } catch (err) { next(err) }
-})
-
-// ── PATCH /api/work-instructions/:id/status ─────────────────────
-router.patch('/:id/status', requireAuth, requireRole('admin', 'approver'), async (req: AuthRequest, res, next) => {
-  try {
-    const { status } = req.body as { status: string }
-    if (!WI_STATUSES.has(status)) {
-      res.status(400).json({ error: 'Invalid work instruction status' }); return
-    }
-    const result = await query(
-      `UPDATE public.work_instructions SET status=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3 RETURNING *`,
-      [status, req.params.id, req.user!.tenantId]
-    )
-    if (result.rows.length === 0) { res.status(404).json({ error: 'Not found' }); return }
-    await auditLog({
-      tenantId: req.user!.tenantId,
-      userId: req.user!.id,
-      action: 'wi.status.updated',
-      entityType: 'work_instructions',
-      entityId: req.params.id,
-      detail: { status },
-    })
-    res.json({ data: result.rows[0] })
-  } catch (err) { next(err) }
-})
+router.patch('/:id', requireAuth, (_req, res) => { res.status(405).json({ error: 'Use the draft editor; approved revisions are immutable' }) })
+router.patch('/:id/status', requireAuth, (_req, res) => { res.status(405).json({ error: 'Use the approval workflow' }) })
 
 // ── POST /api/work-instructions/:id/submit-approval ─────────────
-router.post('/:id/submit-approval', requireAuth, async (req: AuthRequest, res, next) => {
+router.post('/:id/submit-approval', requireAuth, requireRole('admin', 'approver'), async (req: AuthRequest, res, next) => {
   const client = await pool.connect()
   try {
     const { approverIds } = req.body as { approverIds: string[] }
@@ -307,7 +255,7 @@ router.post('/:id/submit-approval', requireAuth, async (req: AuthRequest, res, n
       res.status(400).json({ error: 'Approvers must be active admin or approver users in your tenant' }); return
     }
 
-    await client.query('BEGIN')
+    await beginActorTransaction(client)
 
     const wiRes = await client.query(
       `SELECT id, wi_number, title, revision, status
@@ -321,6 +269,8 @@ router.post('/:id/submit-approval', requireAuth, async (req: AuthRequest, res, n
       res.status(404).json({ error: 'Work instruction not found' }); return
     }
 
+    if (wiRes.rows[0].status !== 'draft') { await client.query('ROLLBACK'); res.status(409).json({ error: 'Only a draft can be submitted' }); return }
+    if (uniqueApproverIds.includes(req.user!.id)) { await client.query('ROLLBACK'); res.status(400).json({ error: 'Submitter cannot approve their own instruction' }); return }
     const activeRes = await client.query(
       `SELECT id
        FROM public.approval_records
@@ -393,6 +343,21 @@ router.post('/:id/submit-approval', requireAuth, async (req: AuthRequest, res, n
   }
 })
 
+router.post('/:id/revise', requireAuth, requireRole('admin', 'approver'), async (req: AuthRequest, res, next) => {
+ const client = await pool.connect()
+ try {
+  await beginActorTransaction(client)
+  const source = await client.query('SELECT * FROM public.work_instructions WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [req.params.id, req.user!.tenantId])
+  if (!source.rows.length) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Not found' }); return }
+  const old = source.rows[0]
+  const created = await client.query(`INSERT INTO public.work_instructions(tenant_id,wi_number,title,description,category,revision,status,owner_id)
+   VALUES($1,$2,$3,$4,$5,$6,'draft',$7) RETURNING *`, [req.user!.tenantId,old.wi_number,old.title,old.description,old.category,`Draft ${Date.now()}`,req.user!.id])
+  await client.query(`INSERT INTO public.wi_checklist_items(tenant_id,work_instruction_id,item_no,description,acceptance_criteria,category,sort_order,field_type,required,placeholder,options_json,unit,min_value,max_value,conditional_json,source_page,source_text,ai_confidence,ai_warnings)
+   SELECT tenant_id,$1,item_no,description,acceptance_criteria,category,sort_order,field_type,required,placeholder,options_json,unit,min_value,max_value,conditional_json,source_page,source_text,ai_confidence,ai_warnings FROM public.wi_checklist_items WHERE work_instruction_id=$2 AND tenant_id=$3`, [created.rows[0].id, old.id, req.user!.tenantId])
+  await client.query('COMMIT'); res.status(201).json({ data: created.rows[0] })
+ } catch (err) { await client.query('ROLLBACK').catch(() => undefined); next(err) } finally { client.release() }
+})
+
 // ── Helpers ──────────────────────────────────────────────────────
 interface ChecklistItemInput {
   itemNo:              string
@@ -414,7 +379,7 @@ interface ChecklistItemInput {
   sortOrder:           number
 }
 
-async function insertItems(wiId: string, tenantId: string, items: ChecklistItemInput[]) {
+async function insertItems(wiId: string, tenantId: string, items: ChecklistItemInput[], run: typeof query = query) {
   const CHUNK = 100
   for (let i = 0; i < items.length; i += CHUNK) {
     const chunk = items.slice(i, i + CHUNK)
@@ -442,7 +407,7 @@ async function insertItems(wiId: string, tenantId: string, items: ChecklistItemI
       return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},$${b+13},$${b+14},$${b+15},$${b+16},$${b+17},$${b+18},$${b+19})`
     }).join(',')
 
-    await query(
+    await run(
       `INSERT INTO public.wi_checklist_items
          (work_instruction_id, tenant_id, item_no, description, acceptance_criteria, category,
           field_type, required, placeholder, options_json, unit, min_value, max_value,

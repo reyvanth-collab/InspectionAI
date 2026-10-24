@@ -7,6 +7,8 @@ export function errorHandler(
   _next: NextFunction
 ) {
   console.error('[error]', err.message)
+  if (err.code === '23514') { res.status(409).json({ error: err.message }); return }
+  if (err.code === '23505') { res.status(409).json({ error: 'A record with this identifier already exists' }); return }
   if (err.code === '23503') {
     res.status(400).json({ error: 'The request references data that does not exist or is not available' }); return
   }

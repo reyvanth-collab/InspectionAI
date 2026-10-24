@@ -67,6 +67,7 @@ class OpenAiProvider implements AiProvider {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const response = await this.fetchImpl('https://api.openai.com/v1/responses', {
         method: 'POST',
+        signal: AbortSignal.timeout(60_000),
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
         body: JSON.stringify({ model: this.model, max_output_tokens: maxTokens, input }),
       })

@@ -17,6 +17,9 @@ export function validateProductionConfig() {
   if ((process.env.JWT_SECRET?.length ?? 0) < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in production')
   }
+  if (required.some(([, value]) => /your-|change-me|placeholder|fallback-dev|REPLACE|YOUR_/i.test(value ?? ''))) throw new Error('Replace all placeholder production configuration')
+  if (!process.env.FRONTEND_URL?.split(',').every(url => url.trim().startsWith('https://'))) throw new Error('Production frontend URLs must use HTTPS')
+  if (process.env.ENABLE_AI_ASSISTANCE === 'true') throw new Error('AI assistance is not enabled for this release; keep ENABLE_AI_ASSISTANCE=false')
   if (process.env.ANTHROPIC_API_KEY?.includes('your-')) {
     throw new Error('ANTHROPIC_API_KEY contains the placeholder value')
   }

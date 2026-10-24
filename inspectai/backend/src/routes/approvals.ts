@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth'
-import { pool, query } from '../lib/db'
+import { pool, query, beginActorTransaction } from '../lib/db'
 import { auditLog, createNotification } from '../lib/events'
 
 const router = Router()
@@ -54,7 +54,7 @@ router.patch('/steps/:stepId/approve', requireAuth, requireRole('admin', 'approv
   const client = await pool.connect()
   try {
     const { comment } = req.body as { comment?: string }
-    await client.query('BEGIN')
+    await beginActorTransaction(client)
 
     const stepRes = await client.query(
       `SELECT s.*, ar.work_instruction_id, ar.submitted_by, ar.final_status,
@@ -75,6 +75,7 @@ router.patch('/steps/:stepId/approve', requireAuth, requireRole('admin', 'approv
     }
 
     const step = stepRes.rows[0]
+    if (step.submitted_by === req.user!.id) { await client.query('ROLLBACK'); res.status(403).json({ error: 'Submitter cannot approve their own revision' }); return }
     if (step.status !== 'active') {
       await client.query('ROLLBACK')
       res.status(409).json({ error: 'Only the active approval step can be approved' }); return
@@ -197,7 +198,7 @@ router.patch('/steps/:stepId/reject', requireAuth, requireRole('admin', 'approve
       res.status(400).json({ error: 'A rejection comment is required' }); return
     }
 
-    await client.query('BEGIN')
+    await beginActorTransaction(client)
     const stepRes = await client.query(
       `SELECT s.*, ar.work_instruction_id, ar.submitted_by,
               wi.wi_number, wi.title AS wi_title, wi.revision
@@ -217,6 +218,7 @@ router.patch('/steps/:stepId/reject', requireAuth, requireRole('admin', 'approve
     }
 
     const step = stepRes.rows[0]
+    if (step.submitted_by === req.user!.id) { await client.query('ROLLBACK'); res.status(403).json({ error: 'Submitter cannot approve their own revision' }); return }
     if (step.status !== 'active') {
       await client.query('ROLLBACK')
       res.status(409).json({ error: 'Only the active approval step can be rejected' }); return

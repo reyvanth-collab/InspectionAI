@@ -1,3 +1,4 @@
+import { fetchPages } from '@/lib/pages'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
@@ -46,8 +47,8 @@ export function useWorkInstructions(search?: string) {
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const params = search ? `?search=${encodeURIComponent(search)}` : ''
-      const res = await api.get<{ data: DBWorkInstruction[] }>(`/work-instructions${params}`)
-      return res.data.data.map(toWorkInstruction)
+      const rows = await fetchPages<DBWorkInstruction>(`/work-instructions${params}`)
+      return rows.map(toWorkInstruction)
     },
   })
 }
