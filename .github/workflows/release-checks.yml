@@ -45,6 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build --build-arg VITE_SUPABASE_URL=https://example.invalid --build-arg VITE_SUPABASE_ANON_KEY=build-test -t inspectai:ci inspectai
+      - name: Validate HTTPS proxy configuration
+        run: docker run --rm -e APP_DOMAIN=example.invalid -v "$PWD/inspectai/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
       - name: Production container startup smoke test
         run: |
           docker run -d --name inspectai-ci -p 4000:4000 --read-only --tmpfs /tmp -e NODE_ENV=production -e JWT_SECRET=ci-only-secret-at-least-forty-eight-characters-long -e FRONTEND_URL=https://example.invalid -e SUPABASE_URL=https://example.invalid -e SUPABASE_SERVICE_ROLE_KEY=inert-ci-key -e DATABASE_URL=postgresql://nobody:invalid@127.0.0.1:9/none inspectai:ci

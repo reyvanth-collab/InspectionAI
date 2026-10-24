@@ -1,6 +1,8 @@
 {$APP_DOMAIN} {
   encode zstd gzip
-  request_body { max_size 31MB }
+  request_body {
+    max_size 31MB
+  }
   reverse_proxy app:4000 {
     health_uri /api/ready
     health_interval 10s
