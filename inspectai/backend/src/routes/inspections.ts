@@ -102,7 +102,7 @@ router.get('/:id/record', requireAuth, async (req: AuthRequest, res, next) => {
 
     const record = recordRes.rows[0]
     const findingsRes = await query(
-      `SELECT id, result, notes, photo_urls,
+      `SELECT id, result, notes, captured_value, photo_urls,
               ai_root_cause, ai_failure_class, ai_failure_code, ai_recommended_action,
               ai_validation_status, ai_validation_confidence, ai_validation_reason,
               ai_validation_recommended_result, ai_validation_evidence,
@@ -638,7 +638,7 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
         error: `Complete all required checklist items before signing (${counts.required_answered}/${counts.required_total} complete)`,
       }); return
     }
-    const overallResult = counts.failed > 0 ? 'fail' : 'pass'
+    const overallResult = counts.failed > 0 ? 'fail' : counts.passed > 0 ? 'pass' : 'na'
     const snapshotRes = await client.query(
       `SELECT ci.id, ci.item_no, ci.description, ci.acceptance_criteria, ci.field_type,
               ci.min_value, ci.max_value, f.result, f.notes, f.captured_value, f.photo_urls

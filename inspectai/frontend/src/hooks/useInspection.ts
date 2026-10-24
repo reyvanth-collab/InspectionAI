@@ -6,6 +6,7 @@ export interface InspectionFinding {
   id: string
   result: 'pass' | 'fail' | 'na' | null
   notes: string | null
+  captured_value: string | null
   photo_urls: string[] | null
   ai_root_cause: string | null
   ai_failure_class: string | null
@@ -145,7 +146,7 @@ export function useCompleteInspection() {
       const res = await api.post<{
         data: {
           success: boolean
-          overallResult: 'pass' | 'fail'
+          overallResult: 'pass' | 'fail' | 'na'
           passed: number
           failed: number
           na: number

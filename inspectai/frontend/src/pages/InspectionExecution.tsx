@@ -387,12 +387,15 @@ export default function InspectionExecution() {
   useEffect(() => {
     if (!record?.id || recordHydrated.current === record.id) return
     const restoredNotes: Record<string, string> = {}
+    const restoredValues: Record<string, string> = {}
     for (const finding of record.inspection_findings ?? []) {
+      if (finding.captured_value != null) restoredValues[finding.checklist_item_id] = finding.captured_value
       if (finding.notes) restoredNotes[finding.checklist_item_id] = finding.notes
     }
     if (Object.keys(restoredNotes).length > 0) {
       setLocalNotes(prev => ({ ...restoredNotes, ...prev }))
     }
+    setLocalValues(prev => ({ ...restoredValues, ...prev }))
     recordHydrated.current = record.id
   }, [record])
 
@@ -490,9 +493,7 @@ export default function InspectionExecution() {
     setSaving(prev => ({ ...prev, [itemId]: true }))
     const capturedValue = evidenceOverride?.capturedValue ?? localValues[itemId]
     const inspectorNotes = evidenceOverride?.inspectorNotes ?? localNotes[itemId]
-    const notesForItem = capturedValue
-      ? `${capturedValue}${inspectorNotes ? '\n' + inspectorNotes : ''}`
-      : inspectorNotes
+    const notesForItem = inspectorNotes
     try {
       await recordFinding.mutateAsync({
         workOrderDbId,
@@ -1047,7 +1048,7 @@ function CompletionSummaryScreen({ summary: s, onBack }: { summary: CompletionSu
         </div>
         <div className="flex-1">
           <p className={cn('text-[18px] font-semibold', isPassed ? 'text-success' : 'text-danger')}>
-            Inspection {isPassed ? 'PASSED' : 'FAILED'}
+            Inspection {s.overallResult === 'na' ? 'NOT APPLICABLE' : isPassed ? 'PASSED' : 'FAILED'}
           </p>
           <p className="text-[12px] text-text-2 mt-0.5">
             {s.woNumber} · {s.assetName}{s.location ? ` · ${s.location}` : ''}

@@ -65,6 +65,8 @@ let base;
  await expect(409,'/inspections/'+wo.id+'/findings',{inspectionRecordId:record.id,checklistItemId:item.id,result:'fail'},'inspector');
  await assert.rejects(db.query('UPDATE public.inspection_findings SET notes=$1 WHERE inspection_record_id=$2',['tamper',record.id]),/already signed/);checks++;
  await assert.rejects(db.query('UPDATE public.wi_checklist_items SET description=$1 WHERE id=$2',['tamper',item.id]),/draft/);checks++;
+ const savedRecord = await expect(200,'/inspections/'+wo.id+'/record',undefined,'inspector','GET');
+ assert.equal(savedRecord.inspection_findings[0].captured_value, '3'); checks++;
  const clone=await expect(201,'/work-instructions/'+wi.id+'/revise',{});
  assert.notEqual(clone.id,wi.id);assert.equal(clone.status,'draft');checks+=2;
  await expect(200,'/work-instructions/'+clone.id,{wiNumber:'WI',title:'New revision',revision:'2',status:'draft',checklistItems:[{itemNo:'1',description:'Changed',sortOrder:1}]},'admin','PUT');
