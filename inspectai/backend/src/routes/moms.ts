@@ -1,47 +1,15 @@
 import { Router } from 'express'
 import multer from 'multer'
-import * as XLSX from 'xlsx'
+import readXlsxFile from 'read-excel-file/node'
+import crypto from 'crypto'
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth'
-import { query } from '../lib/db'
+import { query, pool, beginActorTransaction } from '../lib/db'
 import { auditLog } from '../lib/events'
 
 const router  = Router()
-const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } })
+const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
 // ── DDL: ensure table exists with correct schema ───────────────
-const CREATE_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS public.moms_checklist_steps (
-    id               BIGSERIAL PRIMARY KEY,
-    tenant_id        UUID NOT NULL,
-    moms_id          BIGINT,
-    work_order_id    TEXT,
-    template_id      TEXT,
-    template_name    TEXT,
-    wi_number        TEXT,
-    wr_number        TEXT,
-    wi_title         TEXT,
-    station          TEXT,
-    equipment_id     TEXT,
-    section_name     TEXT,
-    sub_section_no   TEXT,
-    sub_section_name TEXT,
-    sub_item_no      TEXT,
-    sub_item_name    TEXT,
-    step_no          TEXT,
-    step_desc        TEXT,
-    col_header       TEXT,
-    ctrl_type        TEXT,
-    category         TEXT,
-    result           TEXT,
-    remark           TEXT,
-    is_filled        BOOLEAN DEFAULT FALSE,
-    has_nok          BOOLEAN DEFAULT FALSE,
-    filled_by        TEXT,
-    inspected_at     TIMESTAMPTZ,
-    imported_at      TIMESTAMPTZ DEFAULT NOW()
-  )
-`
-
 // ── Parse Excel row → DB row ───────────────────────────────────
 // Handles both extract.py v4 columns and older column names gracefully.
 interface StepRow {
@@ -77,10 +45,7 @@ function str(v: unknown): string | null {
   return String(v).trim()
 }
 
-function parseRows(sheet: XLSX.WorkSheet): StepRow[] {
-  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-    defval: null,
-  })
+function parseRows(raw: Record<string, unknown>[]): StepRow[] {
 
   return raw.map(r => {
     // extract.py v4 uses FieldLabel; older may use StepDesc
@@ -137,38 +102,29 @@ router.post(
   requireRole('admin', 'approver'),
   upload.single('file'),
   async (req: AuthRequest, res, next) => {
+    const client = await pool.connect()
     try {
       if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return }
 
-      const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true })
-
-      // Accept All_Years, Checklist_Steps, or any year sheet
-      const sheetName =
-        wb.SheetNames.find(n => n === 'All_Years') ??
-        wb.SheetNames.find(n => n === 'Checklist_Steps') ??
-        wb.SheetNames.find(n => /^\d{4}$/.test(n))
-
-      if (!sheetName) {
-        res.status(422).json({
-          error: `No recognised sheet found. Expected 'All_Years' or 'Checklist_Steps'. Found: ${wb.SheetNames.join(', ')}`,
-        }); return
-      }
-
-      const rows = parseRows(wb.Sheets[sheetName])
+      if (process.env.ENABLE_MOMS_IMPORT !== 'true') { res.status(503).json({ error: 'Historical import is disabled for this deployment' }); return }
+      if (!req.file.originalname.toLowerCase().endsWith('.xlsx') || req.file.buffer.subarray(0,2).toString() !== 'PK') { res.status(400).json({ error: 'Upload an XLSX workbook' }); return }
+      const sheets = await readXlsxFile(req.file.buffer)
+      const chosen = sheets.find(s => s.sheet === 'All_Years') ?? sheets.find(s => s.sheet === 'Checklist_Steps')
+      if (!chosen) { res.status(422).json({ error: 'Expected All_Years or Checklist_Steps sheet' }); return }
+      const sheetName = chosen.sheet
+      const [headers, ...data] = chosen.data
+      if (!headers || data.length > 10000 || !headers.includes('WorkOrderID') || !headers.includes('WI_Number')) { res.status(422).json({ error: 'Required columns missing or 10,000 row limit exceeded' }); return }
+      const raw = data.map(values => Object.fromEntries(headers.map((h,i) => [String(h), values[i]])))
+      const rows = parseRows(raw)
+      if (rows.some(row => !row.work_order_id || !row.wi_number || (row.inspected_at && !Number.isFinite(row.inspected_at.getTime())))) { res.status(422).json({ error: 'Invalid work order, instruction or date in workbook' }); return }
       if (rows.length === 0) {
         res.status(422).json({ error: `No rows found in sheet '${sheetName}'` }); return
       }
 
-      // Ensure table + indexes; backfill columns added after initial deploy
-      await query(CREATE_TABLE_SQL)
-      await query(`ALTER TABLE IF EXISTS public.moms_checklist_steps ADD COLUMN IF NOT EXISTS section_name     TEXT`)
-      await query(`ALTER TABLE IF EXISTS public.moms_checklist_steps ADD COLUMN IF NOT EXISTS sub_section_name TEXT`)
-      await query(`ALTER TABLE IF EXISTS public.moms_checklist_steps ADD COLUMN IF NOT EXISTS category         TEXT`)
-      await query(`CREATE INDEX IF NOT EXISTS idx_moms_tenant_wi    ON public.moms_checklist_steps (tenant_id, wi_number)`)
-      await query(`CREATE INDEX IF NOT EXISTS idx_moms_work_order   ON public.moms_checklist_steps (tenant_id, work_order_id)`)
-      await query(`CREATE INDEX IF NOT EXISTS idx_moms_inspected_at ON public.moms_checklist_steps (tenant_id, inspected_at)`)
-      await query(`CREATE INDEX IF NOT EXISTS idx_moms_category     ON public.moms_checklist_steps (tenant_id, category)`)
-
+      await beginActorTransaction(client)
+      const digest = crypto.createHash('sha256').update(req.file.buffer).digest('hex')
+      const receipt = await client.query('INSERT INTO public.import_receipts(tenant_id,digest,row_count) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING digest', [req.user!.tenantId, digest, rows.length])
+      if (!receipt.rows.length) { await client.query('ROLLBACK'); res.status(409).json({ error: 'This file has already been imported' }); return }
       const tenantId = req.user!.tenantId
       const CHUNK    = 500
       let   inserted = 0
@@ -189,7 +145,7 @@ router.post(
           return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},$${b+13},$${b+14},$${b+15},$${b+16},$${b+17},$${b+18},$${b+19},$${b+20},$${b+21},$${b+22},$${b+23},$${b+24},$${b+25},$${b+26},NOW())`
         }).join(',')
 
-        await query(
+        await client.query(
           `INSERT INTO public.moms_checklist_steps
              (tenant_id,moms_id,work_order_id,template_id,template_name,wi_number,wr_number,wi_title,
               station,equipment_id,section_name,sub_section_no,sub_section_name,sub_item_no,sub_item_name,
@@ -201,6 +157,7 @@ router.post(
         inserted += chunk.length
       }
 
+      await client.query('COMMIT')
       // Build response summary
       const wiNumbers  = [...new Set(rows.map(r => r.wi_number).filter(Boolean))]
       const woIds      = [...new Set(rows.map(r => r.work_order_id).filter(Boolean))]
@@ -222,7 +179,7 @@ router.post(
         entityType: 'moms_checklist_steps',
         detail: { inserted, sheet: sheetName, wi_numbers: wiNumbers, work_orders: woIds.length, nok_count: nokCount },
       })
-    } catch (err) { next(err) }
+    } catch (err) { await client.query('ROLLBACK').catch(() => undefined); next(err) } finally { client.release() }
   }
 )
 

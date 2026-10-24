@@ -6,6 +6,7 @@ export interface InspectionFinding {
   id: string
   result: 'pass' | 'fail' | 'na' | null
   notes: string | null
+  captured_value: string | null
   photo_urls: string[] | null
   ai_root_cause: string | null
   ai_failure_class: string | null
@@ -80,19 +81,20 @@ export function useRecordFinding() {
       inspectionRecordId,
       checklistItemId,
       result,
-      notes,
+      notes, capturedValue,
     }: {
       workOrderDbId: string
       inspectionRecordId: string
       checklistItemId:    string
       result:             'pass' | 'fail' | 'na'
+      capturedValue?:     string
       notes?:             string
     }) => {
       const res = await api.post<{ data: InspectionFinding }>(`/inspections/${workOrderDbId}/findings`, {
         inspectionRecordId,
         checklistItemId,
         result,
-        notes,
+        notes, capturedValue,
       })
       return res.data.data
     },
@@ -144,7 +146,7 @@ export function useCompleteInspection() {
       const res = await api.post<{
         data: {
           success: boolean
-          overallResult: 'pass' | 'fail'
+          overallResult: 'pass' | 'fail' | 'na'
           passed: number
           failed: number
           na: number

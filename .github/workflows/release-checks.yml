@@ -1,0 +1,56 @@
+name: Release checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inspectai/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: inspectai/backend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm audit --omit=dev
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inspectai/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: inspectai/frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://example.invalid
+          VITE_SUPABASE_ANON_KEY: test-build-only
+      - run: npm audit --omit=dev
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --reporter=line
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --build-arg VITE_SUPABASE_URL=https://example.invalid --build-arg VITE_SUPABASE_ANON_KEY=build-test -t inspectai:ci inspectai
+      - name: Validate HTTPS proxy configuration
+        run: docker run --rm -e APP_DOMAIN=example.invalid -v "$PWD/inspectai/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+      - name: Production container startup smoke test
+        run: |
+          docker run -d --name inspectai-ci -p 4000:4000 --read-only --tmpfs /tmp -e NODE_ENV=production -e JWT_SECRET=ci-only-secret-at-least-forty-eight-characters-long -e FRONTEND_URL=https://example.invalid -e SUPABASE_URL=https://example.invalid -e SUPABASE_SERVICE_ROLE_KEY=inert-ci-key -e DATABASE_URL=postgresql://nobody:invalid@127.0.0.1:9/none inspectai:ci
+          for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:4000/api/health && break || sleep 1; done
+          curl -fsS http://127.0.0.1:4000/login | grep 'root'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/api/missing)" = 404
+          docker logs inspectai-ci

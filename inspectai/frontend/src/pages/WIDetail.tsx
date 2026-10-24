@@ -1,3 +1,4 @@
+import { api } from '@/lib/api'
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -103,7 +104,8 @@ export default function WIDetail() {
           </p>
         </div>
         <div className="flex gap-2">
-          {w.status === 'draft' || w.status === 'active' ? (
+          <Button variant="secondary" onClick={async () => { try { if (w.status === 'draft') { navigate(`/library/${dbId}/edit`); return } const response = await api.post(`/work-instructions/${dbId}/revise`); navigate(`/library/${response.data.data.id}/edit`) } catch (e) { toast(e instanceof Error ? e.message : 'Could not create revision', 'error') } }}>{w.status === 'draft' ? 'Edit draft' : 'Create new revision'}</Button>
+          {w.status === 'draft' ? (
             <Button variant="secondary" onClick={() => setShowApprovalModal(true)}>
               Submit for Approval
             </Button>

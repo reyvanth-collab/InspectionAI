@@ -4,7 +4,7 @@ const SECRET = process.env.JWT_SECRET ?? 'fallback-dev-secret'
 if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) {
   throw new Error('JWT_SECRET must be set to at least 32 characters in production')
 }
-const EXPIRES = '8h'
+const EXPIRES = '2h'
 
 export interface JWTPayload {
   id:       string
@@ -13,6 +13,7 @@ export interface JWTPayload {
   staffId:  string
   tenantId: string
   name:     string
+  authVersion: string
 }
 
 export function signToken(payload: JWTPayload): string {
@@ -23,7 +24,7 @@ export function verifyToken(token: string): JWTPayload {
   const decoded = jwt.verify(token, SECRET)
   if (typeof decoded !== 'object' || decoded === null) throw new Error('Invalid token payload')
   const payload = decoded as Partial<JWTPayload>
-  if (!payload.id || !payload.email || !payload.role || !payload.tenantId) {
+  if (!payload.id || !payload.email || !payload.role || !payload.tenantId || !payload.authVersion) {
     throw new Error('Invalid token payload')
   }
   return payload as JWTPayload

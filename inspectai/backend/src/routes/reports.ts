@@ -7,7 +7,8 @@ const router = Router()
 // GET /api/reports/inspection-summary?days=30
 router.get('/inspection-summary', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const days  = Math.min(parseInt(String(req.query.days ?? '30')), 365)
+    const page = Math.max(1, Math.min(10000, Number.parseInt(String(req.query.page ?? 1), 10) || 1))
+    const days = Math.max(1, Math.min(Number.parseInt(String(req.query.days ?? '30'), 10) || 30, 365))
     const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
     const result = await query(
@@ -34,10 +35,10 @@ router.get('/inspection-summary', requireAuth, async (req: AuthRequest, res, nex
        GROUP BY wo.wo_number, wo.asset_name, wo.location, wo.completed_at,
                 u.name, wi.wi_number, wi.title, ir.overall_result
        ORDER BY wo.completed_at DESC NULLS LAST
-       LIMIT  200`,
-      [req.user!.tenantId, since]
+       LIMIT 200 OFFSET $3`,
+      [req.user!.tenantId, since, (page - 1) * 200]
     )
-    res.json({ data: result.rows })
+    res.json({ data: result.rows, meta: { page, hasMore: result.rows.length === 200 } })
   } catch (err) { next(err) }
 })
 
@@ -70,7 +71,7 @@ router.get('/wi-compliance', requireAuth, async (req: AuthRequest, res, next) =>
 // GET /api/reports/defect-analysis?days=30
 router.get('/defect-analysis', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const days  = Math.min(parseInt(String(req.query.days ?? '30')), 365)
+    const days = Math.max(1, Math.min(Number.parseInt(String(req.query.days ?? '30'), 10) || 30, 365))
     const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
     const result = await query(

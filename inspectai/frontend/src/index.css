@@ -112,3 +112,11 @@
     animation: pulse-dot 1.4s ease-in-out infinite;
   }
 }
+
+@media print {
+ aside, header, button, nav { display: none !important; }
+ .h-screen { height: auto !important; }
+ .overflow-hidden, .overflow-y-auto, .overflow-x-auto { overflow: visible !important; }
+ .max-h-\[400px\] { max-height: none !important; }
+ body { background: white !important; color: black !important; }
+}

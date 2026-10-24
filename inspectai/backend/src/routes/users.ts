@@ -53,6 +53,7 @@ router.get('/assignable', requireAuth, async (req: AuthRequest, res, next) => {
 // PATCH /api/users/:id/role — update a user's role (admin only)
 router.patch('/:id/role', requireAuth, requireRole('admin'), async (req: AuthRequest, res, next) => {
   try {
+    if (req.params.id === req.user!.id) { res.status(403).json({ error: 'Ask another administrator to change your role' }); return }
     const { role } = req.body as { role: string }
     const allowedRoles = new Set(['admin', 'approver', 'inspector', 'viewer'])
     if (!allowedRoles.has(role)) {

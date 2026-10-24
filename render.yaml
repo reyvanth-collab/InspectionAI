@@ -1,0 +1,38 @@
+# Staging only: no paid resources, automatic upgrades, or production data.
+services:
+  - type: web
+    name: inspectai-staging
+    runtime: docker
+    plan: free
+    region: singapore
+    repo: https://github.com/reyvanth-collab/InspectionAI
+    branch: fix/production-release-hardening
+    dockerfilePath: ./inspectai/Dockerfile
+    dockerContext: ./inspectai
+    autoDeployTrigger: 'off'
+    healthCheckPath: /api/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_VERSION
+        value: 1.0.0-rc.1
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENABLE_AI_ASSISTANCE
+        value: 'false'
+      - key: ENABLE_PDF_EXTRACTION
+        value: 'false'
+      - key: ENABLE_MOMS_IMPORT
+        value: 'false'
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false

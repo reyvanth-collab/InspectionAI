@@ -12,7 +12,7 @@ const client = new pg.Client({ connectionString: process.env.DATABASE_URL })
 const checks = []
 try {
   await client.connect()
-  const requiredTables = ['assets', 'work_orders', 'job_queue', 'audit_logs']
+  const requiredTables = ['assets', 'work_orders', 'job_queue', 'audit_logs', 'moms_checklist_steps', 'import_receipts']
   const tables = await client.query(
     `SELECT c.relname, c.relrowsecurity
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -21,7 +21,7 @@ try {
   )
   for (const table of requiredTables) {
     const row = tables.rows.find(value => value.relname === table)
-    checks.push({ check: `table:${table}`, pass: Boolean(row), rls: row?.relrowsecurity ?? false })
+    checks.push({ check: `table:${table}`, pass: Boolean(row?.relrowsecurity), rls: row?.relrowsecurity ?? false })
   }
 
   const columns = await client.query(
@@ -50,6 +50,10 @@ try {
     checks.push({ check: `index:${index}`, pass: indexes.rows.some(row => row.indexname === index) })
   }
 
+  const migration = await client.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='inspection_records' AND column_name='signed_payload'")
+  checks.push({ check: 'signed_payload_migration', pass: migration.rowCount === 1 })
+  const demos = await client.query("SELECT count(*)::int AS count FROM public.users WHERE id::text LIKE 'aaaaaaaa-0001-%'")
+  checks.push({ check: 'no_demo_accounts', pass: demos.rows[0].count === 0 })
   const failures = checks.filter(check => !check.pass)
   console.log(JSON.stringify({ database: 'connected', checks, passed: checks.length - failures.length, failed: failures.length }, null, 2))
   if (failures.length) process.exitCode = 1

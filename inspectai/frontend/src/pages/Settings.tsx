@@ -10,9 +10,9 @@ import type { UserRole } from '@/types'
 type SettingsTab = 'branding' | 'sso' | 'integrations' | 'users'
 
 const TABS: Array<{ id: SettingsTab; label: string }> = [
-  { id: 'branding',     label: 'Branding'      },
-  { id: 'sso',          label: 'SSO & Auth'    },
-  { id: 'integrations', label: 'Integrations'  },
+
+
+
   { id: 'users',        label: 'Users & Access'},
 ]
 
@@ -26,9 +26,9 @@ const ROLE_PILL: Record<string, string> = {
 const SSO_PROVIDERS = ['Azure AD', 'Okta', 'Google Workspace', 'Generic SAML 2.0']
 
 const INTEGRATIONS = [
-  { id: 'maximo', name: 'IBM Maximo', status: 'connected',    desc: 'Asset & work order sync'  },
+  { id: 'maximo', name: 'IBM Maximo', status: 'unavailable',    desc: 'Asset & work order sync'  },
   { id: 'sap',    name: 'SAP PM',     status: 'disconnected', desc: 'Maintenance integration'  },
-  { id: 'teams',  name: 'MS Teams',   status: 'connected',    desc: 'Escalation notifications' },
+  { id: 'teams',  name: 'MS Teams',   status: 'unavailable',    desc: 'Escalation notifications' },
   { id: 'slack',  name: 'Slack',      status: 'disconnected', desc: 'Alert notifications'      },
   { id: 'powerbi',name: 'Power BI',   status: 'disconnected', desc: 'Analytics dashboard'      },
 ]
@@ -36,7 +36,7 @@ const INTEGRATIONS = [
 export default function Settings() {
   const { user }   = useAuth()
   const { toast }  = useToast()
-  const [tab, setTab]             = useState<SettingsTab>('branding')
+  const [tab, setTab]             = useState<SettingsTab>('users')
   const [appName, setAppName]     = useState('InspectAI')
   const [primaryColor, setColor]  = useState('#4f8ef7')
   const [ssoProvider, setSso]     = useState(SSO_PROVIDERS[0])

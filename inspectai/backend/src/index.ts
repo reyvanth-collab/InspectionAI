@@ -1,4 +1,6 @@
+import 'express-async-errors'
 import express from 'express'
+import path from 'node:path'
 import cors from 'cors'
 import helmet from 'helmet'
 import dotenv from 'dotenv'
@@ -23,6 +25,7 @@ dotenv.config()
 validateProductionConfig()
 
 const app  = express()
+app.set('trust proxy', 1)
 const PORT = process.env.PORT ?? 4000
 const allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000')
   .split(',')
@@ -43,7 +46,7 @@ app.use(cors({
   credentials: true,
 }))
 app.use(express.json({ limit: '30mb' }))
-app.use(express.urlencoded({ extended: true, limit: '30mb' }))
+app.use(express.urlencoded({ extended: false, limit: '30mb' }))
 
 // ── Routes ──────────────────────────────────────────────────
 app.use('/api/auth',              authRouter)
@@ -70,12 +73,18 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/ready', async (_req, res) => {
   try {
-    await query('SELECT 1')
+    const guards = await query(`SELECT count(*)::int AS count FROM pg_trigger WHERE NOT tgisinternal AND tgname IN ('guard_finding','guard_signed_record','guard_work_order','guard_instruction_items','guard_instruction_revision')`)
+    if (guards.rows[0].count !== 5) throw new Error('Integrity migration is missing')
     res.json({ status: 'ready', database: 'ok' })
   } catch {
     res.status(503).json({ status: 'not_ready', database: 'unavailable' })
   }
 })
+
+app.use('/api', (_req, res) => { res.status(404).json({ error: 'API endpoint not found' }) })
+const publicDir = path.resolve(__dirname, '../../public')
+app.use(express.static(publicDir, { index: false, maxAge: '1h' }))
+app.get('*', (_req, res, next) => { res.sendFile(path.join(publicDir, 'index.html'), err => { if (err) next(err) }) })
 
 // ── Error handler (must be last) ────────────────────────────
 app.use(errorHandler)
@@ -83,6 +92,9 @@ app.use(errorHandler)
 const server = app.listen(PORT, () => {
   console.log(`[inspectai-backend] listening on http://localhost:${PORT}`)
 })
+
+server.requestTimeout = 65_000
+server.headersTimeout = 15_000
 
 const shutdown = (signal: string) => {
   console.log(`[inspectai-backend] ${signal} received; draining connections`)

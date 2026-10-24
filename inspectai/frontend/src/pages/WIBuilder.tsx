@@ -371,10 +371,10 @@ export default function WIBuilder() {
         revision:      meta.revision,
         effectiveDate: meta.effectiveDate,
         expiryDate:    meta.expiryDate,
-        status:        publish ? 'active' : 'draft',
+        status:        'draft',
         checklistItems,
       })
-      toast(publish ? 'Published!' : 'Saved as draft', 'success')
+      toast('Saved as draft. Submit it for independent approval from the library.', 'success')
       navigate('/library')
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error')
@@ -439,9 +439,9 @@ export default function WIBuilder() {
           />
 
           <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-            <Button variant="ghost" size="sm" onClick={() => setShowImport(true)}>
+            {import.meta.env.VITE_ENABLE_PDF_EXTRACTION === 'true' && <Button variant="ghost" size="sm" onClick={() => setShowImport(true)}>
               <Upload size={14} className="mr-1" /> Import PDF
-            </Button>
+            </Button>}
             <div className="w-px h-4 bg-border" />
             <Button variant="ghost" size="sm" onClick={() => setShowPreview(true)}>
               <Eye size={14} className="mr-1" /> Preview
@@ -450,7 +450,7 @@ export default function WIBuilder() {
               Save draft
             </Button>
             <Button variant="primary" size="sm" loading={saveWI.isPending} onClick={() => handleSave(true)}>
-              Save &amp; publish
+              Validate &amp; save draft
             </Button>
           </div>
         </div>
@@ -738,10 +738,10 @@ function ChecklistQualityPanel({
           <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
           <p className="text-[12px] leading-relaxed">
             {ready
-              ? 'Ready to publish.'
+              ? 'Ready for review.'
               : fields.length === 0
               ? 'Start with a template or add checklist items.'
-              : `${errors.length} blocker${errors.length === 1 ? '' : 's'} before publish.`}
+              : `${errors.length} blocker${errors.length === 1 ? '' : 's'} before review.`}
           </p>
         </div>
       </div>

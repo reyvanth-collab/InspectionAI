@@ -24,3 +24,12 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+**/dist-review/
+**/node_modules/
+**/dist/
+.env
+**/.env
+
+**/playwright-report/
+**/test-results/

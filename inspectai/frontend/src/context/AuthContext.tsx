@@ -3,6 +3,7 @@ import {
   useCallback, type ReactNode,
 } from 'react'
 import { api, JWT_KEY, decodeJWT } from '@/lib/api'
+import { queryClient } from '@/lib/queryClient'
 import type { User } from '@/types'
 
 interface AuthContextValue {
@@ -56,6 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Login — POST /api/auth/login ────────────────────────────
   const login = useCallback(async (email: string, password: string) => {
+    await queryClient.cancelQueries()
+    queryClient.clear()
     const res = await api.post<{
       token: string
       user: { id: string; name: string; email: string; role: string; staffId: string; tenantId: string }
@@ -78,9 +81,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Logout ──────────────────────────────────────────────────
   const logout = useCallback(() => {
+    void queryClient.cancelQueries()
+    queryClient.clear()
     localStorage.removeItem(JWT_KEY)
     setUser(null)
   }, [])
+
+  useEffect(() => { const expired = () => logout(); window.addEventListener('session-expired', expired); return () => window.removeEventListener('session-expired', expired) }, [logout])
 
   // ── Theme ───────────────────────────────────────────────────
   const toggleTheme = useCallback(() => {

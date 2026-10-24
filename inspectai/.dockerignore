@@ -1,0 +1,8 @@
+**/node_modules
+**/dist*
+**/.env
+**/test
+supabase/demo-seed.sql
+../output
+../MOMS_Extract
+../inspection-app-v9.html
