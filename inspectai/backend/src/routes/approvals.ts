@@ -127,6 +127,15 @@ router.patch('/steps/:stepId/approve', requireAuth, requireRole('admin', 'approv
       )
       await client.query(
         `UPDATE public.work_instructions
+         SET status = 'superseded', updated_at = NOW()
+         WHERE tenant_id = $1
+           AND wi_number = $2
+           AND id <> $3
+           AND status IN ('active', 'expiring', 'expired')`,
+        [req.user!.tenantId, step.wi_number, step.work_instruction_id]
+      )
+      await client.query(
+        `UPDATE public.work_instructions
          SET status = 'active',
              effective_date = COALESCE(effective_date, CURRENT_DATE),
              updated_at = NOW()

@@ -1,4 +1,3 @@
-import { api } from '@/lib/api'
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -6,7 +5,7 @@ import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { useWorkInstruction, useSubmitForApproval } from '@/hooks/useWorkInstructions'
+import { useWorkInstruction, useSubmitForApproval, useCreateWIRevision } from '@/hooks/useWorkInstructions'
 import { useApprovers } from '@/hooks/useUsers'
 import { useToast } from '@/components/ui/Toast'
 
@@ -22,6 +21,7 @@ const STATUS_MAP: Record<string, BadgeVariant> = {
 interface ChecklistItem {
   id: string; item_no: string; description: string
   acceptance_criteria: string | null; category: string | null; sort_order: number
+  field_type?: string | null; layout_json?: string | null
 }
 interface RevisionHistory {
   id: string; revision: string; change_summary: string | null
@@ -32,11 +32,14 @@ export default function WIDetail() {
   const { id: dbId = '' } = useParams()
   const navigate          = useNavigate()
   const { toast }         = useToast()
-  const { data: wi, isLoading } = useWorkInstruction(dbId)
+  const { data: wi, isLoading, refetch: refetchWI } = useWorkInstruction(dbId)
   const { data: approvers = [] } = useApprovers()
   const submitForApproval = useSubmitForApproval()
+  const createRevision = useCreateWIRevision()
 
   const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [showRevisionModal, setShowRevisionModal] = useState(false)
+  const [changeSummary, setChangeSummary] = useState('')
   const [selectedApprovers, setSelectedApprovers] = useState<string[]>([])
 
   const toggleApprover = (id: string) =>
@@ -49,8 +52,21 @@ export default function WIDetail() {
       toast('Submitted for approval', 'success')
       setShowApprovalModal(false)
       setSelectedApprovers([])
+      await refetchWI()
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Failed to submit', 'error')
+    }
+  }
+
+  const handleCreateRevision = async () => {
+    try {
+      const created = await createRevision.mutateAsync({ wiDbId: dbId, changeSummary })
+      toast('Draft revision created', 'success')
+      setShowRevisionModal(false)
+      setChangeSummary('')
+      navigate(`/library/${String((created as any).id)}/edit`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to create revision', 'error')
     }
   }
 
@@ -84,6 +100,7 @@ export default function WIDetail() {
   const today        = new Date()
   const expiry       = w.expiry_date ? new Date(w.expiry_date) : null
   const daysRemaining = expiry ? Math.round((expiry.getTime() - today.getTime()) / 86_400_000) : null
+  const canCreateRevision = ['active', 'expiring', 'expired', 'superseded'].includes(String(w.status))
 
   return (
     <AppLayout breadcrumb={[
@@ -104,15 +121,21 @@ export default function WIDetail() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={async () => { try { if (w.status === 'draft') { navigate(`/library/${dbId}/edit`); return } const response = await api.post(`/work-instructions/${dbId}/revise`); navigate(`/library/${response.data.data.id}/edit`) } catch (e) { toast(e instanceof Error ? e.message : 'Could not create revision', 'error') } }}>{w.status === 'draft' ? 'Edit draft' : 'Create new revision'}</Button>
+          {canCreateRevision && (
+            <Button variant="secondary" onClick={() => setShowRevisionModal(true)}>
+              Create Revision
+            </Button>
+          )}
           {w.status === 'draft' ? (
             <Button variant="secondary" onClick={() => setShowApprovalModal(true)}>
               Submit for Approval
             </Button>
-          ) : (
+          ) : w.status === 'pending_approval' ? (
             <Button variant="secondary" onClick={() => navigate('/approvals')}>
               View Approvals
             </Button>
+          ) : (
+            null
           )}
           <Button variant="primary" onClick={() => navigate('/library')}>Back to Library</Button>
         </div>
@@ -132,7 +155,9 @@ export default function WIDetail() {
                 <p className="text-[13px] text-text-3">No checklist items yet.</p>
               </CardBody>
             ) : (
-              items.map(item => (
+              items.map(item => {
+                const layout = parseLayout(item.layout_json)
+                return (
                 <div key={item.id}
                   className="flex items-start gap-3 px-[18px] py-3 border-b border-border last:border-0">
                   <span className="font-mono text-[11px] text-text-3 w-8 pt-0.5 flex-shrink-0">
@@ -143,6 +168,20 @@ export default function WIDetail() {
                     {item.acceptance_criteria && (
                       <p className="text-[11px] text-text-2 mt-0.5">{item.acceptance_criteria}</p>
                     )}
+                    {item.field_type === 'table' && (
+                      <div className="mt-2 overflow-hidden rounded-[8px] border border-border">
+                        <div className="grid" style={{ gridTemplateColumns: `repeat(${layout.tableColumns.length}, minmax(90px, 1fr))` }}>
+                          {layout.tableColumns.map((col, i) => (
+                            <div key={i} className="border-r border-border last:border-r-0 bg-bg-3 px-2 py-1.5 text-[10px] font-semibold text-text-2 truncate">{col}</div>
+                          ))}
+                        </div>
+                        {Array.from({ length: Math.min(layout.tableRows, 3) }).map((_, row) => (
+                          <div key={row} className="grid border-t border-border" style={{ gridTemplateColumns: `repeat(${layout.tableColumns.length}, minmax(90px, 1fr))` }}>
+                            {layout.tableColumns.map((_, col) => <div key={col} className="h-7 border-r border-border last:border-r-0 bg-bg-2" />)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {item.category && (
                     <span className="text-[10px] text-text-3 bg-bg-3 border border-border px-2 py-0.5 rounded-full flex-shrink-0">
@@ -150,7 +189,7 @@ export default function WIDetail() {
                     </span>
                   )}
                 </div>
-              ))
+              )})
             )}
           </Card>
 
@@ -290,6 +329,49 @@ export default function WIDetail() {
           </p>
         )}
       </Modal>
+      <Modal
+        open={showRevisionModal}
+        onClose={() => { setShowRevisionModal(false); setChangeSummary('') }}
+        title="Create Draft Revision"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setShowRevisionModal(false); setChangeSummary('') }}>
+              Cancel
+            </Button>
+            <Button variant="primary" loading={createRevision.isPending} onClick={handleCreateRevision}>
+              Create Revision
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[13px] text-text-2 mb-3">
+          This creates the next draft revision from <span className="font-mono text-text">{w.wi_number} {w.revision}</span> and opens it in the WI builder.
+        </p>
+        <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.07em] mb-1">
+          Change summary
+        </label>
+        <textarea
+          value={changeSummary}
+          onChange={e => setChangeSummary(e.target.value)}
+          rows={3}
+          className="w-full px-3 py-2 bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent resize-none"
+          placeholder="What needs to change in this revision?"
+        />
+      </Modal>
     </AppLayout>
   )
+}
+
+function parseLayout(value?: string | null) {
+  const fallback = { tableColumns: ['Item', 'Acceptance criteria', 'Result', 'Remarks'], tableRows: 4 }
+  if (!value) return fallback
+  try {
+    const parsed = JSON.parse(value) as Partial<typeof fallback>
+    return {
+      tableColumns: Array.isArray(parsed.tableColumns) && parsed.tableColumns.length ? parsed.tableColumns.map(String) : fallback.tableColumns,
+      tableRows: typeof parsed.tableRows === 'number' ? parsed.tableRows : fallback.tableRows,
+    }
+  } catch {
+    return fallback
+  }
 }

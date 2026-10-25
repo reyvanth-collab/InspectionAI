@@ -11,13 +11,13 @@ interface AppLayoutProps {
 
 export function AppLayout({ children, title, breadcrumb }: AppLayoutProps) {
   return (
-    <div className="flex h-screen overflow-hidden bg-bg">
+    <div className="flex h-screen overflow-hidden bg-bg page-shell">
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopNav title={title} breadcrumb={breadcrumb} />
         <OfflineBanner />
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-[1200px] mx-auto w-full px-6 py-6">
+          <div className="max-w-[1240px] mx-auto w-full px-6 py-6">
             {children}
           </div>
         </main>

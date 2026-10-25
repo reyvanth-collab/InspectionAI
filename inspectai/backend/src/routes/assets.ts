@@ -37,7 +37,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
 
     const result = await query(
       `SELECT a.*,
-              COUNT(DISTINCT wo.id) FILTER (WHERE wo.status IN ('open', 'pending', 'in_progress', 'in-progress'))::int AS open_work_orders,
+              COUNT(DISTINCT wo.id) FILTER (WHERE wo.status IN ('open', 'in_progress'))::int AS open_work_orders,
               COUNT(DISTINCT ir.id) FILTER (WHERE ir.completed_at IS NOT NULL)::int AS completed_inspections,
               MAX(ir.completed_at) AS last_inspected_at
        FROM public.assets a

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Pencil } from 'lucide-react'
+import { BookOpenCheck, FileClock, FileWarning, Layers3, Pencil, Plus, Search, ShieldCheck } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { SkeletonTable } from '@/components/ui/Skeleton'
+import { MetricTile, PageHero } from '@/components/ui/PageHero'
 import { useWorkInstructions } from '@/hooks/useWorkInstructions'
 import type { WorkInstruction, WIStatus } from '@/types'
 import type { BadgeVariant } from '@/components/ui/Badge'
@@ -28,16 +29,33 @@ export default function MasterLibrary() {
 
   return (
     <AppLayout breadcrumb={[{ label: 'Master Library' }]}>
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-[-0.3px]">Master Library</h1>
-          <p className="text-[13px] text-text-2 mt-1">Work instruction repository and revision control</p>
-        </div>
-        <Button variant="primary" onClick={() => navigate('/library/new')}>+ New WI</Button>
+      <PageHero
+        eyebrow="Controlled WI Library"
+        title="Govern every work instruction from draft to approval, expiry, and revision."
+        description="A controlled document library for inspection checklists, approval-ready revisions, expiry risk, and active operational procedures."
+        icon={BookOpenCheck}
+        stats={[
+          { label: 'Active', value: isLoading ? '-' : active, tone: 'success' },
+          { label: 'Expiring', value: isLoading ? '-' : expiring, tone: 'warning' },
+          { label: 'Expired', value: isLoading ? '-' : expired, tone: 'danger' },
+          { label: 'Total', value: isLoading ? '-' : wis.length, tone: 'info' },
+        ]}
+        actions={
+          <Button variant="primary" onClick={() => navigate('/library/new')}>
+            <Plus size={15} /> New WI
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <MetricTile label="Total Library" value={isLoading ? '-' : wis.length} sub="All revisions" icon={Layers3} tone="info" />
+        <MetricTile label="Active" value={isLoading ? '-' : active} sub="Approved for use" icon={ShieldCheck} tone="success" />
+        <MetricTile label="Expiring" value={isLoading ? '-' : expiring} sub="Within risk window" icon={FileClock} tone="warning" />
+        <MetricTile label="Expired" value={isLoading ? '-' : expired} sub="Needs revision" icon={FileWarning} tone="danger" />
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="hidden">
         {[
           { label: 'Total',    value: wis.length, color: 'bg-bg-2'        },
           { label: 'Active',   value: active,     color: 'bg-success-bg'  },
@@ -52,17 +70,20 @@ export default function MasterLibrary() {
       </div>
 
       {/* Search */}
-      <div className="mb-4">
+      <div className="surface-panel mb-4 rounded-[14px] p-3">
+        <div className="relative max-w-md">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-3" />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by title or WI number…"
-          className="w-full max-w-sm px-[14px] py-[9px] bg-bg-2 border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors"
+          className="w-full rounded-[10px] border border-border-2 bg-bg px-[14px] py-[10px] pl-10 text-[13px] text-text outline-none transition-colors placeholder:text-text-3 focus:border-accent"
         />
+        </div>
       </div>
 
       {/* Table */}
-      <Card>
+      <Card className="premium-ring">
         {isLoading ? (
           <SkeletonTable rows={6} />
         ) : wis.length === 0 ? (

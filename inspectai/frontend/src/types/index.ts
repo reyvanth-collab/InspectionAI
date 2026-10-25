@@ -42,7 +42,7 @@ export interface ChecklistItem {
 }
 
 // ── Work Orders / Inspections ────────────────────────────────
-export type WOStatus = 'open' | 'in-progress' | 'complete' | 'pending'
+export type WOStatus = 'open' | 'in-progress' | 'complete' | 'cancelled'
 export type WOPriority = 'high' | 'medium' | 'low' | 'critical'
 
 export interface WorkOrder {

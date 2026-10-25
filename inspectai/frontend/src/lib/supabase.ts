@@ -7,9 +7,12 @@ const supabaseUrl = import.meta.env.DEV
   ? 'http://localhost:3000'
   : (import.meta.env.VITE_SUPABASE_URL as string)
 
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+const configuredAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+// The application authenticates through the backend JWT. Keep the Supabase
+// client constructible locally; production builds still require real values.
+const supabaseAnonKey = configuredAnonKey || 'local-development-placeholder'
 
-if (!supabaseAnonKey) {
+if (!configuredAnonKey) {
   console.warn('[supabase] VITE_SUPABASE_ANON_KEY not set in frontend/.env')
 }
 

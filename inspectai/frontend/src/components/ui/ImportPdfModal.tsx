@@ -58,6 +58,14 @@ function toWIField(item: ImportedItem): WIField {
     sourceText:         item.sourceText ?? '',
     aiConfidence:       item.confidence ?? null,
     aiWarnings:         item.warnings ?? [],
+    layout: {
+      width:        item.fieldType === 'heading' ? 'full' : 'full',
+      height:       88,
+      sectionLevel: 1,
+      tableColumns: ['Item', 'Acceptance criteria', 'Result', 'Remarks'],
+      tableRows:    4,
+      rowBreakBefore: true,
+    },
   }
 }
 

@@ -7,6 +7,7 @@
     "build": "tsc",
     "test": "npm run build && node test/assetValidation.test.mjs && node test/aiProvider.test.mjs && node test/release.integration.cjs",
     "load-test": "node scripts/load-test.mjs",
+    "benchmark:api": "node scripts/benchmark-api.mjs",
     "verify:staging": "node scripts/verify-staging.mjs",
     "worker": "npm run build && node dist/worker.js",
     "start": "node dist/index.js",

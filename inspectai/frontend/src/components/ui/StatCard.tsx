@@ -17,7 +17,7 @@ const colorClasses = {
 
 export function StatCard({ label, value, sub, color = 'default' }: StatCardProps) {
   return (
-    <div className="bg-bg-2 border border-border rounded-[10px] px-[18px] py-4">
+    <div className="surface-panel rounded-[12px] px-[18px] py-4 premium-ring">
       <p className="text-[11px] text-text-2 uppercase tracking-[0.07em] mb-2">{label}</p>
       <p className={cn('text-[28px] font-semibold tracking-[-1px] font-mono', colorClasses[color])}>
         {value}

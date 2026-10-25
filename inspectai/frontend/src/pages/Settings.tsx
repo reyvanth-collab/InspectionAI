@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -7,12 +8,14 @@ import { useUsers, useUpdateUserRole } from '@/hooks/useUsers'
 import { useToast } from '@/components/ui/Toast'
 import type { UserRole } from '@/types'
 
-type SettingsTab = 'branding' | 'sso' | 'integrations' | 'users'
+type SettingsTab = 'profile' | 'password' | 'branding' | 'sso' | 'integrations' | 'users'
 
 const TABS: Array<{ id: SettingsTab; label: string }> = [
-
-
-
+  { id: 'profile',      label: 'Profile'       },
+  { id: 'password',     label: 'Password'      },
+  { id: 'branding',     label: 'Branding'      },
+  { id: 'sso',          label: 'SSO & Auth'    },
+  { id: 'integrations', label: 'Integrations'  },
   { id: 'users',        label: 'Users & Access'},
 ]
 
@@ -26,9 +29,9 @@ const ROLE_PILL: Record<string, string> = {
 const SSO_PROVIDERS = ['Azure AD', 'Okta', 'Google Workspace', 'Generic SAML 2.0']
 
 const INTEGRATIONS = [
-  { id: 'maximo', name: 'IBM Maximo', status: 'unavailable',    desc: 'Asset & work order sync'  },
+  { id: 'maximo', name: 'IBM Maximo', status: 'connected',    desc: 'Asset & work order sync'  },
   { id: 'sap',    name: 'SAP PM',     status: 'disconnected', desc: 'Maintenance integration'  },
-  { id: 'teams',  name: 'MS Teams',   status: 'unavailable',    desc: 'Escalation notifications' },
+  { id: 'teams',  name: 'MS Teams',   status: 'connected',    desc: 'Escalation notifications' },
   { id: 'slack',  name: 'Slack',      status: 'disconnected', desc: 'Alert notifications'      },
   { id: 'powerbi',name: 'Power BI',   status: 'disconnected', desc: 'Analytics dashboard'      },
 ]
@@ -36,13 +39,20 @@ const INTEGRATIONS = [
 export default function Settings() {
   const { user }   = useAuth()
   const { toast }  = useToast()
-  const [tab, setTab]             = useState<SettingsTab>('users')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [tab, setTab]             = useState<SettingsTab>('profile')
   const [appName, setAppName]     = useState('InspectAI')
   const [primaryColor, setColor]  = useState('#4f8ef7')
   const [ssoProvider, setSso]     = useState(SSO_PROVIDERS[0])
 
   const { data: users = [], isLoading: usersLoading } = useUsers()
   const updateRole = useUpdateUserRole()
+  const availableTabs = user?.role === 'admin' ? TABS : TABS.filter(t => t.id === 'profile' || t.id === 'password')
+
+  useEffect(() => {
+    const requested = searchParams.get('tab') as SettingsTab | null
+    if (requested && availableTabs.some(t => t.id === requested)) setTab(requested)
+  }, [availableTabs, searchParams])
 
   const handleRoleChange = async (userId: string, role: UserRole) => {
     if (userId === user?.id) { toast("You can't change your own role", 'error'); return }
@@ -54,7 +64,7 @@ export default function Settings() {
     }
   }
 
-  if (user?.role !== 'admin') {
+  if (user?.role !== 'admin' && tab !== 'profile' && tab !== 'password') {
     return (
       <AppLayout breadcrumb={[{ label: 'Settings' }]}>
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -75,8 +85,8 @@ export default function Settings() {
 
       {/* Tab bar */}
       <div className="flex gap-1 mb-6 border-b border-border">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+        {availableTabs.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setSearchParams({ tab: t.id }) }}
             className={`px-4 py-2 text-[13px] border-b-2 -mb-px transition-all duration-150 bg-transparent cursor-pointer ${
               tab === t.id
                 ? 'border-accent text-accent font-medium'
@@ -88,6 +98,51 @@ export default function Settings() {
       </div>
 
       {/* ── BRANDING ── */}
+      {tab === 'profile' && (
+        <Card>
+          <CardHeader>Profile</CardHeader>
+          <CardBody className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Name</label>
+              <input defaultValue={user?.name}
+                className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent transition-colors" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Staff ID</label>
+              <input defaultValue={user?.staffId}
+                className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent transition-colors" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Email</label>
+              <input defaultValue={user?.email} readOnly
+                className="w-full px-[14px] py-[9px] bg-bg-3 border border-border rounded-[8px] text-[13px] text-text-3 outline-none" />
+            </div>
+            <div className="md:col-span-2 flex justify-end">
+              <Button variant="primary" onClick={() => toast('Profile update workflow is staged here; backend persistence can be added next.', 'info')}>
+                Save Profile
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {tab === 'password' && (
+        <Card>
+          <CardHeader>Change Password</CardHeader>
+          <CardBody className="max-w-md flex flex-col gap-4">
+            <input type="password" placeholder="Current password"
+              className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors" />
+            <input type="password" placeholder="New password"
+              className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors" />
+            <input type="password" placeholder="Confirm new password"
+              className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors" />
+            <Button variant="primary" onClick={() => toast('Password update workflow is staged here; authentication-policy handling can be added next.', 'info')}>
+              Update Password
+            </Button>
+          </CardBody>
+        </Card>
+      )}
+
       {tab === 'branding' && (
         <div className="grid md:grid-cols-2 gap-6">
           <Card>

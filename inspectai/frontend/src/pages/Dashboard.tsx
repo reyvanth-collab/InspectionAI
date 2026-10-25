@@ -8,10 +8,11 @@ import { useWorkInstructions } from '@/hooks/useWorkInstructions'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useAuditLogs } from '@/hooks/useAuditLogs'
 import { SkeletonCard, SkeletonTable, Skeleton } from '@/components/ui/Skeleton'
+import { Bell, ClipboardCheck, FileWarning, Gauge, ShieldCheck } from 'lucide-react'
 import type { WorkOrder, WOStatus, WOPriority } from '@/types'
 
 const STATUS_BADGE: Record<WOStatus, 'open' | 'complete' | 'pending' | 'expiring'> = {
-  'open': 'open', 'in-progress': 'expiring', 'complete': 'complete', 'pending': 'pending',
+  'open': 'open', 'in-progress': 'expiring', 'complete': 'complete', 'cancelled': 'pending',
 }
 const PRIORITY_BADGE: Record<WOPriority, 'high' | 'medium' | 'low'> = {
   high: 'high', medium: 'medium', low: 'low', critical: 'high',
@@ -56,11 +57,32 @@ export default function Dashboard() {
 
   return (
     <AppLayout breadcrumb={[{ label: 'Dashboard' }]}>
-      <div className="mb-6">
-        <h1 className="text-[22px] font-semibold tracking-[-0.3px]">
-          {greeting}, {user?.name.split(' ')[0]}
-        </h1>
-        <p className="text-[13px] text-text-2 mt-1">Here's your inspection overview for today.</p>
+      <div className="premium-ring relative mb-6 overflow-hidden rounded-[16px] border border-border bg-[linear-gradient(135deg,rgba(104,167,255,0.18),rgba(64,224,208,0.08)_42%,rgba(255,209,102,0.06))] p-6 shadow-lg">
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-accent-bd bg-accent-bg px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-accent">
+              <ShieldCheck size={13} />
+              Live Inspection Command Center
+            </div>
+            <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.8px]">
+              {greeting}, {user?.name.split(' ')[0]}
+            </h1>
+            <p className="mt-2 max-w-[680px] text-[14px] leading-6 text-text-2">
+              Monitor work orders, controlled work instructions, exceptions, and approval readiness from one operational cockpit.
+            </p>
+          </div>
+          <div className="grid min-w-[280px] grid-cols-2 gap-2">
+            <div className="rounded-[12px] border border-border bg-bg-2/70 px-3 py-3">
+              <p className="text-[10px] uppercase tracking-[0.1em] text-text-3">Completion</p>
+              <p className="mt-1 font-mono text-[22px] font-semibold text-success">{total ? Math.round((complete / total) * 100) : 0}%</p>
+            </div>
+            <div className="rounded-[12px] border border-border bg-bg-2/70 px-3 py-3">
+              <p className="text-[10px] uppercase tracking-[0.1em] text-text-3">Attention</p>
+              <p className="mt-1 font-mono text-[22px] font-semibold text-warning">{expiring + unread}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* KPI cards */}
@@ -69,10 +91,10 @@ export default function Dashboard() {
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           <>
-            <KpiCard label="Total Work Orders" value={total}    sub="All statuses"     color="accent" />
-            <KpiCard label="Completed"         value={complete} sub="Inspections done" color="green"  />
-            <KpiCard label="Expiring WIs"      value={expiring} sub="Within 30 days"   color="amber"  />
-            <KpiCard label="Unread Alerts"     value={unread}   sub="Notifications"    color="red"    />
+            <KpiCard label="Total Work Orders" value={total}    sub="All statuses"     color="accent" Icon={ClipboardCheck} />
+            <KpiCard label="Completed"         value={complete} sub="Inspections done" color="green"  Icon={ShieldCheck} />
+            <KpiCard label="Expiring WIs"      value={expiring} sub="Within 30 days"   color="amber"  Icon={FileWarning} />
+            <KpiCard label="Unread Alerts"     value={unread}   sub="Notifications"    color="red"    Icon={Bell} />
           </>
         )}
       </div>
@@ -160,15 +182,20 @@ const COLOR_MAP = {
   red:    { value: 'text-danger',  bg: 'bg-danger-bg'  },
 }
 
-function KpiCard({ label, value, sub, color = 'accent' }: {
-  label: string; value: number; sub: string; color?: keyof typeof COLOR_MAP
+function KpiCard({ label, value, sub, color = 'accent', Icon = Gauge }: {
+  label: string; value: number; sub: string; color?: keyof typeof COLOR_MAP; Icon?: typeof Gauge
 }) {
   const c = COLOR_MAP[color]
   return (
-    <div className={`rounded-[10px] border border-border p-4 ${c.bg}`}>
-      <p className="text-[11px] font-medium text-text-2 uppercase tracking-[0.07em] mb-2">{label}</p>
-      <p className={`text-[28px] font-bold leading-none ${c.value}`}>{value}</p>
-      <p className="text-[11px] text-text-3 mt-1.5">{sub}</p>
+    <div className="surface-panel premium-ring rounded-[14px] p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-[10px] font-semibold text-text-2 uppercase tracking-[0.09em]">{label}</p>
+        <span className={`grid h-8 w-8 place-items-center rounded-[10px] ${c.bg} ${c.value}`}>
+          <Icon size={16} />
+        </span>
+      </div>
+      <p className={`font-mono text-[30px] font-bold leading-none tracking-[-1px] ${c.value}`}>{value}</p>
+      <p className="mt-2 text-[11px] text-text-3">{sub}</p>
     </div>
   )
 }

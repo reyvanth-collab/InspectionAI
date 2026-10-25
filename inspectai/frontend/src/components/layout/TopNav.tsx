@@ -1,5 +1,6 @@
-import { Link, useNavigate } from 'react-router-dom'
-import { Sun, Moon, ChevronRight, Bell } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Sun, Moon, ChevronRight, Bell, UserRound, KeyRound, UsersRound, Settings, LogOut } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/cn'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -17,21 +18,24 @@ interface TopNavProps {
 }
 
 export function TopNav({ title, breadcrumb }: TopNavProps) {
-  const navigate = useNavigate()
   const { user, theme, toggleTheme, logout } = useAuth()
   const { data: notifs = [] } = useNotifications()
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   const unread = notifs.filter((n: { read: boolean }) => !n.read).length
 
-  return (
-    <header className="h-[52px] bg-bg border-b border-border flex items-center px-5 gap-3 flex-shrink-0 sticky top-0 z-[100]">
+  useEffect(() => {
+    if (!userMenuOpen) return
+    const close = (event: MouseEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) setUserMenuOpen(false)
+    }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [userMenuOpen])
 
-      <select aria-label="Navigate" defaultValue="" onChange={e => { if (e.target.value === 'logout') logout(); else navigate(e.target.value); e.target.value = '' }} className="md:hidden max-w-[100px] bg-bg text-text text-xs rounded border border-border p-2">
-        <option value="" disabled>Menu</option>
-        <option value="/dashboard">Dashboard</option><option value="/assets">Assets</option><option value="/inspections">Inspections</option><option value="/library">Library</option><option value="/reports">Reports</option>
-        {(user?.role === 'admin' || user?.role === 'approver') && <option value="/approvals">Approvals</option>}
-        {user?.role === 'admin' && <option value="/settings">Settings</option>}
-        <option value="logout">Sign out</option>
-      </select>
+  return (
+    <header className="h-[64px] bg-bg-2/82 border-b border-border flex items-center px-6 gap-3 flex-shrink-0 sticky top-0 z-[100] backdrop-blur-xl">
+
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 flex-1 min-w-0">
         {breadcrumb ? (
@@ -67,7 +71,7 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
         <button
           onClick={toggleTheme}
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="w-8 h-8 flex items-center justify-center rounded-[6px] text-text-3 hover:text-text hover:bg-bg-2 transition-all border-none bg-transparent cursor-pointer"
+          className="w-9 h-9 flex items-center justify-center rounded-[9px] text-text-3 hover:text-text hover:bg-bg-3 transition-all border border-transparent hover:border-border cursor-pointer"
         >
           {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
         </button>
@@ -75,11 +79,11 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
         {/* Notifications bell */}
         <Link
           to="/notifications"
-          className="relative w-8 h-8 flex items-center justify-center rounded-[6px] text-text-3 hover:text-text hover:bg-bg-2 transition-all"
+          className="relative w-9 h-9 flex items-center justify-center rounded-[9px] text-text-3 hover:text-text hover:bg-bg-3 transition-all border border-transparent hover:border-border"
         >
           <Bell size={15} />
           {unread > 0 && (
-            <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-danger rounded-full text-[8px] font-bold text-white flex items-center justify-center leading-none">
+            <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-danger rounded-full text-[8px] font-bold text-white flex items-center justify-center leading-none ring-2 ring-bg-2">
               {unread > 9 ? '9+' : unread}
             </span>
           )}
@@ -100,14 +104,61 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
 
         {/* Avatar + name */}
         {user && (
-          <div className="flex items-center gap-2 pl-1">
-            <div className="w-[26px] h-[26px] rounded-full bg-gradient-to-br from-accent to-accent-2 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-              {user.avatarInitials}
-            </div>
-            <span className="text-[12px] font-medium text-text hidden md:block">{user.name}</span>
+          <div ref={userMenuRef} className="relative pl-1">
+            <button
+              onClick={() => setUserMenuOpen(open => !open)}
+              className="flex items-center gap-2 rounded-[10px] border border-border bg-bg-3/45 px-2 py-1.5 text-left transition-colors hover:border-accent-bd hover:bg-accent-bg"
+            >
+              <div className="w-[28px] h-[28px] rounded-full bg-gradient-to-br from-accent to-accent-2 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                {user.avatarInitials}
+              </div>
+              <span className="text-[12px] font-medium text-text hidden md:block">{user.name}</span>
+            </button>
+            {userMenuOpen && (
+              <div className="absolute right-0 top-[44px] z-[120] w-[240px] overflow-hidden rounded-[12px] border border-border bg-bg-2 shadow-lg backdrop-blur-xl">
+                <div className="border-b border-border bg-bg-3/45 px-3 py-3">
+                  <p className="truncate text-[13px] font-medium text-text">{user.name}</p>
+                  <p className="truncate text-[11px] text-text-3">{user.email}</p>
+                </div>
+                <MenuLink to="/settings?tab=profile" icon={UserRound} label="Profile" onClick={() => setUserMenuOpen(false)} />
+                <MenuLink to="/settings?tab=password" icon={KeyRound} label="Change password" onClick={() => setUserMenuOpen(false)} />
+                {user.role === 'admin' && (
+                  <MenuLink to="/settings?tab=users" icon={UsersRound} label="Users & Access" onClick={() => setUserMenuOpen(false)} />
+                )}
+                <MenuLink to="/settings" icon={Settings} label="Settings" onClick={() => setUserMenuOpen(false)} />
+                <button
+                  onClick={() => { setUserMenuOpen(false); logout() }}
+                  className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left text-[12px] text-danger transition-colors hover:bg-danger-bg"
+                >
+                  <LogOut size={14} /> Logout
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
     </header>
+  )
+}
+
+function MenuLink({
+  to,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  to: string
+  icon: typeof UserRound
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      className="flex items-center gap-2 px-3 py-2.5 text-[12px] text-text-2 transition-colors hover:bg-bg-3 hover:text-text"
+    >
+      <Icon size={14} /> {label}
+    </Link>
   )
 }

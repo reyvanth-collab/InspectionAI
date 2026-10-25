@@ -18,21 +18,6 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-function userFromJWT(token: string): User | null {
-  const p = decodeJWT(token)
-  if (!p || !p.id) return null
-  const name = (p.name as string) ?? (p.email as string).split('@')[0]
-  return {
-    id:             p.id as string,
-    tenantId:       (p.tenantId as string) ?? '',
-    staffId:        (p.staffId  as string) ?? '',
-    name,
-    email:          p.email as string,
-    role:           (p.role as User['role']) ?? 'inspector',
-    avatarInitials: name.split(' ').map((s: string) => s[0]).join('').slice(0, 2).toUpperCase(),
-  }
-}
-
 function isTokenExpired(token: string): boolean {
   const p = decodeJWT(token)
   if (!p?.exp) return true
@@ -48,7 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem(JWT_KEY)
     if (token && !isTokenExpired(token)) {
-      setUser(userFromJWT(token))
+      // Only the backend can validate the token and current account privileges.
+      let current = true
+      void api.get<{ data: User }>('/auth/me').then(({ data }) => {
+        if (current && localStorage.getItem(JWT_KEY) === token) {
+          const profile = data.data
+          setUser({ ...profile, avatarInitials: profile.name.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase() })
+        }
+      }).catch(() => {
+        if (current && localStorage.getItem(JWT_KEY) === token) localStorage.removeItem(JWT_KEY)
+      }).finally(() => { if (current) setLoading(false) })
+      return () => { current = false }
     } else {
       localStorage.removeItem(JWT_KEY)
     }

@@ -1,4 +1,3 @@
-import crypto from 'node:crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { verifyToken } from '../lib/jwt'
 import { query } from '../lib/db'
@@ -25,8 +24,8 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   try {
     const claims = verifyToken(token)
     const result = await query(
-      `SELECT u.id, u.email, u.name, u.role, u.staff_id, u.tenant_id, au.encrypted_password
-       FROM public.users u JOIN auth.users au ON au.id = u.id
+      `SELECT u.id, u.email, u.name, u.role, u.staff_id, u.tenant_id, av.auth_version
+       FROM public.users u JOIN inspectai_private.session_versions av ON av.id = u.id
        WHERE u.id = $1 AND u.tenant_id = $2 AND u.active = true
        LIMIT 1`,
       [claims.id, claims.tenantId]
@@ -36,7 +35,7 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       return
     }
     const user = result.rows[0]
-    if (claims.authVersion !== crypto.createHash('sha256').update(user.encrypted_password).digest('hex')) { res.status(401).json({ error: 'Credentials changed; sign in again' }); return }
+    if (claims.authVersion !== user.auth_version) { res.status(401).json({ error: 'Credentials changed; sign in again' }); return }
     req.user = {
       id: user.id,
       email: user.email,

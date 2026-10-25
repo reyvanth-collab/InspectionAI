@@ -8,7 +8,7 @@ interface CardFooterProps { children: ReactNode; className?: string }
 
 export function Card({ children, className }: CardProps) {
   return (
-    <div className={cn('bg-bg-2 border border-border rounded-[10px] overflow-hidden mb-4', className)}>
+    <div className={cn('surface-panel rounded-[12px] overflow-hidden mb-4', className)}>
       {children}
     </div>
   )
@@ -16,8 +16,8 @@ export function Card({ children, className }: CardProps) {
 
 export function CardHeader({ children, actions, className }: CardHeaderProps) {
   return (
-    <div className={cn('px-[18px] py-[14px] border-b border-border flex items-center justify-between gap-3 flex-wrap', className)}>
-      <span className="text-[13px] font-semibold text-text">{children}</span>
+    <div className={cn('px-[18px] py-[14px] border-b border-border flex items-center justify-between gap-3 flex-wrap bg-bg-3/40', className)}>
+      <span className="text-[12px] font-semibold uppercase tracking-[0.08em] text-text-2">{children}</span>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>
   )

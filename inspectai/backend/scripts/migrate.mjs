@@ -2,6 +2,7 @@ import pg from 'pg'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { migrationPlan } from './migration-plan.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../supabase')
 if (!process.env.MIGRATION_DATABASE_URL) throw new Error('Set the administrative MIGRATION_DATABASE_URL; never give this URL to the application')
 const client = new pg.Client({ connectionString: process.env.MIGRATION_DATABASE_URL })
@@ -12,7 +13,8 @@ try {
  const fresh = !exists.rows[0].table_name
  if (fresh) { await client.query('BEGIN'); try { await client.query(await fs.readFile(path.join(root,'schema.sql'),'utf8')); await client.query('COMMIT') } catch (error) { await client.query('ROLLBACK'); throw error } }
  await client.query('CREATE TABLE IF NOT EXISTS public.inspectai_migrations(name text PRIMARY KEY, applied_at timestamptz DEFAULT now())')
- for (const name of (await fs.readdir(path.join(root,'migrations'))).filter(n=>n.endsWith('.sql')).sort()) {
+ await client.query('ALTER TABLE public.inspectai_migrations ENABLE ROW LEVEL SECURITY')
+ for (const name of migrationPlan(await fs.readdir(path.join(root,'migrations')))) {
   if (fresh && name < '20261025000000') { await client.query('INSERT INTO public.inspectai_migrations(name) VALUES($1) ON CONFLICT DO NOTHING',[name]); continue }
   const applied=await client.query('SELECT 1 FROM public.inspectai_migrations WHERE name=$1',[name]); if(applied.rowCount) continue
   const sql = (await fs.readFile(path.join(root,'migrations',name),'utf8')).replace(/^BEGIN;\s*/m, '').replace(/COMMIT;\s*$/, '')

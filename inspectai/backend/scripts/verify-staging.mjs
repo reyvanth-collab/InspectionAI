@@ -37,9 +37,7 @@ try {
      GROUP BY tablename`
   )
   for (const table of ['assets', 'work_orders', 'job_queue']) {
-    checks.push({ check: `policies:${table}`, pass: table === 'job_queue'
-      ? !policies.rows.some(row => row.tablename === table)
-      : policies.rows.some(row => row.tablename === table && row.count > 0) })
+    checks.push({ check: `policies:${table}`, pass: policies.rows.some(row => row.tablename === table && row.count > 0) })
   }
 
   const indexes = await client.query(

@@ -37,6 +37,8 @@ export interface InspectionRecord {
   failed_items: number
   na_items: number
   overall_result: 'pass' | 'fail' | 'na' | null
+  signed_by?: string | null
+  signed_at?: string | null
   signature_data_url?: string | null
   signature_hash?: string | null
   inspection_findings: InspectionFinding[]
@@ -137,11 +139,12 @@ export function useCompleteInspection() {
 
   return useMutation({
     mutationFn: async ({
-      inspectionRecordId, workOrderDbId, signatureDataUrl,
+      inspectionRecordId, workOrderDbId, signatureDataUrl, signedBy,
     }: {
       inspectionRecordId: string
       workOrderDbId:      string
       signatureDataUrl:   string
+      signedBy?:          string
     }) => {
       const res = await api.post<{
         data: {
@@ -152,7 +155,7 @@ export function useCompleteInspection() {
           na: number
           signatureHash: string
         }
-      }>(`/inspections/${workOrderDbId}/complete`, { inspectionRecordId, signatureDataUrl })
+      }>(`/inspections/${workOrderDbId}/complete`, { inspectionRecordId, signatureDataUrl, signedBy })
       return res.data.data
     },
     onSuccess: (_data, { workOrderDbId }) => {

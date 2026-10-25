@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, ClipboardList, Plus } from 'lucide-react'
+import { Activity, AlertCircle, CheckCircle2, ClipboardList, ListChecks, Plus, Search, TimerReset } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { SkeletonTable } from '@/components/ui/Skeleton'
+import { MetricTile, PageHero } from '@/components/ui/PageHero'
 import { useWorkOrders, useCreateWorkOrder } from '@/hooks/useWorkOrders'
 import { useWorkInstructions } from '@/hooks/useWorkInstructions'
 import { useAssets } from '@/hooks/useAssets'
@@ -15,7 +16,7 @@ import { useToast } from '@/components/ui/Toast'
 import type { WorkOrder, WOStatus, WOPriority } from '@/types'
 
 const STATUS_BADGE: Record<WOStatus, 'open' | 'complete' | 'pending' | 'expiring'> = {
-  'open': 'open', 'in-progress': 'expiring', 'complete': 'complete', 'pending': 'pending',
+  'open': 'open', 'in-progress': 'expiring', 'complete': 'complete', 'cancelled': 'pending',
 }
 const PRIORITY_BADGE: Record<WOPriority, 'high' | 'medium' | 'low'> = {
   high: 'high', medium: 'medium', low: 'low', critical: 'high',
@@ -32,17 +33,23 @@ export default function Inspections() {
   const [filter, setFilter]     = useState<FilterStatus>('all')
   const [showModal, setShowModal] = useState(false)
   const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const [columnFilters, setColumnFilters] = useState({
+    woNumber: '', asset: '', location: '', wi: '', inspector: '', dueDate: '',
+  })
+  const [assetSearch, setAssetSearch] = useState('')
+  const [wiSearch, setWiSearch] = useState('')
 
-  const { data: woPage, isLoading } = useWorkOrders(undefined, page)
+  const { data: woPage, isLoading } = useWorkOrders(undefined, page, search, columnFilters)
   const wos = woPage?.items ?? []
-  const { data: wis  = [] }            = useWorkInstructions()
+  const { data: wis  = [] }            = useWorkInstructions(wiSearch)
   const { data: users = [] }           = useUsers()
-  const { data: assetPage }            = useAssets()
+  const { data: assetPage }            = useAssets({ search: assetSearch, page: 1 })
   const assets = assetPage?.items ?? []
   const createWO                       = useCreateWorkOrder()
   const usableWis = wis.filter(w => (w.checkableItemCount ?? w.checklistItemCount ?? 0) > 0)
 
-  useEffect(() => { setPage(1) }, [filter])
+  useEffect(() => { setPage(1) }, [filter, search, columnFilters])
 
   const filtered = filter === 'all' ? wos : wos.filter(w => w.status === filter)
 
@@ -57,6 +64,9 @@ export default function Inspections() {
   const set = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm(p => ({ ...p, [k]: e.target.value }))
+  const setColumnFilter = (key: keyof typeof columnFilters) =>
+    (e: React.ChangeEvent<HTMLInputElement>) =>
+      setColumnFilters(prev => ({ ...prev, [key]: e.target.value }))
 
   const handleCreate = async () => {
     if (!form.assetId) { toast('Select an asset', 'error'); return }
@@ -64,7 +74,7 @@ export default function Inspections() {
     const selectedWI = usableWis.find(w => w.dbId === form.workInstructionId)
     if (!selectedWI) { toast('Selected work instruction has no checklist items', 'error'); return }
     try {
-      await createWO.mutateAsync({
+      const created = await createWO.mutateAsync({
         assetId: form.assetId,
         priority: form.priority, dueDate: form.dueDate,
         assignedTo: form.assignedTo, workInstructionId: form.workInstructionId,
@@ -73,6 +83,8 @@ export default function Inspections() {
       toast('Work order created', 'success')
       setShowModal(false)
       setForm({ assetId: '', priority: 'medium', dueDate: '', assignedTo: '', workInstructionId: '', notes: '' })
+      const createdId = typeof created.id === 'string' ? created.id : ''
+      if (createdId) navigate(`/inspections/${createdId}`)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Failed to create', 'error')
     }
@@ -80,18 +92,33 @@ export default function Inspections() {
 
   return (
     <AppLayout breadcrumb={[{ label: 'Inspections' }]}>
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-[-0.3px]">Inspections</h1>
-          <p className="text-[13px] text-text-2 mt-1">Manage and execute work order inspections</p>
-        </div>
-        <Button variant="primary" onClick={() => setShowModal(true)}>
-          <Plus size={15} /> New Work Order
-        </Button>
+      <PageHero
+        eyebrow="Inspection Operations"
+        title="Plan, launch, and close field inspections with controlled checklist coverage."
+        description="A live work-order command board for assets, assigned inspectors, WI readiness, due dates, and execution status."
+        icon={ClipboardList}
+        stats={[
+          { label: 'Open', value: isLoading ? '-' : open, tone: 'warning' },
+          { label: 'In progress', value: isLoading ? '-' : inProgress, tone: 'accent' },
+          { label: 'Complete', value: isLoading ? '-' : complete, tone: 'success' },
+          { label: 'Visible', value: isLoading ? '-' : filtered.length, tone: 'info' },
+        ]}
+        actions={
+          <Button variant="primary" onClick={() => { setAssetSearch(''); setWiSearch(''); setShowModal(true) }}>
+            <Plus size={15} /> New Work Order
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <MetricTile label="Total Queue" value={isLoading ? '-' : wos.length} sub="Loaded work orders" icon={ListChecks} tone="info" />
+        <MetricTile label="Open" value={isLoading ? '-' : open} sub="Waiting to start" icon={TimerReset} tone="warning" />
+        <MetricTile label="In Progress" value={isLoading ? '-' : inProgress} sub="Currently executing" icon={Activity} tone="accent" />
+        <MetricTile label="Complete" value={isLoading ? '-' : complete} sub="Inspection closed" icon={CheckCircle2} tone="success" />
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="hidden">
         {[
           { label: 'Total',       value: wos.length, color: 'bg-bg-2' },
           { label: 'Open',        value: open,        color: 'bg-warning-bg' },
@@ -106,21 +133,32 @@ export default function Inspections() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {(['all', 'open', 'in-progress', 'complete'] as FilterStatus[]).map(s => (
-          <button key={s} onClick={() => setFilter(s)}
-            className={`px-3 py-1.5 rounded-[6px] text-[12px] border transition-all cursor-pointer ${
-              filter === s
-                ? 'bg-accent-bg border-accent-bd text-accent'
-                : 'bg-transparent border-border-2 text-text-2 hover:border-accent hover:text-accent'
-            }`}>
-            {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex gap-2 flex-wrap">
+          {(['all', 'open', 'in-progress', 'complete'] as FilterStatus[]).map(s => (
+            <button key={s} onClick={() => setFilter(s)}
+              className={`px-3 py-1.5 rounded-[6px] text-[12px] border transition-all cursor-pointer ${
+                filter === s
+                  ? 'bg-accent-bg border-accent-bd text-accent'
+                  : 'bg-transparent border-border-2 text-text-2 hover:border-accent hover:text-accent'
+              }`}>
+              {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="relative w-full lg:w-[360px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-3" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search WO, asset, WI, location, inspector..."
+            className={INPUT + ' pl-9'}
+          />
+        </div>
       </div>
 
       {/* Table */}
-      <Card>
+      <Card className="premium-ring">
         {isLoading ? (
           <SkeletonTable rows={6} />
         ) : filtered.length === 0 ? (
@@ -138,6 +176,16 @@ export default function Inspections() {
                   {h}
                 </span>
               ))}
+            </div>
+            <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-bg-2">
+              <input value={columnFilters.woNumber} onChange={setColumnFilter('woNumber')} placeholder="WO" className="w-20 flex-none rounded-[6px] border border-border bg-bg px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent" />
+              <input value={columnFilters.asset} onChange={setColumnFilter('asset')} placeholder="Asset" className="min-w-0 flex-1 rounded-[6px] border border-border bg-bg px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent" />
+              <input value={columnFilters.location} onChange={setColumnFilter('location')} placeholder="Location" className="hidden min-w-0 flex-1 rounded-[6px] border border-border bg-bg px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent md:block" />
+              <input value={columnFilters.wi} onChange={setColumnFilter('wi')} placeholder="WI" className="hidden min-w-0 flex-1 rounded-[6px] border border-border bg-bg px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent lg:block" />
+              <span className="flex-1" />
+              <span className="flex-1" />
+              <input value={columnFilters.inspector} onChange={setColumnFilter('inspector')} placeholder="Inspector" className="hidden min-w-0 flex-1 rounded-[6px] border border-border bg-bg px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent md:block" />
+              <input type="date" value={columnFilters.dueDate} onChange={setColumnFilter('dueDate')} className="w-24 flex-none rounded-[6px] border border-border bg-bg px-2 py-1.5 text-[11px] text-text outline-none focus:border-accent" />
             </div>
             {filtered.map((wo: WorkOrder) => (
               <div key={wo.dbId}
@@ -188,12 +236,20 @@ export default function Inspections() {
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className={LABEL}>Asset <span className="text-danger">*</span></label>
+              <SearchInput
+                value={assetSearch}
+                onChange={setAssetSearch}
+                placeholder="Search by asset number, name, or location..."
+              />
               <select value={form.assetId} onChange={set('assetId')} className={INPUT} required>
                 <option value="" disabled>Select registered asset...</option>
                 {assets.map(asset => (
                   <option key={asset.id} value={asset.id}>{asset.assetNumber} — {asset.name}{asset.location ? ` (${asset.location})` : ''}</option>
                 ))}
               </select>
+              {assets.length === 0 && (
+                <p className="text-[11px] text-warning mt-1">No matching assets found.</p>
+              )}
             </div>
             <div>
               <label className={LABEL}>Location</label>
@@ -223,6 +279,11 @@ export default function Inspections() {
             </div>
             <div className="col-span-2">
               <label className={LABEL}>Work Instruction Checklist <span className="text-danger">*</span></label>
+              <SearchInput
+                value={wiSearch}
+                onChange={setWiSearch}
+                placeholder="Search by WI number or title..."
+              />
               <select value={form.workInstructionId} onChange={set('workInstructionId')} required className={INPUT}>
                 <option value="" disabled>Select checklist...</option>
                 {wis.map(w => {
@@ -237,6 +298,9 @@ export default function Inspections() {
                   <option key={w.dbId} value={w.dbId}>{w.id} — {w.title}</option>
                 */}
               </select>
+              {wis.length === 0 && (
+                <p className="text-[11px] text-warning mt-1">No matching work instructions found.</p>
+              )}
               {usableWis.length === 0 ? (
                 <div className="mt-2 flex items-start gap-2 rounded-[8px] border border-warning-border bg-warning-bg/20 px-3 py-2 text-warning">
                   <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
@@ -262,5 +326,23 @@ export default function Inspections() {
         </div>
       </Modal>
     </AppLayout>
+  )
+}
+
+function SearchInput({ value, onChange, placeholder }: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+}) {
+  return (
+    <div className="relative mb-2">
+      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-3" />
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={INPUT + ' pl-9'}
+      />
+    </div>
   )
 }

@@ -3,6 +3,9 @@ node_modules/
 */node_modules/
 
 # Environment variables (contain secrets)
+.env.*
+!.env.example
+**/supabase/.temp/
 .env
 */.env
 **/.env

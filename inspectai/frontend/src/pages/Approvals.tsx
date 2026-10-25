@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, Clock3, Search, SlidersHorizontal, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Clock3, GitPullRequest, Search, SlidersHorizontal, X } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { StatCard } from '@/components/ui/StatCard'
+import { PageHero } from '@/components/ui/PageHero'
 import { Modal } from '@/components/ui/Modal'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { useApprovals, useApproveStep, useRejectStep, type Approval, type ApprovalStep } from '@/hooks/useApprovals'
@@ -140,15 +141,23 @@ export default function Approvals() {
 
   return (
     <AppLayout breadcrumb={[{ label: 'Approvals' }]}>
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-[-0.3px]">Approvals</h1>
-          <p className="mt-1 text-[13px] text-text-2">Review and action work instruction submissions</p>
-        </div>
-        <div className="hidden items-center gap-2 rounded-md border border-border bg-bg-2 px-3 py-2 text-[11px] text-text-2 sm:flex">
-          <Clock3 size={14} className="text-accent" /> {pending} requiring attention
-        </div>
-      </div>
+      <PageHero
+        eyebrow="Approval Control"
+        title="Review, challenge, and release controlled WIs through a visible approval workflow."
+        description="A focused approval inbox for pending technical checks, final approval steps, rejections, comments, and controlled activation."
+        icon={GitPullRequest}
+        stats={[
+          { label: 'Pending', value: pending, tone: 'warning' },
+          { label: 'Approved', value: approved, tone: 'success' },
+          { label: 'Rejected', value: rejected, tone: 'danger' },
+          { label: 'Total', value: approvals.length, tone: 'info' },
+        ]}
+        actions={
+          <div className="inline-flex items-center gap-2 rounded-[10px] border border-border bg-bg-2/70 px-3 py-2 text-[12px] text-text-2">
+            <Clock3 size={14} className="text-accent" /> {pending} requiring attention
+          </div>
+        }
+      />
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <button onClick={() => setFilterAndReset('active')} className="text-left"><StatCard label="Pending" value={pending} color="amber" sub="Needs action" /></button>
@@ -157,7 +166,7 @@ export default function Approvals() {
         <button onClick={() => setFilterAndReset('all')} className="text-left"><StatCard label="Total" value={approvals.length} sub="All submissions" /></button>
       </div>
 
-      <Card className="mb-4">
+      <Card className="premium-ring mb-4">
         <div className="grid gap-3 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div className="relative min-w-0">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-3" />
@@ -182,7 +191,7 @@ export default function Approvals() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="premium-ring">
         {isLoading ? <SkeletonTable rows={8} /> : visible.length === 0 ? (
           <CardBody><div className="py-12 text-center"><Search size={22} className="mx-auto mb-3 text-text-3" /><p className="text-[13px] text-text-2">No approval records match your search</p><p className="mt-1 text-[12px] text-text-3">Try another WI number, title, or status filter.</p></div></CardBody>
         ) : (
