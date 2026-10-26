@@ -1,297 +1,306 @@
-import { useEffect, useState } from 'react'
+﻿import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { History } from '@/components/ui/History'
+import { useDepartments } from '@/hooks/useDepartments'
 import { useAuth } from '@/context/AuthContext'
-import { useUsers, useUpdateUserRole } from '@/hooks/useUsers'
-import { useToast } from '@/components/ui/Toast'
-import type { UserRole } from '@/types'
-
-type SettingsTab = 'profile' | 'password' | 'branding' | 'sso' | 'integrations' | 'users'
-
-const TABS: Array<{ id: SettingsTab; label: string }> = [
-  { id: 'profile',      label: 'Profile'       },
-  { id: 'password',     label: 'Password'      },
-  { id: 'branding',     label: 'Branding'      },
-  { id: 'sso',          label: 'SSO & Auth'    },
-  { id: 'integrations', label: 'Integrations'  },
-  { id: 'users',        label: 'Users & Access'},
-]
-
-const ROLE_PILL: Record<string, string> = {
-  admin:     'bg-danger-bg text-danger border border-danger-border',
-  approver:  'bg-violet-bg text-violet border border-violet-border',
-  inspector: 'bg-info-bg text-info border border-info-border',
-  viewer:    'bg-bg-3 text-text-2 border border-border-2',
+import { can } from '@/lib/permissions'
+import { api } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
+interface Profile {
+  id: string
+  name: string
+  email: string
+  primary_department_id: string
+  department_ids: string[]
+  capabilities: string[]
 }
-
-const SSO_PROVIDERS = ['Azure AD', 'Okta', 'Google Workspace', 'Generic SAML 2.0']
-
-const INTEGRATIONS = [
-  { id: 'maximo', name: 'IBM Maximo', status: 'connected',    desc: 'Asset & work order sync'  },
-  { id: 'sap',    name: 'SAP PM',     status: 'disconnected', desc: 'Maintenance integration'  },
-  { id: 'teams',  name: 'MS Teams',   status: 'connected',    desc: 'Escalation notifications' },
-  { id: 'slack',  name: 'Slack',      status: 'disconnected', desc: 'Alert notifications'      },
-  { id: 'powerbi',name: 'Power BI',   status: 'disconnected', desc: 'Analytics dashboard'      },
+const capabilities = [
+  ['inspector', 'Inspector'],
+  ['form_author', 'Form author'],
+  ['form_approver', 'Form approver'],
+  ['viewer', 'Viewer'],
+  ['asset_manager', 'Manage assets'],
+  ['work_order_manager', 'Manage work orders'],
+  ['administrator', 'Administrator'],
 ]
-
 export default function Settings() {
-  const { user }   = useAuth()
-  const { toast }  = useToast()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [tab, setTab]             = useState<SettingsTab>('profile')
-  const [appName, setAppName]     = useState('InspectAI')
-  const [primaryColor, setColor]  = useState('#4f8ef7')
-  const [ssoProvider, setSso]     = useState(SSO_PROVIDERS[0])
-
-  const { data: users = [], isLoading: usersLoading } = useUsers()
-  const updateRole = useUpdateUserRole()
-  const availableTabs = user?.role === 'admin' ? TABS : TABS.filter(t => t.id === 'profile' || t.id === 'password')
-
-  useEffect(() => {
-    const requested = searchParams.get('tab') as SettingsTab | null
-    if (requested && availableTabs.some(t => t.id === requested)) setTab(requested)
-  }, [availableTabs, searchParams])
-
-  const handleRoleChange = async (userId: string, role: UserRole) => {
-    if (userId === user?.id) { toast("You can't change your own role", 'error'); return }
+  const { user } = useAuth(),
+    [params, setParams] = useSearchParams(),
+    qc = useQueryClient(),
+    { data: departments = [] } = useDepartments(),
+    [message, setMessage] = useState(''),
+    [busy, setBusy] = useState(false)
+  const [code, setCode] = useState(''),
+    [name, setName] = useState(''),
+    [selected, setSelected] = useState<Profile | null>(null),
+    [reason, setReason] = useState('')
+  const admin = can(user, 'administrator'),
+    tab = params.get('tab') || (admin ? 'departments' : 'profile')
+  const { data: users = [] } = useQuery({
+    queryKey: ['admin-users'],
+    enabled: admin,
+    queryFn: async () => (await api.get<{ data: Profile[] }>('/users')).data.data,
+  })
+  async function run(action: () => Promise<unknown>, success: string) {
+    setBusy(true)
+    setMessage('')
     try {
-      await updateRole.mutateAsync({ userId, role })
-      toast('Role updated', 'success')
+      await action()
+      setMessage(success)
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['departments'] }),
+        qc.invalidateQueries({ queryKey: ['admin-users'] }),
+        qc.invalidateQueries({ queryKey: ['history'] }),
+      ])
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Failed to update role', 'error')
+      setMessage(e instanceof Error ? e.message : 'Could not save the change')
+    } finally {
+      setBusy(false)
     }
   }
-
-  if (user?.role !== 'admin' && tab !== 'profile' && tab !== 'password') {
-    return (
-      <AppLayout breadcrumb={[{ label: 'Settings' }]}>
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <span className="text-5xl mb-4">🔒</span>
-          <h3 className="text-[16px] font-medium mb-2">Admin access required</h3>
-          <p className="text-[13px] text-text-2">Only admins can access Settings.</p>
-        </div>
-      </AppLayout>
-    )
-  }
-
   return (
     <AppLayout breadcrumb={[{ label: 'Settings' }]}>
-      <div className="mb-6">
-        <h1 className="text-[22px] font-semibold tracking-[-0.3px]">Settings</h1>
-        <p className="text-[13px] text-text-2 mt-1">Enterprise configuration and administration</p>
-      </div>
-
-      {/* Tab bar */}
-      <div className="flex gap-1 mb-6 border-b border-border">
-        {availableTabs.map(t => (
-          <button key={t.id} onClick={() => { setTab(t.id); setSearchParams({ tab: t.id }) }}
-            className={`px-4 py-2 text-[13px] border-b-2 -mb-px transition-all duration-150 bg-transparent cursor-pointer ${
-              tab === t.id
-                ? 'border-accent text-accent font-medium'
-                : 'border-transparent text-text-2 hover:text-text'
-            }`}>
-            {t.label}
+      <h1 className="text-2xl font-semibold mb-2">Settings</h1>
+      <p className="text-sm text-text-2 mb-6">Account details and authorised administration.</p>
+      <div className="flex flex-wrap gap-2 mb-5">
+        {[...(admin ? ['departments', 'users', 'history'] : []), 'profile', 'password'].map((t) => (
+          <button
+            key={t}
+            className={`px-4 py-2 text-sm rounded-lg border ${tab === t ? 'border-accent text-accent bg-accent-bg' : 'border-border'}`}
+            onClick={() => {
+              setParams({ tab: t })
+              setMessage('')
+            }}
+          >
+            {t === 'users'
+              ? 'People & access'
+              : t === 'history'
+                ? 'Activity history'
+                : t[0].toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
-
-      {/* ── BRANDING ── */}
-      {tab === 'profile' && (
-        <Card>
-          <CardHeader>Profile</CardHeader>
-          <CardBody className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Name</label>
-              <input defaultValue={user?.name}
-                className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent transition-colors" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Staff ID</label>
-              <input defaultValue={user?.staffId}
-                className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent transition-colors" />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Email</label>
-              <input defaultValue={user?.email} readOnly
-                className="w-full px-[14px] py-[9px] bg-bg-3 border border-border rounded-[8px] text-[13px] text-text-3 outline-none" />
-            </div>
-            <div className="md:col-span-2 flex justify-end">
-              <Button variant="primary" onClick={() => toast('Profile update workflow is staged here; backend persistence can be added next.', 'info')}>
-                Save Profile
+      {message && (
+        <p role="status" className="text-sm p-3 bg-bg-2 border border-border rounded-lg mb-4">
+          {message}
+        </p>
+      )}
+      {admin && tab === 'history' && <History />}
+      {admin && tab === 'departments' && (
+        <div className="space-y-5">
+          <div className="execution-card">
+            <h2 className="font-semibold mb-4">Create department</h2>
+            <div className="grid sm:grid-cols-[160px_1fr_auto] gap-3">
+              <input
+                aria-label="Department code"
+                className="field-input"
+                placeholder="Code, e.g. SIG"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+              />
+              <input
+                aria-label="Department name"
+                className="field-input"
+                placeholder="Department name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <Button
+                variant="primary"
+                loading={busy}
+                disabled={!code || !name}
+                onClick={() =>
+                  void run(async () => {
+                    await api.post('/departments', { code, name })
+                    setCode('')
+                    setName('')
+                  }, 'Department created')
+                }
+              >
+                Create department
               </Button>
             </div>
-          </CardBody>
-        </Card>
-      )}
-
-      {tab === 'password' && (
-        <Card>
-          <CardHeader>Change Password</CardHeader>
-          <CardBody className="max-w-md flex flex-col gap-4">
-            <input type="password" placeholder="Current password"
-              className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors" />
-            <input type="password" placeholder="New password"
-              className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors" />
-            <input type="password" placeholder="Confirm new password"
-              className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors" />
-            <Button variant="primary" onClick={() => toast('Password update workflow is staged here; authentication-policy handling can be added next.', 'info')}>
-              Update Password
-            </Button>
-          </CardBody>
-        </Card>
-      )}
-
-      {tab === 'branding' && (
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>White-label Branding</CardHeader>
-            <CardBody className="flex flex-col gap-4">
-              <div>
-                <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">App Name</label>
-                <input value={appName} onChange={e => setAppName(e.target.value)}
-                  className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent transition-colors" />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {departments.map((d) => (
+              <div className="execution-card" key={d.id}>
+                <span className="text-xs font-mono text-accent">{d.code}</span>
+                <h3 className="font-medium mt-2">{d.name}</h3>
               </div>
-              <div>
-                <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Primary Colour</label>
-                <div className="flex items-center gap-3">
-                  <input type="color" value={primaryColor} onChange={e => setColor(e.target.value)}
-                    className="w-10 h-10 rounded-[6px] border border-border-2 cursor-pointer bg-transparent p-0.5" />
-                  <span className="font-mono text-[13px] text-text-2">{primaryColor}</span>
-                </div>
-                <div className="flex gap-1.5 mt-2 flex-wrap">
-                  {['#4f8ef7','#34d399','#f87171','#fbbf24','#a78bfa','#22d3ee','#f97316','#ec4899'].map(c => (
-                    <button key={c} onClick={() => setColor(c)}
-                      className="w-6 h-6 rounded-full border-2 cursor-pointer transition-all"
-                      style={{ background: c, borderColor: c === primaryColor ? '#fff' : 'transparent' }} />
+            ))}
+          </div>
+        </div>
+      )}
+      {admin && tab === 'users' && (
+        <div className="grid lg:grid-cols-[280px_1fr] gap-5">
+          <div className="space-y-2">
+            {users.map((u) => (
+              <button
+                key={u.id}
+                className="execution-card block w-full text-left text-sm"
+                onClick={() => {
+                  setSelected({
+                    ...u,
+                    department_ids: u.department_ids || [u.primary_department_id],
+                  })
+                  setReason('')
+                }}
+              >
+                <strong>{u.name}</strong>
+                <span className="block text-xs text-text-2 mt-1">{u.email}</span>
+              </button>
+            ))}
+          </div>
+          {selected && (
+            <div className="execution-card">
+              <h2 className="font-semibold mb-4">Access for {selected.name}</h2>
+              <p className="text-sm text-text-2 mb-4">
+                Authors and approvers are separate capabilities. Department memberships also control
+                cross-department review access. Administrators have tenant-wide oversight.
+              </p>
+              <label className="field-label">
+                Primary department
+                <select
+                  aria-label="Primary department"
+                  className="field-input mt-2"
+                  value={selected.primary_department_id}
+                  onChange={(e) =>
+                    setSelected({
+                      ...selected,
+                      primary_department_id: e.target.value,
+                      department_ids: [...new Set([...selected.department_ids, e.target.value])],
+                    })
+                  }
+                >
+                  {departments.map((d) => (
+                    <option value={d.id} key={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <fieldset className="mt-4">
+                <legend className="text-sm font-semibold mb-3">
+                  Additional department memberships
+                </legend>
+                {departments.map((d) => (
+                  <label key={d.id} className="flex gap-2 items-center py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      disabled={d.id === selected.primary_department_id}
+                      checked={selected.department_ids.includes(d.id)}
+                      onChange={(e) =>
+                        setSelected({
+                          ...selected,
+                          department_ids: e.target.checked
+                            ? [...selected.department_ids, d.id]
+                            : selected.department_ids.filter((id) => id !== d.id),
+                        })
+                      }
+                    />
+                    {d.name}
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset className="mt-4">
+                <legend className="text-sm font-semibold mb-3">Capabilities</legend>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {capabilities.map(([c, label]) => (
+                    <label key={c} className="flex gap-2 items-center text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selected.capabilities.includes(c)}
+                        onChange={(e) =>
+                          setSelected({
+                            ...selected,
+                            capabilities: e.target.checked
+                              ? [...selected.capabilities, c]
+                              : selected.capabilities.filter((v) => v !== c),
+                          })
+                        }
+                      />
+                      {label}
+                    </label>
                   ))}
                 </div>
-              </div>
-              <Button variant="primary" size="md">Save Branding</Button>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader>Live Preview</CardHeader>
-            <CardBody>
-              <div className="border border-border rounded-[8px] overflow-hidden">
-                <div className="h-10 flex items-center px-4 gap-2" style={{ background: primaryColor }}>
-                  <span className="w-5 h-5 rounded-[4px] bg-white/20 flex items-center justify-center text-[10px]">✦</span>
-                  <span className="text-white font-semibold text-[13px]">{appName}</span>
-                </div>
-                <div className="p-4 bg-bg-3">
-                  <div className="h-3 w-24 bg-border-2 rounded shimmer mb-2" />
-                  <div className="h-2 w-40 bg-border rounded shimmer" />
-                </div>
-              </div>
-            </CardBody>
-          </Card>
+              </fieldset>
+              <label className="field-label mt-5">
+                Reason for access change
+                <textarea
+                  aria-label="Access change reason"
+                  className="field-input mt-2"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </label>
+              <Button
+                variant="primary"
+                className="mt-4"
+                loading={busy}
+                disabled={selected.id === user?.id || !reason.trim()}
+                onClick={() =>
+                  void run(
+                    () =>
+                      api.put(`/departments/users/${selected.id}`, {
+                        primaryDepartmentId: selected.primary_department_id,
+                        departmentIds: selected.department_ids,
+                        capabilities: selected.capabilities,
+                        reason,
+                      }),
+                    'Access updated',
+                  )
+                }
+              >
+                Save access
+              </Button>
+              {selected.id === user?.id && (
+                <p className="text-sm text-text-2 mt-3">
+                  Another administrator must change your own access.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
-
-      {/* ── SSO ── */}
-      {tab === 'sso' && (
-        <Card>
-          <CardHeader>SSO Configuration</CardHeader>
-          <CardBody className="flex flex-col gap-4">
-            <div>
-              <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Identity Provider</label>
-              <select value={ssoProvider} onChange={e => setSso(e.target.value)}
-                className="w-full max-w-sm px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent transition-colors cursor-pointer">
-                {SSO_PROVIDERS.map(p => <option key={p}>{p}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">Entity ID / Metadata URL</label>
-              <input placeholder="https://your-idp.com/metadata.xml"
-                className="w-full px-[14px] py-[9px] bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent placeholder:text-text-3 transition-colors" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.08em] mb-1.5">ACS URL</label>
-              <input defaultValue="https://app.inspectai.io/auth/saml/callback" readOnly
-                className="w-full px-[14px] py-[9px] bg-bg-3 border border-border rounded-[8px] text-[13px] text-text-3 outline-none font-mono" />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="secondary" size="md">Test Connection</Button>
-              <Button variant="primary"   size="md">Save SSO Config</Button>
-            </div>
-          </CardBody>
-        </Card>
-      )}
-
-      {/* ── INTEGRATIONS ── */}
-      {tab === 'integrations' && (
-        <div className="flex flex-col gap-3">
-          {INTEGRATIONS.map(int => (
-            <Card key={int.id}>
-              <CardBody className="flex items-center gap-4 py-4">
-                <div className="flex-1">
-                  <p className="text-[14px] font-medium text-text">{int.name}</p>
-                  <p className="text-[12px] text-text-2 mt-0.5">{int.desc}</p>
-                </div>
-                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
-                  int.status === 'connected'
-                    ? 'bg-success-bg text-success border border-success-border'
-                    : 'bg-bg-3 text-text-3 border border-border-2'
-                }`}>
-                  {int.status}
-                </span>
-                <Button variant="secondary" size="sm">Configure</Button>
-              </CardBody>
-            </Card>
-          ))}
+      {tab === 'profile' && (
+        <div className="execution-card">
+          <h2 className="font-semibold">{user?.name}</h2>
+          <p className="text-sm text-text-2 mt-2">
+            {user?.email} · {user?.staffId}
+          </p>
+          <p className="text-sm mt-4">
+            Department:{' '}
+            {departments.find((d) => d.id === user?.primaryDepartmentId)?.name || 'Not recorded'}
+          </p>
         </div>
       )}
-
-      {/* ── USERS (real data) ── */}
-      {tab === 'users' && (
-        <Card>
-          <CardHeader>
-            Users & Access Control
-            <span className="ml-2 text-[11px] text-text-3 font-normal font-mono">
-              {users.length} users
-            </span>
-          </CardHeader>
-          <CardBody className="p-0">
-            {usersLoading ? (
-              <div className="p-4 flex flex-col gap-3">
-                {[1,2,3].map(i => <div key={i} className="h-14 rounded shimmer" />)}
-              </div>
-            ) : users.length === 0 ? (
-              <div className="px-4 py-6 text-[13px] text-text-3 text-center">No users found</div>
-            ) : (
-              users.map(u => (
-                <div key={u.id} className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0">
-                  <div className="w-8 h-8 rounded-full bg-accent-2 flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0">
-                    {u.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[13px] font-medium text-text">{u.name}</p>
-                      {u.id === user?.id && (
-                        <span className="text-[10px] text-text-3 bg-bg-3 border border-border px-1.5 py-0.5 rounded-full">you</span>
-                      )}
-                    </div>
-                    <p className="text-[12px] text-text-2">{u.email} · <span className="font-mono">{u.staffId}</span></p>
-                  </div>
-                  <select
-                    value={u.role}
-                    disabled={u.id === user?.id || updateRole.isPending}
-                    onChange={e => handleRoleChange(u.id, e.target.value as UserRole)}
-                    className={`text-[11px] font-medium px-2 py-1 rounded-[6px] border outline-none cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${ROLE_PILL[u.role]}`}
-                  >
-                    <option value="admin">admin</option>
-                    <option value="approver">approver</option>
-                    <option value="inspector">inspector</option>
-                    <option value="viewer">viewer</option>
-                  </select>
-                </div>
-              ))
-            )}
-          </CardBody>
-        </Card>
+      {tab === 'password' && (
+        <div className="execution-card">
+          <h2 className="font-semibold">Reset your password</h2>
+          <p className="text-sm text-text-2 mt-2 mb-4">
+            Send a secure reset link to your account email. Changing your password invalidates
+            existing application sessions.
+          </p>
+          <Button
+            variant="primary"
+            loading={busy}
+            onClick={() =>
+              void run(async () => {
+                const { error } = await supabase.auth.resetPasswordForEmail(user!.email, {
+                  redirectTo: window.location.origin + '/reset-password',
+                })
+                if (error) throw error
+              }, 'If the account is available, a reset email will arrive shortly.')
+            }
+          >
+            Send password reset email
+          </Button>
+        </div>
       )}
+      {!admin && !['profile', 'password'].includes(tab) && <p>Administrator access is required.</p>}
     </AppLayout>
   )
 }

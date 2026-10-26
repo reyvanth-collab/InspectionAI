@@ -5,35 +5,55 @@ import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { useWorkInstruction, useSubmitForApproval, useCreateWIRevision } from '@/hooks/useWorkInstructions'
+import {
+  useWorkInstruction,
+  useSubmitForApproval,
+  useCreateWIRevision,
+} from '@/hooks/useWorkInstructions'
 import { useApprovers } from '@/hooks/useUsers'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/context/AuthContext'
+import { can, formStatus } from '@/lib/permissions'
+import { History } from '@/components/ui/History'
+import { FormApprovals } from '@/components/ui/FormApprovals'
 
 const STATUS_MAP: Record<string, BadgeVariant> = {
-  active:           'active',
-  expiring:         'expiring',
-  expired:          'expired',
-  draft:            'draft',
+  active: 'active',
+  expiring: 'expiring',
+  expired: 'expired',
+  draft: 'draft',
   pending_approval: 'pending_approval',
-  superseded:       'superseded',
+  superseded: 'superseded',
 }
 
 interface ChecklistItem {
-  id: string; item_no: string; description: string
-  acceptance_criteria: string | null; category: string | null; sort_order: number
-  field_type?: string | null; layout_json?: string | null
+  id: string
+  item_no: string
+  description: string
+  acceptance_criteria: string | null
+  category: string | null
+  sort_order: number
+  field_type?: string | null
+  layout_json?: string | null
 }
 interface RevisionHistory {
-  id: string; revision: string; change_summary: string | null
-  effective_date: string | null; approved_by: string | null
+  id: string
+  revision: string
+  change_summary: string | null
+  effective_date: string | null
+  approved_by: string | null
 }
 
 export default function WIDetail() {
   const { id: dbId = '' } = useParams()
-  const navigate          = useNavigate()
-  const { toast }         = useToast()
+  const navigate = useNavigate()
+  const { toast } = useToast()
+  const { user } = useAuth()
+  const [tab, setTab] = useState('content')
   const { data: wi, isLoading, refetch: refetchWI } = useWorkInstruction(dbId)
-  const { data: approvers = [] } = useApprovers()
+  const { data: approvers = [] } = useApprovers(
+    typeof wi?.department_id === 'string' ? wi.department_id : undefined,
+  )
   const submitForApproval = useSubmitForApproval()
   const createRevision = useCreateWIRevision()
 
@@ -43,10 +63,15 @@ export default function WIDetail() {
   const [selectedApprovers, setSelectedApprovers] = useState<string[]>([])
 
   const toggleApprover = (id: string) =>
-    setSelectedApprovers(prev => prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id])
+    setSelectedApprovers((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id],
+    )
 
   const handleSubmitApproval = async () => {
-    if (selectedApprovers.length === 0) { toast('Select at least one approver', 'error'); return }
+    if (selectedApprovers.length === 0) {
+      toast('Select at least one approver', 'error')
+      return
+    }
     try {
       await submitForApproval.mutateAsync({ wiDbId: dbId, approverIds: selectedApprovers })
       toast('Submitted for approval', 'success')
@@ -72,9 +97,13 @@ export default function WIDetail() {
 
   if (isLoading) {
     return (
-      <AppLayout breadcrumb={[{ label: 'Master Library', path: '/library' }, { label: 'Loading…' }]}>
+      <AppLayout
+        breadcrumb={[{ label: 'Inspection Forms', path: '/library' }, { label: 'Loading…' }]}
+      >
         <div className="flex flex-col gap-3">
-          {[1,2,3].map(i => <div key={i} className="h-24 rounded-[10px] shimmer" />)}
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 rounded-[10px] shimmer" />
+          ))}
         </div>
       </AppLayout>
     )
@@ -82,40 +111,46 @@ export default function WIDetail() {
 
   if (!wi) {
     return (
-      <AppLayout breadcrumb={[{ label: 'Master Library', path: '/library' }, { label: 'Not found' }]}>
-        <div className="text-center py-16 text-text-2">Work instruction not found.</div>
+      <AppLayout
+        breadcrumb={[{ label: 'Inspection Forms', path: '/library' }, { label: 'Not found' }]}
+      >
+        <div className="text-center py-16 text-text-2">Inspection form not found.</div>
       </AppLayout>
     )
   }
 
   const w = wi as any
-  const items: ChecklistItem[]    = [...(w.wi_checklist_items ?? [])].sort(
-    (a: ChecklistItem, b: ChecklistItem) => a.sort_order - b.sort_order
+  const items: ChecklistItem[] = [...(w.wi_checklist_items ?? [])].sort(
+    (a: ChecklistItem, b: ChecklistItem) => a.sort_order - b.sort_order,
   )
   const history: RevisionHistory[] = [...(w.wi_revision_history ?? [])].sort(
     (a: RevisionHistory, b: RevisionHistory) =>
-      new Date(b.effective_date ?? 0).getTime() - new Date(a.effective_date ?? 0).getTime()
+      new Date(b.effective_date ?? 0).getTime() - new Date(a.effective_date ?? 0).getTime(),
   )
 
-  const today        = new Date()
-  const expiry       = w.expiry_date ? new Date(w.expiry_date) : null
-  const daysRemaining = expiry ? Math.round((expiry.getTime() - today.getTime()) / 86_400_000) : null
-  const canCreateRevision = ['active', 'expiring', 'expired', 'superseded'].includes(String(w.status))
+  const today = new Date()
+  const expiry = w.expiry_date ? new Date(w.expiry_date) : null
+  const daysRemaining = expiry
+    ? Math.round((expiry.getTime() - today.getTime()) / 86_400_000)
+    : null
+  const canCreateRevision =
+    can(user, 'form_author') &&
+    ['active', 'expiring', 'expired', 'superseded'].includes(String(w.status))
 
   return (
-    <AppLayout breadcrumb={[
-      { label: 'Master Library', path: '/library' },
-      { label: w.wi_number },
-    ]}>
+    <AppLayout
+      breadcrumb={[{ label: 'Inspection Forms', path: '/library' }, { label: w.wi_number }]}
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="font-mono text-[12px] text-accent">{w.wi_number}</span>
             <span className="font-mono text-[11px] text-text-3">{w.revision}</span>
-            <Badge variant={STATUS_MAP[w.status] ?? 'draft'}>{w.status}</Badge>
+            <Badge variant={STATUS_MAP[w.status] ?? 'draft'}>{formStatus(w.status)}</Badge>
           </div>
           <h1 className="text-[20px] font-semibold tracking-[-0.3px]">{w.title}</h1>
+          {w.description && <p className="text-sm text-text-2 mt-2 max-w-2xl">{w.description}</p>}
           <p className="text-[13px] text-text-2 mt-1">
             {w.category} · Owner: {w.owner_name ?? '—'}
           </p>
@@ -126,28 +161,55 @@ export default function WIDetail() {
               Create Revision
             </Button>
           )}
-          {w.status === 'draft' ? (
+          {w.status === 'draft' && can(user, 'form_author') ? (
             <Button variant="secondary" onClick={() => setShowApprovalModal(true)}>
               Submit for Approval
             </Button>
           ) : w.status === 'pending_approval' ? (
-            <Button variant="secondary" onClick={() => navigate('/approvals')}>
+            <Button variant="secondary" onClick={() => setTab('approval')}>
               View Approvals
             </Button>
-          ) : (
-            null
-          )}
-          <Button variant="primary" onClick={() => navigate('/library')}>Back to Library</Button>
+          ) : null}
+          <Button variant="primary" onClick={() => navigate('/library')}>
+            Back to forms
+          </Button>
         </div>
       </div>
 
-      <div className="grid md:grid-cols-[1fr_320px] gap-5 items-start">
+      <div className="flex gap-2 mb-5" role="tablist" aria-label="Form details">
+        {['content', 'approval', 'history'].map((t) => (
+          <button
+            role="tab"
+            aria-selected={tab === t}
+            key={t}
+            className={`px-4 py-2 rounded-lg border text-sm ${tab === t ? 'border-accent bg-accent-bg text-accent' : 'border-border'}`}
+            onClick={() => setTab(t)}
+          >
+            {t === 'content' ? 'Content' : t === 'approval' ? 'Approval & comments' : 'History'}
+          </button>
+        ))}
+        {w.status === 'draft' && can(user, 'form_author') && (
+          <Button variant="secondary" onClick={() => navigate(`/library/${dbId}/edit`)}>
+            Edit draft
+          </Button>
+        )}
+      </div>
+      {tab === 'history' && <History formId={dbId} />}
+      {tab === 'approval' && (
+        <FormApprovals formId={dbId} authorId={w.owner_id} onChanged={() => void refetchWI()} />
+      )}
+
+      <div
+        className={tab === 'content' ? 'grid md:grid-cols-[1fr_320px] gap-5 items-start' : 'hidden'}
+      >
         {/* Left — checklist items */}
         <div className="flex flex-col gap-4">
           <Card>
-            <CardHeader actions={
-              <span className="text-[12px] text-text-3 font-mono">{items.length} items</span>
-            }>
+            <CardHeader
+              actions={
+                <span className="text-[12px] text-text-3 font-mono">{items.length} items</span>
+              }
+            >
               Checklist Items
             </CardHeader>
             {items.length === 0 ? (
@@ -155,41 +217,65 @@ export default function WIDetail() {
                 <p className="text-[13px] text-text-3">No checklist items yet.</p>
               </CardBody>
             ) : (
-              items.map(item => {
+              items.map((item) => {
                 const layout = parseLayout(item.layout_json)
                 return (
-                <div key={item.id}
-                  className="flex items-start gap-3 px-[18px] py-3 border-b border-border last:border-0">
-                  <span className="font-mono text-[11px] text-text-3 w-8 pt-0.5 flex-shrink-0">
-                    {item.item_no}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-[13px] text-text">{item.description}</p>
-                    {item.acceptance_criteria && (
-                      <p className="text-[11px] text-text-2 mt-0.5">{item.acceptance_criteria}</p>
-                    )}
-                    {item.field_type === 'table' && (
-                      <div className="mt-2 overflow-hidden rounded-[8px] border border-border">
-                        <div className="grid" style={{ gridTemplateColumns: `repeat(${layout.tableColumns.length}, minmax(90px, 1fr))` }}>
-                          {layout.tableColumns.map((col, i) => (
-                            <div key={i} className="border-r border-border last:border-r-0 bg-bg-3 px-2 py-1.5 text-[10px] font-semibold text-text-2 truncate">{col}</div>
+                  <div
+                    key={item.id}
+                    className="flex items-start gap-3 px-[18px] py-3 border-b border-border last:border-0"
+                  >
+                    <span className="font-mono text-[11px] text-text-3 w-8 pt-0.5 flex-shrink-0">
+                      {item.item_no}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-[13px] text-text">{item.description}</p>
+                      {item.acceptance_criteria && (
+                        <p className="text-[11px] text-text-2 mt-0.5">{item.acceptance_criteria}</p>
+                      )}
+                      {item.field_type === 'table' && (
+                        <div className="mt-2 overflow-hidden rounded-[8px] border border-border">
+                          <div
+                            className="grid"
+                            style={{
+                              gridTemplateColumns: `repeat(${layout.tableColumns.length}, minmax(90px, 1fr))`,
+                            }}
+                          >
+                            {layout.tableColumns.map((col, i) => (
+                              <div
+                                key={i}
+                                className="border-r border-border last:border-r-0 bg-bg-3 px-2 py-1.5 text-[10px] font-semibold text-text-2 truncate"
+                              >
+                                {col}
+                              </div>
+                            ))}
+                          </div>
+                          {Array.from({ length: Math.min(layout.tableRows, 3) }).map((_, row) => (
+                            <div
+                              key={row}
+                              className="grid border-t border-border"
+                              style={{
+                                gridTemplateColumns: `repeat(${layout.tableColumns.length}, minmax(90px, 1fr))`,
+                              }}
+                            >
+                              {layout.tableColumns.map((_, col) => (
+                                <div
+                                  key={col}
+                                  className="h-7 border-r border-border last:border-r-0 bg-bg-2"
+                                />
+                              ))}
+                            </div>
                           ))}
                         </div>
-                        {Array.from({ length: Math.min(layout.tableRows, 3) }).map((_, row) => (
-                          <div key={row} className="grid border-t border-border" style={{ gridTemplateColumns: `repeat(${layout.tableColumns.length}, minmax(90px, 1fr))` }}>
-                            {layout.tableColumns.map((_, col) => <div key={col} className="h-7 border-r border-border last:border-r-0 bg-bg-2" />)}
-                          </div>
-                        ))}
-                      </div>
+                      )}
+                    </div>
+                    {item.category && (
+                      <span className="text-[10px] text-text-3 bg-bg-3 border border-border px-2 py-0.5 rounded-full flex-shrink-0">
+                        {item.category}
+                      </span>
                     )}
                   </div>
-                  {item.category && (
-                    <span className="text-[10px] text-text-3 bg-bg-3 border border-border px-2 py-0.5 rounded-full flex-shrink-0">
-                      {item.category}
-                    </span>
-                  )}
-                </div>
-              )})
+                )
+              })
             )}
           </Card>
 
@@ -201,17 +287,28 @@ export default function WIDetail() {
                 <div className="px-[18px] py-4 text-[13px] text-text-3">No revision history.</div>
               ) : (
                 history.map((rev, i) => (
-                  <div key={rev.id} className="flex gap-3 px-[18px] py-3 border-b border-border last:border-0">
+                  <div
+                    key={rev.id}
+                    className="flex gap-3 px-[18px] py-3 border-b border-border last:border-0"
+                  >
                     {/* Timeline dot */}
                     <div className="flex flex-col items-center pt-1 gap-1">
-                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${i === 0 ? 'bg-accent' : 'bg-border-2'}`} />
-                      {i < history.length - 1 && <div className="w-0.5 flex-1 bg-border min-h-[16px]" />}
+                      <div
+                        className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${i === 0 ? 'bg-accent' : 'bg-border-2'}`}
+                      />
+                      {i < history.length - 1 && (
+                        <div className="w-0.5 flex-1 bg-border min-h-[16px]" />
+                      )}
                     </div>
                     <div className="flex-1 pb-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[12px] font-medium text-text">{rev.revision}</span>
+                        <span className="font-mono text-[12px] font-medium text-text">
+                          {rev.revision}
+                        </span>
                         {rev.effective_date && (
-                          <span className="text-[11px] text-text-3 font-mono">{rev.effective_date}</span>
+                          <span className="text-[11px] text-text-3 font-mono">
+                            {rev.effective_date}
+                          </span>
                         )}
                       </div>
                       {rev.change_summary && (
@@ -231,28 +328,37 @@ export default function WIDetail() {
             <CardHeader>Metadata</CardHeader>
             <CardBody className="flex flex-col gap-3">
               {[
-                { label: 'WI Number',      value: w.wi_number },
-                { label: 'Revision',       value: w.revision },
-                { label: 'Category',       value: w.category ?? '—' },
-                { label: 'Owner',          value: w.owner_name ?? '—' },
+                { label: 'Form reference', value: w.wi_number },
+                { label: 'Revision', value: w.revision },
+                { label: 'Category', value: w.category ?? '—' },
+                { label: 'Owner', value: w.owner_name ?? '—' },
                 { label: 'Effective Date', value: w.effective_date ?? '—' },
-                { label: 'Expiry Date',    value: w.expiry_date ?? '—' },
+                { label: 'Expiry Date', value: w.expiry_date ?? '—' },
                 {
                   label: 'Days Remaining',
-                  value: daysRemaining === null ? '—'
-                    : daysRemaining < 0 ? `Expired ${Math.abs(daysRemaining)}d ago`
-                    : `${daysRemaining}d`,
+                  value:
+                    daysRemaining === null
+                      ? '—'
+                      : daysRemaining < 0
+                        ? `Expired ${Math.abs(daysRemaining)}d ago`
+                        : `${daysRemaining}d`,
                 },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between gap-2">
-                  <span className="text-[11px] text-text-2 uppercase tracking-[0.07em]">{label}</span>
-                  <span className={`text-[12px] font-mono text-right ${
-                    label === 'Days Remaining' && daysRemaining !== null
-                      ? daysRemaining < 0    ? 'text-danger'
-                      : daysRemaining <= 30  ? 'text-warning'
-                      : 'text-success'
-                      : 'text-text'
-                  }`}>
+                  <span className="text-[11px] text-text-2 uppercase tracking-[0.07em]">
+                    {label}
+                  </span>
+                  <span
+                    className={`text-[12px] font-mono text-right ${
+                      label === 'Days Remaining' && daysRemaining !== null
+                        ? daysRemaining < 0
+                          ? 'text-danger'
+                          : daysRemaining <= 30
+                            ? 'text-warning'
+                            : 'text-success'
+                        : 'text-text'
+                    }`}
+                  >
                     {value}
                   </span>
                 </div>
@@ -264,8 +370,12 @@ export default function WIDetail() {
             <Card>
               <CardHeader>Source Document</CardHeader>
               <CardBody>
-                <a href={w.pdf_url} target="_blank" rel="noopener noreferrer"
-                  className="text-[13px] text-accent hover:underline">
+                <a
+                  href={w.pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[13px] text-accent hover:underline"
+                >
                   View PDF →
                 </a>
               </CardBody>
@@ -276,11 +386,20 @@ export default function WIDetail() {
       {/* Submit for Approval modal */}
       <Modal
         open={showApprovalModal}
-        onClose={() => { setShowApprovalModal(false); setSelectedApprovers([]) }}
+        onClose={() => {
+          setShowApprovalModal(false)
+          setSelectedApprovers([])
+        }}
         title="Submit for Approval"
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setShowApprovalModal(false); setSelectedApprovers([]) }}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowApprovalModal(false)
+                setSelectedApprovers([])
+              }}
+            >
               Cancel
             </Button>
             <Button
@@ -294,14 +413,14 @@ export default function WIDetail() {
         }
       >
         <p className="text-[13px] text-text-2 mb-4">
-          Select approvers for <span className="text-text font-medium">{w.wi_number}</span>.
-          They will be notified to review this work instruction in order.
+          Select approvers for <span className="text-text font-medium">{w.wi_number}</span>. They
+          will be notified to review this inspection form in order.
         </p>
         {approvers.length === 0 ? (
           <p className="text-[13px] text-text-3">No approvers found in your organisation.</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {approvers.map(approver => (
+            {approvers.map((approver) => (
               <label
                 key={approver.id}
                 className="flex items-center gap-3 p-3 rounded-[8px] border border-border-2 cursor-pointer hover:bg-bg-3 transition-colors"
@@ -325,34 +444,52 @@ export default function WIDetail() {
         )}
         {selectedApprovers.length > 0 && (
           <p className="text-[11px] text-text-3 mt-3">
-            {selectedApprovers.length} approver{selectedApprovers.length > 1 ? 's' : ''} selected · steps will be created in selected order
+            {selectedApprovers.length} approver{selectedApprovers.length > 1 ? 's' : ''} selected ·
+            steps will be created in selected order
           </p>
         )}
       </Modal>
       <Modal
         open={showRevisionModal}
-        onClose={() => { setShowRevisionModal(false); setChangeSummary('') }}
+        onClose={() => {
+          setShowRevisionModal(false)
+          setChangeSummary('')
+        }}
         title="Create Draft Revision"
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setShowRevisionModal(false); setChangeSummary('') }}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowRevisionModal(false)
+                setChangeSummary('')
+              }}
+            >
               Cancel
             </Button>
-            <Button variant="primary" loading={createRevision.isPending} onClick={handleCreateRevision}>
+            <Button
+              variant="primary"
+              loading={createRevision.isPending}
+              onClick={handleCreateRevision}
+            >
               Create Revision
             </Button>
           </>
         }
       >
         <p className="text-[13px] text-text-2 mb-3">
-          This creates the next draft revision from <span className="font-mono text-text">{w.wi_number} {w.revision}</span> and opens it in the WI builder.
+          This creates the next draft revision from{' '}
+          <span className="font-mono text-text">
+            {w.wi_number} {w.revision}
+          </span>{' '}
+          and opens it in the form editor.
         </p>
         <label className="block text-[11px] font-medium text-text-2 uppercase tracking-[0.07em] mb-1">
           Change summary
         </label>
         <textarea
           value={changeSummary}
-          onChange={e => setChangeSummary(e.target.value)}
+          onChange={(e) => setChangeSummary(e.target.value)}
           rows={3}
           className="w-full px-3 py-2 bg-bg border border-border-2 rounded-[8px] text-[13px] text-text outline-none focus:border-accent resize-none"
           placeholder="What needs to change in this revision?"
@@ -363,12 +500,18 @@ export default function WIDetail() {
 }
 
 function parseLayout(value?: string | null) {
-  const fallback = { tableColumns: ['Item', 'Acceptance criteria', 'Result', 'Remarks'], tableRows: 4 }
+  const fallback = {
+    tableColumns: ['Item', 'Acceptance criteria', 'Result', 'Remarks'],
+    tableRows: 4,
+  }
   if (!value) return fallback
   try {
     const parsed = JSON.parse(value) as Partial<typeof fallback>
     return {
-      tableColumns: Array.isArray(parsed.tableColumns) && parsed.tableColumns.length ? parsed.tableColumns.map(String) : fallback.tableColumns,
+      tableColumns:
+        Array.isArray(parsed.tableColumns) && parsed.tableColumns.length
+          ? parsed.tableColumns.map(String)
+          : fallback.tableColumns,
       tableRows: typeof parsed.tableRows === 'number' ? parsed.tableRows : fallback.tableRows,
     }
   } catch {

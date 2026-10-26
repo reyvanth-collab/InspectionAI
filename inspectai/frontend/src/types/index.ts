@@ -8,16 +8,24 @@ export interface User {
   email: string
   staffId: string
   role: UserRole
+  capabilities?: string[]
+  primaryDepartmentId?: string
   avatarInitials: string
   avatarUrl?: string
 }
 
 // ── Work Instructions ────────────────────────────────────────
-export type WIStatus = 'active' | 'expiring' | 'expired' | 'draft' | 'pending_approval' | 'superseded'
+export type WIStatus =
+  | 'active'
+  | 'expiring'
+  | 'expired'
+  | 'draft'
+  | 'pending_approval'
+  | 'superseded'
 
 export interface WorkInstruction {
-  id: string        // wi_number e.g. "WI-EL-042"
-  dbId: string      // uuid from DB
+  id: string // wi_number e.g. "WI-EL-042"
+  dbId: string // uuid from DB
   title: string
   category?: string
   revision: string
@@ -29,6 +37,8 @@ export interface WorkInstruction {
   checklistItemCount?: number
   checkableItemCount?: number
   checklistItems: ChecklistItem[]
+  departmentId?: string
+  ownerId?: string
 }
 
 export interface ChecklistItem {
@@ -46,8 +56,8 @@ export type WOStatus = 'open' | 'in-progress' | 'complete' | 'cancelled'
 export type WOPriority = 'high' | 'medium' | 'low' | 'critical'
 
 export interface WorkOrder {
-  id: string        // wo_number e.g. "WO-2401"
-  dbId: string      // uuid from DB — used for mutations
+  id: string // wo_number e.g. "WO-2401"
+  dbId: string // uuid from DB — used for mutations
   asset: string
   location: string
   type: string
@@ -64,6 +74,7 @@ export type AssetStatus = 'active' | 'maintenance' | 'retired'
 export type AssetCriticality = 'low' | 'medium' | 'high' | 'critical'
 
 export interface Asset {
+  departmentId?: string
   id: string
   assetNumber: string
   name: string

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, type AuthRequest } from '../middleware/auth'
+import { requireAuth, requireCapability, type AuthRequest } from '../middleware/auth'
 import { query } from '../lib/db'
 
 const router = Router()
@@ -13,7 +13,7 @@ function parseBoundedInt(value: unknown, fallback: number, max: number) {
 // GET /api/analytics/summary?days=30
 router.get('/summary', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const days  = parseBoundedInt(req.query.days, 30, 365)
+    const days = parseBoundedInt(req.query.days, 30, 365)
     const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
     const [totalRes, passRes, failRes, recordsRes] = await Promise.all([
@@ -21,41 +21,43 @@ router.get('/summary', requireAuth, async (req: AuthRequest, res, next) => {
         `SELECT COUNT(*) FROM public.inspection_findings f
          JOIN   public.inspection_records r ON r.id = f.inspection_record_id
          WHERE  r.tenant_id = $1 AND r.started_at >= $2`,
-        [req.user!.tenantId, since]
+        [req.user!.tenantId, since],
       ),
       query(
         `SELECT COUNT(*) FROM public.inspection_findings f
          JOIN   public.inspection_records r ON r.id = f.inspection_record_id
          WHERE  r.tenant_id = $1 AND r.started_at >= $2 AND f.result = 'pass'`,
-        [req.user!.tenantId, since]
+        [req.user!.tenantId, since],
       ),
       query(
         `SELECT COUNT(*) FROM public.inspection_findings f
          JOIN   public.inspection_records r ON r.id = f.inspection_record_id
          WHERE  r.tenant_id = $1 AND r.started_at >= $2 AND f.result = 'fail'`,
-        [req.user!.tenantId, since]
+        [req.user!.tenantId, since],
       ),
       query(
         `SELECT COUNT(*) FROM public.inspection_records
          WHERE  tenant_id = $1 AND started_at >= $2`,
-        [req.user!.tenantId, since]
+        [req.user!.tenantId, since],
       ),
     ])
 
-    const total    = parseInt(totalRes.rows[0].count)
-    const pass     = parseInt(passRes.rows[0].count)
-    const fail     = parseInt(failRes.rows[0].count)
-    const records  = parseInt(recordsRes.rows[0].count)
+    const total = parseInt(totalRes.rows[0].count)
+    const pass = parseInt(passRes.rows[0].count)
+    const fail = parseInt(failRes.rows[0].count)
+    const records = parseInt(recordsRes.rows[0].count)
     const passRate = total > 0 ? Math.round((pass / total) * 100) : 0
 
     res.json({ data: { total, pass, fail, passRate, totalInspections: records, days } })
-  } catch (err) { next(err) }
+  } catch (err) {
+    next(err)
+  }
 })
 
 // GET /api/analytics/by-category?days=30
 router.get('/by-category', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const days  = parseBoundedInt(req.query.days, 30, 365)
+    const days = parseBoundedInt(req.query.days, 30, 365)
     const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
     const result = await query(
@@ -70,21 +72,27 @@ router.get('/by-category', requireAuth, async (req: AuthRequest, res, next) => {
          AND    f.result IN ('pass','fail')
        GROUP BY COALESCE(ci.category, 'General')
        ORDER BY (pass + fail) DESC`,
-      [req.user!.tenantId, since]
+      [req.user!.tenantId, since],
     )
     res.json({ data: result.rows })
-  } catch (err) { next(err) }
+  } catch (err) {
+    next(err)
+  }
 })
 
 // GET /api/analytics/audit-logs?limit=100&table=work_instructions
-router.get('/audit-logs', requireAuth, async (req: AuthRequest, res, next) => {
-  try {
-    const limit  = parseBoundedInt(req.query.limit, 100, 1000)
-    const table  = req.query.table ? String(req.query.table) : null
-    const params: unknown[] = [req.user!.tenantId, limit]
-    if (table) params.push(table)
-    const result = await query(
-      `SELECT al.id, al.action, al.entity_type AS table_name, al.entity_id, al.severity, al.detail, al.created_at,
+router.get(
+  '/audit-logs',
+  requireAuth,
+  requireCapability('administrator'),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const limit = parseBoundedInt(req.query.limit, 100, 1000)
+      const table = req.query.table ? String(req.query.table) : null
+      const params: unknown[] = [req.user!.tenantId, limit]
+      if (table) params.push(table)
+      const result = await query(
+        `SELECT al.id, al.action, al.entity_type AS table_name, al.entity_id, al.severity, al.detail, al.created_at,
               u.name AS performed_by_name,
               wi.id AS wi_id, wi.wi_number, wi.title AS wi_title, wi.revision AS wi_revision, wi.status AS wi_status
        FROM   public.audit_logs al
@@ -96,10 +104,13 @@ router.get('/audit-logs', requireAuth, async (req: AuthRequest, res, next) => {
          ${table ? 'AND al.entity_type = $3' : ''}
        ORDER  BY al.created_at DESC
        LIMIT  $2`,
-      params
-    )
-    res.json({ data: result.rows })
-  } catch (err) { next(err) }
-})
+        params,
+      )
+      res.json({ data: result.rows })
+    } catch (err) {
+      next(err)
+    }
+  },
+)
 
 export default router

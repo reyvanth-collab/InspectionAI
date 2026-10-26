@@ -5,7 +5,8 @@ import { useAuth } from '@/context/AuthContext'
 import type { WorkInstruction } from '@/types'
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-const EMPTY_DATE_TEXT = /^(n\/a|na|nil|none|null|unknown|not stated|not stated in source|not mentioned|not available|not applicable)$/i
+const EMPTY_DATE_TEXT =
+  /^(n\/a|na|nil|none|null|unknown|not stated|not stated in source|not mentioned|not available|not applicable)$/i
 
 function normalizeDateInput(value?: string) {
   const text = String(value ?? '').trim()
@@ -16,15 +17,17 @@ function normalizeDateInput(value?: string) {
 }
 
 interface DBWorkInstruction {
-  id:             string
-  wi_number:      string
-  title:          string
-  category:       string | null
-  revision:       string
-  status:         string
+  id: string
+  wi_number: string
+  title: string
+  category: string | null
+  revision: string
+  status: string
   effective_date: string | null
-  expiry_date:    string | null
-  owner_name:     string | null
+  expiry_date: string | null
+  owner_name: string | null
+  department_id?: string
+  owner_id?: string
   checklist_item_count?: number | string | null
   checkable_item_count?: number | string | null
 }
@@ -34,15 +37,17 @@ function toWorkInstruction(row: DBWorkInstruction): WorkInstruction {
   const expiry = row.expiry_date ? new Date(row.expiry_date) : null
   const daysRemaining = expiry ? Math.round((expiry.getTime() - today.getTime()) / 86_400_000) : 0
   return {
-    id:            row.wi_number,
-    dbId:          row.id,
-    title:         row.title,
-    category:      row.category ?? undefined,
-    revision:      row.revision,
-    status:        row.status as WorkInstruction['status'],
-    owner:         row.owner_name ?? '-',
+    id: row.wi_number,
+    departmentId: row.department_id,
+    ownerId: row.owner_id,
+    dbId: row.id,
+    title: row.title,
+    category: row.category ?? undefined,
+    revision: row.revision,
+    status: row.status as WorkInstruction['status'],
+    owner: row.owner_name ?? '-',
     effectiveDate: row.effective_date ?? '',
-    expiryDate:    row.expiry_date ?? '',
+    expiryDate: row.expiry_date ?? '',
     daysRemaining,
     checklistItemCount: Number(row.checklist_item_count ?? 0),
     checkableItemCount: Number(row.checkable_item_count ?? row.checklist_item_count ?? 0),
@@ -50,11 +55,11 @@ function toWorkInstruction(row: DBWorkInstruction): WorkInstruction {
   }
 }
 
-export function useWorkInstructions(search?: string) {
+export function useWorkInstructions(search?: string, enabled = true) {
   const { user } = useAuth()
   return useQuery({
-    queryKey:        ['work-instructions', search],
-    enabled:         !!user,
+    queryKey: ['work-instructions', search],
+    enabled: !!user && enabled,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const params = search ? `?search=${encodeURIComponent(search)}` : ''
@@ -68,8 +73,8 @@ export function useWorkInstruction(dbId: string) {
   const { user } = useAuth()
   return useQuery({
     queryKey: ['work-instruction', dbId],
-    enabled:  !!user && !!dbId,
-    queryFn:  async () => {
+    enabled: !!user && !!dbId,
+    queryFn: async () => {
       const res = await api.get<{ data: Record<string, unknown> }>(`/work-instructions/${dbId}`)
       return res.data.data
     },
@@ -77,13 +82,13 @@ export function useWorkInstruction(dbId: string) {
 }
 
 export interface CreateWIInput {
-  wiNumber:      string
-  title:         string
-  description?:  string
-  category?:     string
-  revision:      string
+  wiNumber: string
+  title: string
+  description?: string
+  category?: string
+  revision: string
   effectiveDate: string
-  expiryDate:    string
+  expiryDate: string
 }
 
 export function useCreateWorkInstruction() {
@@ -91,9 +96,14 @@ export function useCreateWorkInstruction() {
   return useMutation({
     mutationFn: async (input: CreateWIInput) => {
       const res = await api.post<{ data: Record<string, unknown> }>('/work-instructions', {
-        wiNumber: input.wiNumber, title: input.title, description: input.description,
-        category: input.category, revision: input.revision,
-        effectiveDate: input.effectiveDate, expiryDate: input.expiryDate, status: 'draft',
+        wiNumber: input.wiNumber,
+        title: input.title,
+        description: input.description,
+        category: input.category,
+        revision: input.revision,
+        effectiveDate: input.effectiveDate,
+        expiryDate: input.expiryDate,
+        status: 'draft',
       })
       return res.data.data
     },
@@ -101,28 +111,14 @@ export function useCreateWorkInstruction() {
   })
 }
 
-export function useUpdateWorkInstruction() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async ({ dbId, ...input }: CreateWIInput & { dbId: string }) => {
-      await api.patch(`/work-instructions/${dbId}`, {
-        wiNumber: input.wiNumber, title: input.title, description: input.description,
-        category: input.category, revision: input.revision,
-        effectiveDate: input.effectiveDate, expiryDate: input.expiryDate,
-      })
-    },
-    onSuccess: (_d, { dbId }) => {
-      qc.invalidateQueries({ queryKey: ['work-instructions'] })
-      qc.invalidateQueries({ queryKey: ['work-instruction', dbId] })
-    },
-  })
-}
-
 export function useSubmitForApproval() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ wiDbId, approverIds }: { wiDbId: string; approverIds: string[] }) => {
-      const res = await api.post<{ data: Record<string, unknown> }>(`/work-instructions/${wiDbId}/submit-approval`, { approverIds })
+      const res = await api.post<{ data: Record<string, unknown> }>(
+        `/work-instructions/${wiDbId}/submit-approval`,
+        { approverIds },
+      )
       return res.data.data
     },
     onSuccess: (_data, { wiDbId }) => {
@@ -138,9 +134,12 @@ export function useCreateWIRevision() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ wiDbId, changeSummary }: { wiDbId: string; changeSummary?: string }) => {
-      const res = await api.post<{ data: Record<string, unknown> }>(`/work-instructions/${wiDbId}/revisions`, {
-        changeSummary,
-      })
+      const res = await api.post<{ data: Record<string, unknown> }>(
+        `/work-instructions/${wiDbId}/revise`,
+        {
+          changeSummary,
+        },
+      )
       return res.data.data
     },
     onSuccess: (_data, { wiDbId }) => {
@@ -156,8 +155,8 @@ export function useWIBuilderData(dbId?: string) {
   const { user } = useAuth()
   return useQuery({
     queryKey: ['wi-builder', dbId],
-    enabled:  !!user && !!dbId,
-    queryFn:  async () => {
+    enabled: !!user && !!dbId,
+    queryFn: async () => {
       const res = await api.get<{ data: Record<string, unknown> }>(`/work-instructions/${dbId}`)
       return res.data.data
     },
@@ -165,36 +164,38 @@ export function useWIBuilderData(dbId?: string) {
 }
 
 export interface ChecklistItemInput {
-  itemNo:              string
-  description:         string
+  id?: string
+  itemNo: string
+  description: string
   acceptanceCriteria?: string
-  category?:           string
-  fieldType?:          string
-  required?:           boolean
-  placeholder?:        string
-  optionsJson?:        string
-  unit?:               string
-  minValue?:           number
-  maxValue?:           number
-  conditionalJson?:    string
-  sourcePage?:         number | null
-  sourceText?:         string
-  aiConfidence?:       number | null
-  aiWarnings?:         string[]
-  layoutJson?:         string
-  sortOrder:           number
+  category?: string
+  fieldType?: string
+  required?: boolean
+  placeholder?: string
+  optionsJson?: string
+  unit?: string
+  minValue?: number
+  maxValue?: number
+  conditionalJson?: string
+  sourcePage?: number | null
+  sourceText?: string
+  aiConfidence?: number | null
+  aiWarnings?: string[]
+  layoutJson?: string
+  sortOrder: number
 }
 
 export interface SaveWIInput {
-  dbId?:          string
-  wiNumber:       string
-  title:          string
-  description?:   string
-  category?:      string
-  revision:       string
+  departmentId?: string
+  dbId?: string
+  wiNumber: string
+  title: string
+  description?: string
+  category?: string
+  revision: string
   effectiveDate?: string
-  expiryDate?:    string
-  status?:        string
+  expiryDate?: string
+  status?: string
   checklistItems: ChecklistItemInput[]
 }
 
@@ -203,13 +204,22 @@ export function useSaveWIWithItems() {
   return useMutation({
     mutationFn: async (input: SaveWIInput) => {
       const body = {
-        wiNumber: input.wiNumber, title: input.title, description: input.description,
-        category: input.category, revision: input.revision,
-        effectiveDate: normalizeDateInput(input.effectiveDate), expiryDate: normalizeDateInput(input.expiryDate),
-        status: input.status ?? 'draft', checklistItems: input.checklistItems,
+        wiNumber: input.wiNumber,
+        title: input.title,
+        description: input.description,
+        category: input.category,
+        revision: input.revision,
+        effectiveDate: normalizeDateInput(input.effectiveDate),
+        expiryDate: normalizeDateInput(input.expiryDate),
+        departmentId: input.departmentId,
+        status: input.status ?? 'draft',
+        checklistItems: input.checklistItems,
       }
       if (input.dbId) {
-        const res = await api.put<{ data: Record<string, unknown> }>(`/work-instructions/${input.dbId}`, body)
+        const res = await api.put<{ data: Record<string, unknown> }>(
+          `/work-instructions/${input.dbId}`,
+          body,
+        )
         return res.data.data
       } else {
         const res = await api.post<{ data: Record<string, unknown> }>('/work-instructions', body)

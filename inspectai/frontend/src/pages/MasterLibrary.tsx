@@ -1,137 +1,199 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { BookOpenCheck, FileClock, FileWarning, Layers3, Pencil, Plus, Search, ShieldCheck } from 'lucide-react'
+﻿import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Plus, Search } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Card, CardBody } from '@/components/ui/Card'
-import { SkeletonTable } from '@/components/ui/Skeleton'
-import { MetricTile, PageHero } from '@/components/ui/PageHero'
-import { useWorkInstructions } from '@/hooks/useWorkInstructions'
-import type { WorkInstruction, WIStatus } from '@/types'
-import type { BadgeVariant } from '@/components/ui/Badge'
-
-const STATUS_BADGE: Record<WIStatus, BadgeVariant> = {
-  active: 'active', expiring: 'expiring', expired: 'expired',
-  draft: 'draft', pending_approval: 'pending_approval', superseded: 'superseded',
+import { Badge } from '@/components/ui/Badge'
+import { useAuth } from '@/context/AuthContext'
+import { useDepartments } from '@/hooks/useDepartments'
+import { can, formStatus } from '@/lib/permissions'
+import { api } from '@/lib/api'
+interface FormRow {
+  id: string
+  wi_number: string
+  title: string
+  revision: string
+  status: string
+  owner_name: string
+  department_id: string
+  checklist_item_count: number
 }
-
-
+const tabs = [
+  ['active', 'Published'],
+  ['draft', 'Drafts'],
+  ['pending_approval', 'Awaiting approval'],
+  ['superseded', 'Previous versions'],
+  ['all', 'All forms'],
+]
 export default function MasterLibrary() {
-  const navigate = useNavigate()
-  const [search, setSearch] = useState('')
-
-  const { data: wis = [], isLoading } = useWorkInstructions(search || undefined)
-
-  const active   = wis.filter(w => w.status === 'active').length
-  const expiring = wis.filter(w => w.status === 'expiring').length
-  const expired  = wis.filter(w => w.status === 'expired').length
-
+  const { user } = useAuth(),
+    [params, setParams] = useSearchParams(),
+    { data: departments = [] } = useDepartments()
+  const [search, setSearch] = useState(''),
+    [department, setDepartment] = useState(''),
+    [mine, setMine] = useState(false),
+    [page, setPage] = useState(1)
+  const status = params.get('status') || 'active',
+    needsApproval = params.get('needsApproval') === 'true'
+  const query = new URLSearchParams({
+    search,
+    page: String(page),
+    ...(status !== 'all' && !needsApproval ? { status } : {}),
+    ...(department ? { departmentId: department } : {}),
+    ...(mine ? { mine: 'true' } : {}),
+    ...(needsApproval ? { needsApproval: 'true' } : {}),
+  })
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['work-instructions', query.toString()],
+    queryFn: async () =>
+      (
+        await api.get<{ data: FormRow[]; meta: { hasMore: boolean } }>(
+          `/work-instructions?${query}`,
+        )
+      ).data,
+  })
   return (
-    <AppLayout breadcrumb={[{ label: 'Master Library' }]}>
-      <PageHero
-        eyebrow="Controlled WI Library"
-        title="Govern every work instruction from draft to approval, expiry, and revision."
-        description="A controlled document library for inspection checklists, approval-ready revisions, expiry risk, and active operational procedures."
-        icon={BookOpenCheck}
-        stats={[
-          { label: 'Active', value: isLoading ? '-' : active, tone: 'success' },
-          { label: 'Expiring', value: isLoading ? '-' : expiring, tone: 'warning' },
-          { label: 'Expired', value: isLoading ? '-' : expired, tone: 'danger' },
-          { label: 'Total', value: isLoading ? '-' : wis.length, tone: 'info' },
-        ]}
-        actions={
-          <Button variant="primary" onClick={() => navigate('/library/new')}>
-            <Plus size={15} /> New WI
-          </Button>
-        }
-      />
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <MetricTile label="Total Library" value={isLoading ? '-' : wis.length} sub="All revisions" icon={Layers3} tone="info" />
-        <MetricTile label="Active" value={isLoading ? '-' : active} sub="Approved for use" icon={ShieldCheck} tone="success" />
-        <MetricTile label="Expiring" value={isLoading ? '-' : expiring} sub="Within risk window" icon={FileClock} tone="warning" />
-        <MetricTile label="Expired" value={isLoading ? '-' : expired} sub="Needs revision" icon={FileWarning} tone="danger" />
+    <AppLayout breadcrumb={[{ label: 'Inspection Forms' }]}>
+      <div className="page-heading flex flex-wrap gap-4 justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold">Inspection Forms</h1>
+          <p className="text-sm text-text-2 mt-2">
+            Create, review and publish versioned inspection checklists.
+          </p>
+        </div>
+        {can(user, 'form_author') && (
+          <Link to="/library/new">
+            <Button variant="primary">
+              <Plus size={16} />
+              Create form
+            </Button>
+          </Link>
+        )}
       </div>
-
-      {/* KPI row */}
-      <div className="hidden">
-        {[
-          { label: 'Total',    value: wis.length, color: 'bg-bg-2'        },
-          { label: 'Active',   value: active,     color: 'bg-success-bg'  },
-          { label: 'Expiring', value: expiring,   color: 'bg-warning-bg'  },
-          { label: 'Expired',  value: expired,    color: 'bg-danger-bg'   },
-        ].map(k => (
-          <div key={k.label} className={`rounded-[10px] border border-border p-4 ${k.color}`}>
-            <p className="text-[11px] text-text-2 uppercase tracking-[0.07em] mb-1">{k.label}</p>
-            <p className="text-[26px] font-bold text-text leading-none">{isLoading ? '—' : k.value}</p>
-          </div>
+      <div className="flex flex-wrap gap-2 mb-5" aria-label="Form lifecycle">
+        {tabs.map(([value, label]) => (
+          <button
+            key={value}
+            className={`px-3 py-2 rounded-lg border text-sm ${status === value && !needsApproval ? 'bg-accent-bg border-accent text-accent' : 'border-border text-text-2'}`}
+            onClick={() => {
+              setParams({ status: value })
+              setPage(1)
+            }}
+          >
+            {label}
+          </button>
+        ))}
+        {can(user, 'form_approver') && (
+          <button
+            onClick={() => {
+              setParams({ needsApproval: 'true' })
+              setPage(1)
+            }}
+            className={`px-3 py-2 rounded-lg border text-sm ${needsApproval ? 'border-accent text-accent bg-accent-bg' : 'border-border'}`}
+          >
+            Needs my approval
+          </button>
+        )}
+      </div>
+      <div className="grid sm:grid-cols-[1fr_240px_auto] gap-3 mb-5">
+        <label className="relative">
+          <Search size={16} className="absolute left-3 top-3.5 text-text-2" />
+          <input
+            aria-label="Search inspection forms"
+            className="field-input pl-10"
+            placeholder="Search reference or title"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
+          />
+        </label>
+        <select
+          aria-label="Department"
+          className="field-input"
+          value={department}
+          onChange={(e) => {
+            setDepartment(e.target.value)
+            setPage(1)
+          }}
+        >
+          <option value="">All departments</option>
+          {departments.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={mine}
+            onChange={(e) => {
+              setMine(e.target.checked)
+              setPage(1)
+            }}
+          />
+          Created by me
+        </label>
+      </div>
+      {isLoading && <p className="text-sm">Loading forms…</p>}
+      {error && (
+        <p className="text-danger" role="alert">
+          Forms could not be loaded. Please try again.
+        </p>
+      )}
+      {data?.data.length === 0 && (
+        <div className="p-10 bg-bg-2 border border-border rounded-xl text-center text-text-2">
+          No forms match these filters.
+        </div>
+      )}
+      <div className="grid md:grid-cols-2 gap-3">
+        {data?.data.map((f) => (
+          <Link
+            key={f.id}
+            to={`/library/${f.id}`}
+            className="bg-bg-2 rounded-xl border border-border p-5 hover:border-accent transition-colors"
+          >
+            <div className="flex justify-between gap-3">
+              <span className="text-xs font-mono text-accent">
+                {f.wi_number} · {f.revision}
+              </span>
+              <Badge
+                variant={
+                  f.status === 'active'
+                    ? 'active'
+                    : f.status === 'pending_approval'
+                      ? 'pending_approval'
+                      : 'draft'
+                }
+              >
+                {formStatus(f.status)}
+              </Badge>
+            </div>
+            <h2 className="font-semibold mt-3">{f.title}</h2>
+            <p className="text-sm text-text-2 mt-3">
+              {departments.find((d) => d.id === f.department_id)?.name || 'Department'} ·{' '}
+              {f.checklist_item_count} items
+            </p>
+            <p className="text-xs text-text-2 mt-2">Author: {f.owner_name || 'Not recorded'}</p>
+          </Link>
         ))}
       </div>
-
-      {/* Search */}
-      <div className="surface-panel mb-4 rounded-[14px] p-3">
-        <div className="relative max-w-md">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-3" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search by title or WI number…"
-          className="w-full rounded-[10px] border border-border-2 bg-bg px-[14px] py-[10px] pl-10 text-[13px] text-text outline-none transition-colors placeholder:text-text-3 focus:border-accent"
-        />
-        </div>
+      <div className="flex justify-between items-center mt-5">
+        <Button variant="secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+          Previous
+        </Button>
+        <span className="text-sm text-text-2">Page {page}</span>
+        <Button
+          variant="secondary"
+          disabled={!data?.meta.hasMore}
+          onClick={() => setPage((p) => p + 1)}
+        >
+          Next
+        </Button>
       </div>
-
-      {/* Table */}
-      <Card className="premium-ring">
-        {isLoading ? (
-          <SkeletonTable rows={6} />
-        ) : wis.length === 0 ? (
-          <CardBody>
-            <p className="text-[13px] text-text-3 text-center py-8">
-              {search ? `No results for "${search}"` : 'No work instructions yet.'}
-            </p>
-          </CardBody>
-        ) : (
-          <>
-            <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-bg-3">
-              {['WI #', 'Title', 'Rev', 'Owner', 'Status', 'Expires In', 'Expiry Date'].map(h => (
-                <span key={h} className="text-[10px] font-semibold text-text-3 uppercase tracking-[0.07em] flex-1 first:w-24 first:flex-none">
-                  {h}
-                </span>
-              ))}
-            </div>
-            {wis.map((wi: WorkInstruction) => (
-              <div key={wi.dbId}
-                onClick={() => navigate(`/library/${wi.dbId}`)}
-                className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-bg-3 cursor-pointer transition-colors group">
-                <span className="font-mono text-[12px] text-accent w-24 flex-shrink-0">{wi.id}</span>
-                <span className="text-[13px] text-text flex-1 truncate group-hover:text-accent transition-colors">{wi.title}</span>
-                <span className="font-mono text-[11px] text-text-3 flex-1">{wi.revision}</span>
-                <span className="text-[12px] text-text-2 flex-1 truncate hidden md:block">{wi.owner}</span>
-                <span className="flex-1">
-                  <Badge variant={STATUS_BADGE[wi.status] ?? 'draft'}>{wi.status}</Badge>
-                </span>
-                <span className={`font-mono text-[12px] flex-1 ${
-                  wi.daysRemaining < 0 ? 'text-danger' :
-                  wi.daysRemaining <= 30 ? 'text-warning' : 'text-success'
-                }`}>
-                  {!wi.expiryDate ? '—' :
-                   wi.daysRemaining < 0 ? `${Math.abs(wi.daysRemaining)}d ago` :
-                   `${wi.daysRemaining}d`}
-                </span>
-                <span className="font-mono text-[11px] text-text-3 flex-1 hidden lg:block">{wi.expiryDate || '—'}</span>
-                <button
-                  onClick={e => { e.stopPropagation(); navigate(`/library/${wi.dbId}/edit`) }}
-                  className="flex items-center gap-1 text-[11px] text-text-3 hover:text-accent bg-transparent border border-border hover:border-accent rounded-[6px] px-2 py-1 cursor-pointer transition-all opacity-0 group-hover:opacity-100 flex-shrink-0">
-                  <Pencil size={11} /> Edit
-                </button>
-              </div>
-            ))}
-          </>
-        )}
-      </Card>
-
     </AppLayout>
   )
 }

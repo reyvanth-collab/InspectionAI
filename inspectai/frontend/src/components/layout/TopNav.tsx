@@ -1,15 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Sun, Moon, ChevronRight, Bell, UserRound, KeyRound, UsersRound, Settings, LogOut } from 'lucide-react'
+import {
+  Sun,
+  Moon,
+  ChevronRight,
+  Bell,
+  UserRound,
+  KeyRound,
+  UsersRound,
+  Settings,
+  LogOut,
+} from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/cn'
 import { useNotifications } from '@/hooks/useNotifications'
+import { can } from '@/lib/permissions'
 
 const ROLE_PILL: Record<string, string> = {
-  admin:     'bg-red-500/10    text-red-400    ring-1 ring-red-500/20',
-  approver:  'bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/20',
+  admin: 'bg-red-500/10    text-red-400    ring-1 ring-red-500/20',
+  approver: 'bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/20',
   inspector: 'bg-blue-500/10   text-blue-400   ring-1 ring-blue-500/20',
-  viewer:    'bg-bg-3          text-text-3     ring-1 ring-border-2',
+  viewer: 'bg-bg-3          text-text-3     ring-1 ring-border-2',
 }
 
 interface TopNavProps {
@@ -35,7 +46,6 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
 
   return (
     <header className="h-[64px] bg-bg-2/82 border-b border-border flex items-center px-6 gap-3 flex-shrink-0 sticky top-0 z-[100] backdrop-blur-xl">
-
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 flex-1 min-w-0">
         {breadcrumb ? (
@@ -50,10 +60,12 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
                   {crumb.label}
                 </Link>
               ) : (
-                <span className={cn(
-                  'text-[13px] truncate',
-                  i === breadcrumb.length - 1 ? 'text-text font-medium' : 'text-text-3'
-                )}>
+                <span
+                  className={cn(
+                    'text-[13px] truncate',
+                    i === breadcrumb.length - 1 ? 'text-text font-medium' : 'text-text-3',
+                  )}
+                >
                   {crumb.label}
                 </span>
               )}
@@ -66,7 +78,6 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
 
       {/* Right actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
-
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
@@ -94,11 +105,22 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
 
         {/* Role pill */}
         {user && (
-          <span className={cn(
-            'text-[10px] font-semibold px-2 py-[3px] rounded-full uppercase tracking-[0.07em]',
-            ROLE_PILL[user.role]
-          )}>
-            {user.role}
+          <span
+            className={cn(
+              'text-[10px] font-semibold px-2 py-[3px] rounded-full uppercase tracking-[0.07em]',
+              ROLE_PILL[user.role],
+              'text-accent bg-accent-bg',
+            )}
+          >
+            {can(user, 'administrator')
+              ? 'Administrator'
+              : can(user, 'form_author') && can(user, 'form_approver')
+                ? 'Author / reviewer'
+                : can(user, 'form_author')
+                  ? 'Form author'
+                  : can(user, 'form_approver')
+                    ? 'Form reviewer'
+                    : user.role}
           </span>
         )}
 
@@ -106,7 +128,7 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
         {user && (
           <div ref={userMenuRef} className="relative pl-1">
             <button
-              onClick={() => setUserMenuOpen(open => !open)}
+              onClick={() => setUserMenuOpen((open) => !open)}
               className="flex items-center gap-2 rounded-[10px] border border-border bg-bg-3/45 px-2 py-1.5 text-left transition-colors hover:border-accent-bd hover:bg-accent-bg"
             >
               <div className="w-[28px] h-[28px] rounded-full bg-gradient-to-br from-accent to-accent-2 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
@@ -120,14 +142,39 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
                   <p className="truncate text-[13px] font-medium text-text">{user.name}</p>
                   <p className="truncate text-[11px] text-text-3">{user.email}</p>
                 </div>
-                <MenuLink to="/settings?tab=profile" icon={UserRound} label="Profile" onClick={() => setUserMenuOpen(false)} />
-                <MenuLink to="/settings?tab=password" icon={KeyRound} label="Change password" onClick={() => setUserMenuOpen(false)} />
-                {user.role === 'admin' && (
-                  <MenuLink to="/settings?tab=users" icon={UsersRound} label="Users & Access" onClick={() => setUserMenuOpen(false)} />
+                <MenuLink
+                  to="/settings?tab=profile"
+                  icon={UserRound}
+                  label="Profile"
+                  onClick={() => setUserMenuOpen(false)}
+                />
+                <MenuLink
+                  to="/settings?tab=password"
+                  icon={KeyRound}
+                  label="Change password"
+                  onClick={() => setUserMenuOpen(false)}
+                />
+                {can(user, 'administrator') && (
+                  <MenuLink
+                    to="/settings?tab=users"
+                    icon={UsersRound}
+                    label="Users & Access"
+                    onClick={() => setUserMenuOpen(false)}
+                  />
                 )}
-                <MenuLink to="/settings" icon={Settings} label="Settings" onClick={() => setUserMenuOpen(false)} />
+                {can(user, 'administrator') && (
+                  <MenuLink
+                    to="/settings"
+                    icon={Settings}
+                    label="Settings"
+                    onClick={() => setUserMenuOpen(false)}
+                  />
+                )}
                 <button
-                  onClick={() => { setUserMenuOpen(false); logout() }}
+                  onClick={() => {
+                    setUserMenuOpen(false)
+                    logout()
+                  }}
                   className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left text-[12px] text-danger transition-colors hover:bg-danger-bg"
                 >
                   <LogOut size={14} /> Logout

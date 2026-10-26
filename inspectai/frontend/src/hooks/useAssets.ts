@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext'
 import type { Asset, AssetCriticality, AssetStatus } from '@/types'
 
 interface DBAsset {
+  department_id?: string
   id: string
   asset_number: string
   name: string
@@ -31,6 +32,7 @@ export interface AssetSummary {
 }
 
 export interface AssetInput {
+  departmentId?: string
   assetNumber: string
   name: string
   category?: string
@@ -48,6 +50,7 @@ export interface AssetInput {
 function toAsset(row: DBAsset): Asset {
   return {
     id: row.id,
+    departmentId: row.department_id,
     assetNumber: row.asset_number,
     name: row.name,
     category: row.category ?? '',
@@ -73,7 +76,9 @@ export interface AssetPage {
   hasMore: boolean
 }
 
-export function useAssets(filters: { search?: string; status?: string; criticality?: string; page?: number } = {}) {
+export function useAssets(
+  filters: { search?: string; status?: string; criticality?: string; page?: number } = {},
+) {
   const { user } = useAuth()
   return useQuery({
     queryKey: ['assets', filters],
@@ -83,11 +88,15 @@ export function useAssets(filters: { search?: string; status?: string; criticali
       const params = new URLSearchParams()
       if (filters.search) params.set('search', filters.search)
       if (filters.status && filters.status !== 'all') params.set('status', filters.status)
-      if (filters.criticality && filters.criticality !== 'all') params.set('criticality', filters.criticality)
+      if (filters.criticality && filters.criticality !== 'all')
+        params.set('criticality', filters.criticality)
       if (filters.page) params.set('page', String(filters.page))
       params.set('pageSize', '50')
       const suffix = params.toString() ? `?${params.toString()}` : ''
-      const res = await api.get<{ data: DBAsset[]; meta?: { page: number; pageSize: number; hasMore: boolean } }>(`/assets${suffix}`)
+      const res = await api.get<{
+        data: DBAsset[]
+        meta?: { page: number; pageSize: number; hasMore: boolean }
+      }>(`/assets${suffix}`)
       return {
         items: res.data.data.map(toAsset),
         page: res.data.meta?.page ?? filters.page ?? 1,
@@ -105,7 +114,13 @@ export function useAssetSummary() {
     enabled: !!user,
     queryFn: async () => {
       const res = await api.get<{
-        data: { total: number | string; active: number | string; maintenance: number | string; high_risk: number | string; pm_due_soon: number | string }
+        data: {
+          total: number | string
+          active: number | string
+          maintenance: number | string
+          high_risk: number | string
+          pm_due_soon: number | string
+        }
       }>('/assets/summary')
       return {
         total: Number(res.data.data.total ?? 0),
