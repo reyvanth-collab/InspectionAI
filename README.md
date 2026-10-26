@@ -2,6 +2,8 @@
 
 Online inspection workflow release candidate. See [release scope, checks and deployment](inspectai/docs/RELEASE.md).
 
+Current focused workflow: [start, permissions, migration strategy and verification](inspectai/docs/FOCUSED_APP.md). Optional fictional rail data: [safe seed and cleanup](inspectai/docs/RAIL_DEMO.md).
+
 ```sh
 cd inspectai/backend
 npm ci

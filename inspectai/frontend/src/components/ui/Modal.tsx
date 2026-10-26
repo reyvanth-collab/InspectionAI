@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, useId, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
 interface ModalProps {
@@ -10,11 +10,51 @@ interface ModalProps {
   maxWidth?: string
 }
 
-export function Modal({ open, onClose, title, children, footer, maxWidth = 'max-w-[560px]' }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  maxWidth = 'max-w-[560px]',
+}: ModalProps) {
+  const dialog = useRef<HTMLDivElement>(null),
+    titleId = useId()
+  useEffect(() => {
+    if (!open) return
+    const previous = document.activeElement as HTMLElement | null
+    const focusable = () =>
+      Array.from(
+        dialog.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',
+        ) || [],
+      )
+    focusable()[0]?.focus()
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      const nodes = focusable(),
+        first = nodes[0],
+        last = nodes[nodes.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last?.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first?.focus()
+      }
+    }
+    window.addEventListener('keydown', trap)
+    return () => {
+      window.removeEventListener('keydown', trap)
+      previous?.focus()
+    }
+  }, [open])
   // Close on Escape
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
@@ -27,15 +67,21 @@ export function Modal({ open, onClose, title, children, footer, maxWidth = 'max-
       onClick={onClose}
     >
       <div
+        ref={dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={cn(
           'surface-panel rounded-[14px] w-full max-h-[90vh] overflow-y-auto shadow-lg',
-          maxWidth
+          maxWidth,
         )}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-[18px] border-b border-border bg-bg-3/45">
-          <h2 className="text-[15px] font-semibold text-text">{title}</h2>
+          <h2 id={titleId} className="text-[15px] font-semibold text-text">
+            {title}
+          </h2>
           <button
             onClick={onClose}
             className="text-text-2 text-xl leading-none hover:text-text transition-colors bg-transparent border-none cursor-pointer px-1"
@@ -50,9 +96,7 @@ export function Modal({ open, onClose, title, children, footer, maxWidth = 'max-
 
         {/* Footer */}
         {footer && (
-          <div className="flex gap-2 justify-end px-5 py-4 border-t border-border">
-            {footer}
-          </div>
+          <div className="flex gap-2 justify-end px-5 py-4 border-t border-border">{footer}</div>
         )}
       </div>
     </div>

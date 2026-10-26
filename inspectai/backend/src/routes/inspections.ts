@@ -1,156 +1,999 @@
-YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×M=é:-jZ.¶›­–)Þ³V–×÷'B²&÷WFW"Òg&öÒvW‡&W72p¦–×÷'B7'—Fòg&öÒv7'—Fòp¦–×÷'B²fÆ–E6–væGW&RÂ6æöæ–6Ä§6öâÒg&öÒrââöÆ–"÷6–væGW&Rp¦–×÷'B²&WV—&TWF‚Â&WV—&U&öÆRÂG—RWF…&WVW7BÒg&öÒrââöÖ–FFÆWv&RöWF‚p¦–×÷'B²ööÂÂVW'’Â&Vv–ä7F÷%G&ç67F–öâÒg&öÒrââöÆ–"öF"p¦–×÷'B²VF—DÆörÂ7&VFTæ÷F–f–6F–öâÂæ÷F–g•&öÆW2Òg&öÒrââöÆ–"öWfVçG2p ¦6öç7B&÷WFW"Ò&÷WFW"‚§&÷WFW"çW6R‡&WV—&TWF‚§&÷WFW"çW6R‚‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢–b‡&WæÖWF†öBÓÓÒttUBr’²æW‡B‚“²&WGW&âÐ¢&WV—&U&öÆR‚vFÖ–ârÂv&÷fW"rÂv–ç7V7F÷"r’‡&WÂ&W2ÂæW‡B§Ò§&÷WFW"çW6R†7–æ2‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢–b‡&WæÖWF†öBÓÓÒttUBr’²æW‡B‚“²&WGW&âÐ¢–b‡&WçF‚ÓÓÒròr’°¢&WV—&U&öÆR‚vFÖ–ârÂv&÷fW"r’‡&WÂ&W2ÂæW‡B“²&WGW&à¢Ð¢6öç7B–BÒ&WçF‚ç7Æ—B‚ròr•³Ð¢6öç7B&W7VÇBÒv—BVW'’‚u4TÄT5B76–væVE÷Fòe$ôÒV&Æ–2çv÷&µö÷&FW'2t„U$R–BÒCäBFVæçEö–BÒC"rÂ¶–BÂ&WçW6W"çFVæçD–EÒ¢–b‚&W7VÇBç&÷w2æÆVæwF‚’²&W2ç7FGW2ƒCB’æ§6öâ‡²W'&÷#¢uv÷&²÷&FW"æ÷Bf÷VæBrÒ“²&WGW&âÐ¢–b‡&WçW6W"ç&öÆRÓÒvFÖ–ârbb&W7VÇBç&÷w5³Òæ76–væVE÷FòÓÒ&WçW6W"æ–B’°¢&W2ç7FGW2ƒC2’æ§6öâ‡²W'&÷#¢töæÇ’F†R76–væVB–ç7V7F÷"÷"âFÖ–æ—7G&F÷"6â6†ævRF†—2v÷&²÷&FW"rÒ“²&WGW&à¢Ð¢æW‡B‚§Ò ¢òòtUBö’ö–ç7V7F–öç2ÒÆ—7Bv÷&²÷&FW'0§&÷WFW"ævWB‚ròrÂ&WV—&TWF‚Â7–æ2‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢G'’°¢6öç7B7FGW4f–ÇFW"Ò&WçVW'’ç7FGW2ò7G&–ær‡&WçVW'’ç7FGW2’¢çVÆÀ¢6öç7BvRÒÖF‚æÖ‚ƒÂçVÖ&W"ç'6T–çB…7G&–ær‡&WçVW'’çvRóòsr’Â’ÇÂ¢6öç7BvU6—¦RÒÖF‚æÖ–âƒÂÖF‚æÖ‚ƒÂçVÖ&W"ç'6T–çB…7G&–ær‡&WçVW'’çvU6—¦RóòsSr’Â’ÇÂS’¢6öç7B&×3¢Væ¶æ÷våµÒÒ·&WçW6W"çFVæçD–EÐ¢–b‡7FGW4f–ÇFW"’&×2çW6‚‡7FGW4f–ÇFW"¢6öç7BÆ–Ö—E&ÒÒ&×2æÆVæwF‚²¢6öç7Böfg6WE&ÒÒ&×2æÆVæwF‚²  ¢6öç7B&W7VÇBÒv—BVW'’€¢4TÄT5Bvòæ–BÂvòçvõöçVÖ&W"À¢4ôÄU44R†ææÖRÂvòæ76WEöæÖR’276WEöæÖRÀ¢4ôÄU44R†æÆö6F–öâÂvòæÆö6F–öâ’2Æö6F–öâÀ¢vòçG—RÀ¢vòç&–÷&—G’Âvòç7FGW2ÂvòæGVUöFFRÂvòæ6ö×ÆWFVEöBÂvòææ÷FW2À¢RææÖR276–væVE÷FõöæÖRÀ¢v’çv•öçVÖ&W"2v•öçVÖ&W"Âv’çF—FÆR2v•÷F—FÆRÀ¢€¢4TÄT5B4õTåB‚¢“£¦–ç@¢e$ôÒV&Æ–2çv•ö6†V6¶Æ—7Eö—FV×26¢t„U$R6’çv÷&µö–ç7G'V7F–öåö–BÒvòçv÷&µö–ç7G'V7F–öåö–@¢äB6’çFVæçEö–BÒvòçFVæçEö–@¢äB4ôÄU44R†6’æf–VÆE÷G—RÂw75öf–Âr’Ãâv†VF–ærp¢’26†V6¶Æ—7Eö—FVÕö6÷Vç@¢e$ôÒV&Æ–2çv÷&µö÷&FW'2vð¢ÄTeB¤ô”âV&Æ–2æ76WG2ôâæ–BÒvòæ76WE÷&V6÷&Eö–BäBçFVæçEö–BÒvòçFVæçEö–@¢ÄTeB¤ô”âV&Æ–2çW6W'2RôâRæ–BÒvòæ76–væVE÷Fð¢ÄTeB¤ô”âV&Æ–2çv÷&µö–ç7G'V7F–öç2v’ôâv’æ–BÒvòçv÷&µö–ç7G'V7F–öåö–@¢t„U$RvòçFVæçEö–BÒC¢G·7FGW4f–ÇFW"òtäBvòç7FGW2ÒC"r¢rwÐ¢õ$DU"%’vòæGVUöFFR42åTÄÅ2Ä5@¢Ä”Ô•BBG¶Æ–Ö—E&×Òôde4UBBG¶öfg6WE&×ÖÀ¢²ââç&×2ÂvU6—¦RÂ‡vRÒ’¢vU6—¦UÐ¢¢&W2æ§6öâ‡²FF¢&W7VÇBç&÷w2ÂÖWF¢²vRÂvU6—¦RÂ†4Ö÷&S¢&W7VÇBç&÷w2æÆVæwF‚ÓÓÒvU6—¦RÒÒ¢Ò6F6‚†W'"’²æW‡B†W'"’Ð§Ò ¢òòtUBö’ö–ç7V7F–öç2÷7VÖÖ'’Òvw&VvFR6÷VçG2v—F†÷WBÆöF–ærWfW'’v÷&²÷&FW §&÷WFW"ævWB‚r÷7VÖÖ'’rÂ&WV—&TWF‚Â7–æ2‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢G'’°¢6öç7B&W7VÇBÒv—BVW'’€¢4TÄT5B4õTåB‚¢“£¦–çB2F÷FÂÀ¢4õTåB‚¢’d”ÅDU"…t„U$R7FGW2Òv÷Vâr“£¦–çB2÷VâÀ¢4õTåB‚¢’d”ÅDU"…t„U$R7FGW2Òv–å÷&öw&W72r“£¦–çB2–å÷&öw&W72À¢4õTåB‚¢’d”ÅDU"…t„U$R7FGW2Òv6ö×ÆWFRr“£¦–çB26ö×ÆWFRÀ¢4õTåB‚¢’d”ÅDU"…t„U$R7FGW2Òv÷Vâr“£¦–çB2VæF–æp¢e$ôÒV&Æ–2çv÷&µö÷&FW'0¢t„U$RFVæçEö–BÒCÀ¢·&WçW6W"çFVæçD–EÐ¢¢&W2æ§6öâ‡²FF¢&W7VÇBç&÷w5³ÒÒ¢Ò6F6‚†W'"’²æW‡B†W'"’Ð§Ò ¢òòtUBö’ö–ç7V7F–öç2ó¦–B÷&V6÷&BÒÆFW7B–ç7V7F–öâ&V6÷&Bf÷"v÷&²÷&FW §&÷WFW"ævWB‚ró¦–B÷&V6÷&BrÂ&WV—&TWF‚Â7–æ2‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢G'’°¢6öç7B&V6÷&E&W2Òv—BVW'’€¢4TÄT5B—"â ¢e$ôÒV&Æ–2æ–ç7V7F–öå÷&V6÷&G2— ¢¤ô”âV&Æ–2çv÷&µö÷&FW'2vòôâvòæ–BÒ—"çv÷&µö÷&FW%ö–@¢t„U$R—"çv÷&µö÷&FW%ö–BÒC¢äB—"çFVæçEö–BÒC ¢äBvòçFVæçEö–BÒC ¢õ$DU"%’—"æ7&VFVEöBDU40¢Ä”Ô•BÀ¢·&Wç&×2æ–BÂ&WçW6W"çFVæçD–EÐ¢¢–b‡&V6÷&E&W2ç&÷w2æÆVæwF‚ÓÓÒ’°¢&W2æ§6öâ‡²FF¢çVÆÂÒ“²&WGW&à¢Ð ¢6öç7B&V6÷&BÒ&V6÷&E&W2ç&÷w5³Ð¢6öç7Bf–æF–æw5&W2Òv—BVW'’€¢4TÄT5B–BÂ&W7VÇBÂæ÷FW2Â6GW&VE÷fÇVRÂ†÷Fõ÷W&Ç2À¢•÷&ö÷Eö6W6RÂ•öf–ÇW&Uö6Æ72Â•öf–ÇW&Uö6öFRÂ•÷&V6öÖÖVæFVEö7F–öâÀ¢•÷fÆ–FF–öå÷7FGW2Â•÷fÆ–FF–öåö6öæf–FVæ6RÂ•÷fÆ–FF–öå÷&V6öâÀ¢•÷fÆ–FF–öå÷&V6öÖÖVæFVE÷&W7VÇBÂ•÷fÆ–FF–öåöWf–FVæ6RÀ¢6†V6¶Æ—7Eö—FVÕö–@¢e$ôÒV&Æ–2æ–ç7V7F–öåöf–æF–æw0¢t„U$R–ç7V7F–öå÷&V6÷&Eö–BÒC¢äBFVæçEö–BÒC ¢õ$DU"%’7&VFVEöB46À¢·&V6÷&Bæ–BÂ&WçW6W"çFVæçD–EÐ¢ ¢&W2æ§6öâ‡²FF¢²ââç&V6÷&BÂ–ç7V7F–öåöf–æF–æw3¢f–æF–æw5&W2ç&÷w2ÒÒ¢Ò6F6‚†W'"’²æW‡B†W'"’Ð§Ò ¢òòtUBö’ö–ç7V7F–öç2ó¦–BÒ6–ævÆRv÷&²÷&FW"v—F‚6†V6¶Æ—7B—FV×0§&÷WFW"ævWB‚ró¦–BrÂ&WV—&TWF‚Â7–æ2‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢G'’°¢6öç7B·võ&W7VÇBÂ—FV×5&W7VÇEÒÒv—B&öÖ—6RæÆÂ…°¢VW'’€¢4TÄT5Bvòâ¢ÂRææÖR276–væVE÷FõöæÖRÀ¢v’çv•öçVÖ&W"Âv’çF—FÆR2v•÷F—FÆRÂv’ç&Wf—6–öà¢e$ôÒV&Æ–2çv÷&µö÷&FW'2vð¢ÄTeB¤ô”âV&Æ–2çW6W'2RôâRæ–BÒvòæ76–væVE÷Fð¢ÄTeB¤ô”âV&Æ–2çv÷&µö–ç7G'V7F–öç2v’ôâv’æ–BÒvòçv÷&µö–ç7G'V7F–öåö–@¢t„U$Rvòæ–BÒCäBvòçFVæçEö–BÒC&À¢·&Wç&×2æ–BÂ&WçW6W"çFVæçD–EÐ¢’À¢VW'’€¢4TÄT5B6’â ¢e$ôÒV&Æ–2çv•ö6†V6¶Æ—7Eö—FV×26¢¤ô”âV&Æ–2çv÷&µö÷&FW'2vòôâvòçv÷&µö–ç7G'V7F–öåö–BÒ6’çv÷&µö–ç7G'V7F–öåö–@¢t„U$Rvòæ–BÒC¢äBvòçFVæçEö–BÒC ¢õ$DU"%’6’ç6÷'Eö÷&FW&À¢·&Wç&×2æ–BÂ&WçW6W"çFVæçD–EÐ¢’À¢Ò ¢–b‡võ&W7VÇBç&÷w2æÆVæwF‚ÓÓÒ’°¢&W2ç7FGW2ƒCB’æ§6öâ‡²W'&÷#¢uv÷&²÷&FW"æ÷Bf÷VæBrÒ“²&WGW&à¢Ð¢&W2æ§6öâ‡²FF¢²ââçvõ&W7VÇBç&÷w5³ÒÂ6†V6¶Æ—7Eö—FV×3¢—FV×5&W7VÇBç&÷w2ÒÒ¢Ò6F6‚†W'"’²æW‡B†W'"’Ð§Ò ¢òòõ5Bö’ö–ç7V7F–öç2Ò7&VFRv÷&²÷&FW §&÷WFW"ç÷7B‚ròrÂ&WV—&TWF‚Â7–æ2‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢G'’°¢6öç7B²76WD–BÂ&–÷&—G’ÂGVTFFRÂ76–væVEFòÂv÷&´–ç7G'V7F–öä–BÂæ÷FW2ÒÒ&Wæ&öG¢6öç7BÆÆ÷vVE&–÷&—F–W2ÒæWr6WB…²vÆ÷rrÂvÖVF—VÒrÂv†–v‚rÂv7&—F–6ÂuÒ¢6öç7Bæ÷&ÖÆ—¦VE&–÷&—G’Ò&–÷&—G’ÇÂvÖVF—VÒp¢–b‚76WD–BÇÂG—Vöb76WD–BÓÒw7G&–ærr’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢t&Vv—7FW&VB76WB—2&WV—&VBrÒ“²&WGW&à¢Ð¢6öç7B76WE&W2Òv—BVW'’€¢4TÄT5B–BÂæÖRÂÆö6F–öâe$ôÒV&Æ–2æ76WG2t„U$R–BÒCäBFVæçEö–BÒC&À¢¶76WD–BÂ&WçW6W"çFVæçD–EÐ¢¢–b†76WE&W2ç&÷w2æÆVæwF‚ÓÓÒ’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢t76WB×W7B&VÆöærFò–÷W"FVæçBrÒ“²&WGW&à¢Ð¢6öç7B76WBÒ76WE&W2ç&÷w5³Ð¢–b‚ÆÆ÷vVE&–÷&—F–W2æ†2†æ÷&ÖÆ—¦VE&–÷&—G’’’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢t–çfÆ–Bv÷&²÷&FW"&–÷&—G’rÒ“²&WGW&à¢Ð¢–b†76–væVEFò’°¢6öç7BW6W%&W2Òv—BVW'’€¢4TÄT5B–Be$ôÒV&Æ–2çW6W'2t„U$R–BÒCäBFVæçEö–BÒC"äB7F—fRÒG'VVÀ¢¶76–væVEFòÂ&WçW6W"çFVæçD–EÐ¢¢–b‡W6W%&W2ç&÷w2æÆVæwF‚ÓÓÒ’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢t76–væVBW6W"×W7B&R7F—fR–â–÷W"FVæçBrÒ“²&WGW&à¢Ð¢Ð¢–b‚v÷&´–ç7G'V7F–öä–B’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢uv÷&²–ç7G'V7F–öâ—2&WV—&VBf÷"WfW'’v÷&²÷&FW"rÒ“²&WGW&à¢Ð¢6öç7Bv•&W2Òv—BVW'’€¢4TÄT5Bv’æ–BÀ¢4õTåB†6’æ–B’d”ÅDU"€¢t„U$R4ôÄU44R†6’æf–VÆE÷G—RÂw75öf–Âr’Ãâv†VF–ærp¢“£¦–çB26†V6¶&ÆUö—FVÕö6÷Vç@¢e$ôÒV&Æ–2çv÷&µö–ç7G'V7F–öç2v¢ÄTeB¤ô”âV&Æ–2çv•ö6†V6¶Æ—7Eö—FV×26¢ôâ6’çv÷&µö–ç7G'V7F–öåö–BÒv’æ–@¢äB6’çFVæçEö–BÒv’çFVæçEö–@¢t„U$Rv’æ–BÒC¢äBv’çFVæçEö–BÒC ¢äBv’ç7FGW2Òv7F—fRp¢äB‡v’æW‡—'•öFFR•2åTÄÂõ"v’æW‡—'•öFFRãÒ5U%$TåEôDDR¢u$õU%’v’æ–FÀ¢·v÷&´–ç7G'V7F–öä–BÂ&WçW6W"çFVæçD–EÐ¢¢–b‡v•&W2ç&÷w2æÆVæwF‚ÓÓÒ’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢uv÷&²–ç7G'V7F–öâ×W7B&VÆöærFò–÷W"FVæçBrÒ“²&WGW&à¢Ð¢–b‚‡v•&W2ç&÷w5³Òæ6†V6¶&ÆUö—FVÕö6÷VçBóò’Â’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢u6VÆV7FVBv÷&²–ç7G'V7F–öâ†2æò6†V6¶Æ—7B—FV×2rÒ“²&WGW&à¢Ð ¢6öç7B6Æ–VçBÒv—BööÂæ6öææV7B‚¢ÆWBv÷&´÷&FW#¢&V6÷&CÇ7G&–ærÂç“à¢G'’°¢v—B&Vv–ä7F÷%G&ç67F–öâ†6Æ–VçB¢òò6W&–Æ—¦RçVÖ&W&–ærW"FVæçB6ò6öæ7W'&VçB7&VFW26ææ÷B&V6V—fRF†R6ÖRtòçVÖ&W"à¢v—B6Æ–VçBçVW'’‚u4TÄT5BuöGf—6÷'•÷†7EöÆö6²††6‡FW‡FW‡FVæFVB‚CÂ’’rÂ·&WçW6W"çFVæçD–EÒ¢6öç7BçVÖ&W%&W2Òv—B6Æ–VçBçVW'’€¢4TÄT5B4ôÄU44R„Ô‚‚‡7V'7G&–ær‡võöçVÖ&W"e$ôÒu³Ó•Ò²r’“£¦–çB’Â’2†–v†W7@¢e$ôÒV&Æ–2çv÷&µö÷&FW'2t„U$RFVæçEö–BÒCÀ¢·&WçW6W"çFVæçD–EÐ¢¢6öç7BæW‡DçVÖ&W"ÒçVÖ&W"†çVÖ&W%&W2ç&÷w5³Òæ†–v†W7B’²¢6öç7BvôçVÖ&W"ÒtòÒGµ7G&–ær†æW‡DçVÖ&W"’çE7F'BƒBÂsr—Ö ¢6öç7B&W7VÇBÒv—B6Æ–VçBçVW'’€¢”å4U%B”åDòV&Æ–2çv÷&µö÷&FW'0¢‡võöçVÖ&W"ÂFVæçEö–BÂ76WEöæÖRÂ76WE÷&V6÷&Eö–BÂÆö6F–öâÂ&–÷&—G’ÂGVUöFFRÂ76–væVE÷FòÂv÷&µö–ç7G'V7F–öåö–BÂæ÷FW2Â7FGW2Â7&VFVEö'’¢dÅTU2‚CÂC"ÂC2ÂCBÂCRÂCbÂCrÂC‚ÂC’ÂCÂv÷VârÂC¢$UEU$ä”är¦À¢·vôçVÖ&W"Â&WçW6W"çFVæçD–BÂ76WBææÖRÂ76WBæ–BÂ76WBæÆö6F–öâÂæ÷&ÖÆ—¦VE&–÷&—G’ÂGVTFFRÇÂçVÆÂÀ¢76–væVEFòÇÂçVÆÂÂv÷&´–ç7G'V7F–öä–BÂæ÷FW2ÇÂçVÆÂÂ&WçW6W"æ–EÐ¢¢v—B6Æ–VçBçVW'’‚t4ôÔÔ•Br¢v÷&´÷&FW"Ò&W7VÇBç&÷w5³Ð¢Ò6F6‚†W'"’°¢v—B6Æ–VçBçVW'’‚u$ôÄÄ$4²r’æ6F6‚‚‚’ÓâVæFVf–æVB¢F‡&÷rW' ¢Òf–æÆÇ’°¢6Æ–VçBç&VÆV6R‚¢Ð ¢v—BVF—DÆör‡°¢FVæçD–C¢&WçW6W"çFVæçD–BÀ¢W6W$–C¢&WçW6W"æ–BÀ¢7F–öã¢wv÷&µö÷&FW"æ7&VFVBrÀ¢VçF—G•G—S¢wv÷&µö÷&FW'2rÀ¢VçF—G”–C¢v÷&´÷&FW"æ–BÀ¢FWF–Ã¢²võöçVÖ&W#¢v÷&´÷&FW"çvõöçVÖ&W"Â76WEöæÖS¢v÷&´÷&FW"æ76WEöæÖRÂ76WEö–C¢v÷&´÷&FW"æ76WE÷&V6÷&Eö–BÒÀ¢Ò¢–b†76–væVEFò’°¢v—B7&VFTæ÷F–f–6F–öâ‡°¢FVæçD–C¢&WçW6W"çFVæçD–BÀ¢W6W$–C¢76–væVEFòÀ¢F—FÆS¢æWrv÷&²÷&FW"76–væVBÒG·v÷&´÷&FW"çvõöçVÖ&W'ÖÀ¢ÖW76vS¢G·v÷&´÷&FW"æ76WEöæÖWÒG·v÷&´÷&FW"æÆö6F–öâòBG·v÷&´÷&FW"æÆö6F–öçÖ¢rwÒ†2&VVâ76–væVBFò–÷RæÀ¢6WfW&—G“¢&–÷&—G’ÓÓÒv7&—F–6ÂrÇÂ&–÷&—G’ÓÓÒv†–v‚ròwv&æ–ærr¢v–æfòrÀ¢VçF—G•G—S¢wv÷&µö÷&FW'2rÀ¢VçF—G”–C¢v÷&´÷&FW"æ–BÀ¢Ò¢Ð ¢&W2ç7FGW2ƒ#’æ§6öâ‡²FF¢v÷&´÷&FW"Ò¢Ò6F6‚†W'"’²æW‡B†W'"’Ð§Ò ¢òòD4‚ö’ö–ç7V7F–öç2ó¦–B÷v÷&²Ö–ç7G'V7F–öâÒGF6‚÷"&WÆ6RF†R–ç7V7F–öâ6†V6¶Æ—7@§&÷WFW"çF6‚‚ró¦–B÷v÷&²Ö–ç7G'V7F–öârÂ&WV—&TWF‚Â7–æ2‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢G'’°¢6öç7B²v÷&´–ç7G'V7F–öä–BÒÒ&Wæ&öG’2²v÷&´–ç7G'V7F–öä–Có¢7G&–ærÐ¢–b‚v÷&´–ç7G'V7F–öä–B’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢uv÷&²–ç7G'V7F–öâ—2&WV—&VBrÒ“²&WGW&à¢Ð ¢6öç7B·võ&W2Âv•&W5ÒÒv—B&öÖ—6RæÆÂ…°¢VW'’€¢4TÄT5B–BÂvõöçVÖ&W"Â7FGW0¢e$ôÒV&Æ–2çv÷&µö÷&FW'0¢t„U$R–BÒCäBFVæçEö–BÒC&À¢·&Wç&×2æ–BÂ&WçW6W"çFVæçD–EÐ¢’À¢VW'’€¢4TÄT5Bv’æ–BÂv’çv•öçVÖ&W"À¢4õTåB†6’æ–B’d”ÅDU"€¢t„U$R4ôÄU44R†6’æf–VÆE÷G—RÂw75öf–Âr’Ãâv†VF–ærp¢“£¦–çB26†V6¶&ÆUö—FVÕö6÷Vç@¢e$ôÒV&Æ–2çv÷&µö–ç7G'V7F–öç2v¢ÄTeB¤ô”âV&Æ–2çv•ö6†V6¶Æ—7Eö—FV×26¢ôâ6’çv÷&µö–ç7G'V7F–öåö–BÒv’æ–@¢äB6’çFVæçEö–BÒv’çFVæçEö–@¢t„U$Rv’æ–BÒC¢äBv’çFVæçEö–BÒC ¢äBv’ç7FGW2Òv7F—fRp¢äB‡v’æW‡—'•öFFR•2åTÄÂõ"v’æW‡—'•öFFRãÒ5U%$TåEôDDR¢u$õU%’v’æ–BÂv’çv•öçVÖ&W&À¢·v÷&´–ç7G'V7F–öä–BÂ&WçW6W"çFVæçD–EÐ¢’À¢Ò ¢–b‡võ&W2ç&÷w2æÆVæwF‚ÓÓÒ’°¢&W2ç7FGW2ƒCB’æ§6öâ‡²W'&÷#¢uv÷&²÷&FW"æ÷Bf÷VæBrÒ“²&WGW&à¢Ð¢–b‡võ&W2ç&÷w5³Òç7FGW2ÓÓÒv6ö×ÆWFRr’°¢&W2ç7FGW2ƒC’’æ§6öâ‡²W'&÷#¢t6ö×ÆWFVBv÷&²÷&FW'26ææ÷B&R&V76–væVBrÒ“²&WGW&à¢Ð¢–b‡v•&W2ç&÷w2æÆVæwF‚ÓÓÒ’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢uv÷&²–ç7G'V7F–öâ×W7B&VÆöærFò–÷W"FVæçBrÒ“²&WGW&à¢Ð¢–b‚‡v•&W2ç&÷w5³Òæ6†V6¶&ÆUö—FVÕö6÷VçBóò’Â’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢u6VÆV7FVBv÷&²–ç7G'V7F–öâ†2æò6†V6¶Æ—7B—FV×2rÒ“²&WGW&à¢Ð ¢6öç7B&W7VÇBÒv—BVW'’€¢UDDRV&Æ–2çv÷&µö÷&FW'0¢4UBv÷&µö–ç7G'V7F–öåö–BÒCÂWFFVEöBÒäõr‚¢t„U$R–BÒC"äBFVæçEö–BÒC0¢$UEU$ä”är¦À¢·v÷&´–ç7G'V7F–öä–BÂ&Wç&×2æ–BÂ&WçW6W"çFVæçD–EÐ¢ ¢v—BVF—DÆör‡°¢FVæçD–C¢&WçW6W"çFVæçD–BÀ¢W6W$–C¢&WçW6W"æ–BÀ¢7F–öã¢wv÷&µö÷&FW"çv÷&µö–ç7G'V7F–öâæ76–væVBrÀ¢VçF—G•G—S¢wv÷&µö÷&FW'2rÀ¢VçF—G”–C¢&Wç&×2æ–BÀ¢FWF–Ã¢°¢võöçVÖ&W#¢võ&W2ç&÷w5³ÒçvõöçVÖ&W"À¢v•öçVÖ&W#¢v•&W2ç&÷w5³Òçv•öçVÖ&W"À¢ÒÀ¢Ò ¢&W2æ§6öâ‡²FF¢&W7VÇBç&÷w5³ÒÒ¢Ò6F6‚†W'"’²æW‡B†W'"’Ð§Ò ¢òòD4‚ö’ö–ç7V7F–öç2ó¦–B÷7FGW0§&÷WFW"çF6‚‚ró¦–B÷7FGW2rÂ&WV—&TWF‚Â7–æ2‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢G'’°¢6öç7B²7FGW2ÒÒ&Wæ&öG’2²7FGW3¢7G&–ærÐ¢6öç7BÆÆ÷vVE7FGW6W2ÒæWr6WB…²v6æ6VÆÆVBuÒ¢–b‚ÆÆ÷vVE7FGW6W2æ†2‡7FGW2’’°¢&W2ç7FGW2ƒC’æ§6öâ‡²W'&÷#¢t–çfÆ–Bv÷&²÷&FW"7FGW2rÒ“²&WGW&à¢Ð¢6öç7B6ö×ÆWFVC¢7G&–ærÂçVÆÂÒçVÆÀ¢6öç7B&W7VÇBÒv—BVW'’€¢UDDRV&Æ–2çv÷&µö÷&FW'0¢4UB7FGW2ÒCÂ6ö×ÆWFVEöBÒC"ÂWFFVEöBÒäõr‚¢t„U$R–BÒC2äBFVæçEö–BÒC@¢$UEU$ä”är¦À¢·7FGW2Â6ö×ÆWFVBÂ&Wç&×2æ–BÂ&WçW6W"çFVæçD–EÐ¢¢–b‡&W7VÇBç&÷w2æÆVæwF‚ÓÓÒ’²&W2ç7FGW2ƒCB’æ§6öâ‡²W'&÷#¢tæ÷Bf÷VæBrÒ“²&WGW&âÐ¢v—BVF—DÆör‡°¢FVæçD–C¢&WçW6W"çFVæçD–BÀ¢W6W$–C¢&WçW6W"æ–BÀ¢7F–öã¢wv÷&µö÷&FW"ç7FGW2çWFFVBrÀ¢VçF—G•G—S¢wv÷&µö÷&FW'2rÀ¢VçF—G”–C¢&Wç&×2æ–BÀ¢FWF–Ã¢²7FGW2ÒÀ¢Ò¢&W2æ§6öâ‡²FF¢&W7VÇBç&÷w5³ÒÒ¢Ò6F6‚†W'"’²æW‡B†W'"’Ð§Ò ¢òòõ5Bö’ö–ç7V7F–öç2ó¦–B÷7F'BÒ7&VFR÷"&W7VÖRâ–ç7V7F–öâ&V6÷&@§&÷WFW"ç÷7B‚ró¦–B÷7F'BrÂ&WV—&TWF‚Â7–æ2‡&W¢WF…&WVW7BÂ&W2ÂæW‡B’Óâ°¢6öç7B6Æ–VçBÒv—BööÂæ6öææV7B‚¢G'’°¢6öç7B²F÷FÄ—FV×2ÒÒ&Wæ&öG¢v—B&Vv–ä7F÷%G&ç67F–öâ†6Æ–VçB ¢6öç7Bvõ&W2Òv—B6Æ–VçBçVW'’€¢4TÄT5B–BÂvõöçVÖ&W"Â76WEöæÖRÂ7FGW2Âv÷&µö–ç7G'V7F–öåö–@¢e$ôÒV&Æ–2çv÷&µö÷&FW'0¢t„U$R–BÒCäBFVæçEö–BÒC ¢dõ"UDDVÀ¢·&Wç&×2æ–BÂ&Wz¶‰žËkºwµçMJKšœÛÛŠÈ\œ›ÜŽˆ	ÐÛÜÙYÛÜšÈÜ™\œÈØ[››Ý™HÝ\Y	ÈJNÈ™]\›‚ˆBˆYˆ
-]ÛÔ™\Ëœ›ÝÜÖÌKÛÜš×Ú[œÝXÝ[Û—ÚY
-HÂˆ]ØZ]ÛY[œ]Y\žJ	Ô“ÓPÒÉÊBˆ™\ËœÝ]\ÊJKšœÛÛŠÈ\œ›ÜŽˆ	Ð\ÜÚYÛˆHÛÜšÈ[œÝXÝ[ÛˆÚ]ÚXÚÛ\Ý][\È™Y›Ü™HÝ\[™È\È[œÜXÝ[Û‰ÈJNÈ™]\›‚ˆBˆÛÛœÝÝ[™\ÈH]ØZ]ÛY[œ]Y\žJˆÑSPÕÓÕS•
+import { workOrderFilters } from '../lib/workOrderFilters'
+import { Router } from 'express'
+import crypto from 'crypto'
+import { validSignature, canonicalJson } from '../lib/signature'
+import { requireAuth, requireCapability, type AuthRequest } from '../middleware/auth'
+import { pool, query, beginActorTransaction } from '../lib/db'
+import { auditLog, createNotification, notifyRoles } from '../lib/events'
 
-ŠNŽš[TÈÝ[Ú][\Âˆ”“ÓHX›XËÚWØÚXÚÛ\ÝÚ][\ÈÚBˆ“ÒSˆX›XËÛÜš×ÛÜ™\œÈÛÈÓˆÛËÛÜš×Ú[œÝXÝ[Û—ÚYHÚKÛÜš×Ú[œÝXÝ[Û—ÚYˆÒT‘HÛËšYH	BˆS‘ÛË[˜[ÚYH	‚ˆS‘ÚK[˜[ÚYH	‚ˆS‘ÓÐSTÐÑJÚK™šY[Ý\K	Ü\Ü×Ù˜Z[	ÊHˆ	ÚXY[™ÉØˆÜ™\Kœ\˜[\ËšY™\K\Ù\ˆK[˜[YBˆ
-BˆÛÛœÝÙ\™\•Ý[][\ÈHÝ[™\Ëœ›ÝÜÖÌOËÝ[Ú][\ÈÏÈÝ[][\ÈÏÈˆYˆ
-Ù\™\•Ý[][\ÈJHÂˆ]ØZ]ÛY[œ]Y\žJ	Ô“ÓPÒÉÊBˆ™\ËœÝ]\ÊJKšœÛÛŠÈ\œ›ÜŽˆ	ÕH[šÙYÛÜšÈ[œÝXÝ[Ûˆ\È›ÈÚXÚÛ\Ý][\ÉÈJNÈ™]\›‚ˆB‚ˆÛÛœÝ^\Ý[™Ô™\ÈH]ØZ]ÛY[œ]Y\žJˆÑSPÕ
-‚ˆ”“ÓHX›XËš[œÜXÝ[Û—Ü™XÛÜ™ÂˆÒT‘HÛÜš×ÛÜ™\—ÚYH	HS‘[˜[ÚYH	‚ˆÔ‘Tˆ–HÜ™X]YØ]TÐÂˆSRUXˆÜ™\Kœ\˜[\ËšY™\K\Ù\ˆK[˜[YBˆ
-BˆYˆ
-^\Ý[™Ô™\Ëœ›ÝÜÖÌOË˜ÛÛ\]YØ]
-HÂˆ]ØZ]ÛY[œ]Y\žJ	Ô“ÓPÒÉÊBˆ™\ËœÝ]\ÊJKšœÛÛŠÈ\œ›ÜŽˆ	Õ\ÈÛÜšÈÜ™\ˆ[™XYH\ÈHÛÛ\]Y[œÜXÝ[Û‰ÈJNÈ™]\›‚ˆB‚ˆ]™XÛÜ™H^\Ý[™Ô™\Ëœ›ÝÜÖÌBˆYˆ
-™XÛÜ™
-HÂˆÛÛœÝ\]Y™XÛÜ™™\ÈH]ØZ]ÛY[œ]Y\žJˆTUHX›XËš[œÜXÝ[Û—Ü™XÛÜ™ÂˆÑUÝ[Ú][\ÈH	K\]YØ]H“ÕÊ
-BˆÒT‘HYH	ˆS‘[˜[ÚYH	Âˆ‘UT“’S‘È
-˜ˆÜÙ\™\•Ý[][\Ë™XÛÜ™šY™\K\Ù\ˆK[˜[YBˆ
-Bˆ™XÛÜ™H\]Y™XÛÜ™™\Ëœ›ÝÜÖÌBˆH[ÙHÂˆ™XÛÜ™H
-]ØZ]ÛY[œ]Y\žJˆS”ÑT•S•ÈX›XËš[œÜXÝ[Û—Ü™XÛÜ™Âˆ
-ÛÜš×ÛÜ™\—ÚY[œÜXÝÜ—ÚY[˜[ÚYÝ[Ú][\ËÝ\YØ]
-BˆSQTÈ
-	K	‹	Ë	“ÕÊ
-JBˆ‘UT“’S‘È
-˜ˆÜ™\Kœ\˜[\ËšY™\K\Ù\ˆKšY™\K\Ù\ˆK[˜[YÙ\™\•Ý[][\×Bˆ
-JKœ›ÝÜÖÌBˆB‚ˆ]ØZ]ÛY[œ]Y\žJˆTUHX›XËÛÜš×ÛÜ™\œÂˆÑUÝ]\ÈH	Ú[—Ü›ÙÜ™\ÜÉË\]YØ]H“ÕÊ
-BˆÒT‘HYH	HS‘[˜[ÚYH	˜ˆÜ™\Kœ\˜[\ËšY™\K\Ù\ˆK[˜[YBˆ
-Bˆ]ØZ]ÛY[œ]Y\žJ	ÐÓÓSRU	ÊB‚ˆ]ØZ]]Y]ÙÊÂˆ[˜[Yˆ™\K\Ù\ˆK[˜[Yˆ\Ù\’Yˆ™\K\Ù\ˆKšYˆXÝ[ÛŽˆ^\Ý[™Ô™\Ëœ›ÝÜÖÌHÈ	Ú[œÜXÝ[Û‹œ™\Ý[YY	Èˆ	Ú[œÜXÝ[Û‹œÝ\Y	Ëˆ[]U\Nˆ	Ú[œÜXÝ[Û—Ü™XÛÜ™ÉËˆ[]RYˆ™XÛÜ™šYˆ]Z[ˆÈÛÜš×ÛÜ™\—ÚYˆ™\Kœ\˜[\ËšYÛ×Û[X™\ŽˆÛÔ™\Ëœ›ÝÜÖÌKÛ×Û[X™\ˆKˆJB‚ˆ™\ËšœÛÛŠÈ]NˆÈ‹‹œ™XÛÜ™[œÜXÝ[Û—Ùš[™[™ÜÎˆ×HHJBˆHØ]Ú
-\œŠHÂˆ]ØZ]ÛY[œ]Y\žJ	Ô“ÓPÒÉÊK˜Ø]Ú
+const router = Router()
+router.use(requireAuth)
+router.use((req: AuthRequest, res, next) => {
+  if (req.method === 'GET') {
+    next()
+    return
+  }
+  if (
+    req.path === '/' ||
+    req.path.endsWith('/assignment') ||
+    req.path.endsWith('/work-instruction')
+  ) {
+    requireCapability('work_order_manager')(req, res, next)
+    return
+  }
+  requireCapability('inspector')(req, res, next)
+})
+router.use(async (req: AuthRequest, res, next) => {
+  if (req.method === 'GET') {
+    next()
+    return
+  }
+  if (
+    req.path === '/' ||
+    req.path.endsWith('/assignment') ||
+    req.path.endsWith('/work-instruction')
+  ) {
+    requireCapability('work_order_manager')(req, res, next)
+    return
+  }
+  const id = req.path.split('/')[1]
+  const result = await query(
+    'SELECT assigned_to FROM public.work_orders WHERE id = $1 AND tenant_id = $2',
+    [id, req.user!.tenantId],
+  )
+  if (!result.rows.length) {
+    res.status(404).json({ error: 'Work order not found' })
+    return
+  }
+  if (
+    !req.user!.capabilities.includes('administrator') &&
+    result.rows[0].assigned_to !== req.user!.id
+  ) {
+    res
+      .status(403)
+      .json({ error: 'Only the assigned inspector or an administrator can change this work order' })
+    return
+  }
+  next()
+})
 
+const orderJoins =
+  'FROM public.work_orders wo LEFT JOIN public.users u ON u.id=wo.assigned_to LEFT JOIN public.work_instructions wi ON wi.id=wo.work_instruction_id'
+async function orderCounts(req: AuthRequest) {
+  const { where, params } = workOrderFilters(req)
+  return (
+    await query(
+      `SELECT count(*)::int total,count(*) FILTER(WHERE wo.status='open')::int open,count(*) FILTER(WHERE wo.status='in_progress')::int in_progress,count(*) FILTER(WHERE wo.status='complete')::int complete,count(*) FILTER(WHERE wo.status='cancelled')::int cancelled ${orderJoins} WHERE ${where}`,
+      params,
+    )
+  ).rows[0]
+}
+router.get('/', async (req: AuthRequest, res) => {
+  const { where, params } = workOrderFilters(req),
+    page = Math.max(1, parseInt(String(req.query.page || 1)) || 1),
+    pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize || 50)) || 50))
+  const [result, summary] = await Promise.all([
+    query(
+      `SELECT wo.*,u.name assigned_to_name,wi.wi_number,wi.title wi_title,(SELECT count(*)::int FROM public.wi_checklist_items ci WHERE ci.work_instruction_id=wo.work_instruction_id AND ci.field_type<>'heading') checklist_item_count ${orderJoins} WHERE ${where} ORDER BY wo.due_date ASC NULLS LAST,wo.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, pageSize, (page - 1) * pageSize],
+    ),
+    orderCounts(req),
+  ])
+  res.json({
+    data: result.rows,
+    meta: {
+      page,
+      pageSize,
+      total: summary.total,
+      summary,
+      hasMore: page * pageSize < summary.total,
+    },
+  })
+})
+router.get('/summary', async (req: AuthRequest, res) => {
+  res.json({ data: await orderCounts(req) })
+})
 
-HOˆ[™Yš[™Y
-Bˆ™^
-\œŠBˆHš[˜[HÂˆÛY[œ™[X\ÙJ
-BˆBŸJB‚‹ËÈÔÕØ\KÚ[œÜXÝ[ÛœËÎšYÙš[™[™ÜÈH\Ù\HÚXÚÛ\Ýš[™[™Âœ›Ý]\‹œÜÝ
-	ËÎšYÙš[™[™ÜÉË™\]Z\™P]]\Þ[˜È
-™\Nˆ]]™\]Y\Ý™\Ë™^
-HOˆÂˆžHÂˆÛÛœÝÈ[œÜXÝ[Û”™XÛÜ™YÚXÚÛ\Ý][RY™\Ý[ˆš[™[™Ô™\Ý[›Ý\ËØ\\™Y˜[YHHH™\K˜›ÙBˆYˆ
-VÉÜ\ÜÉË	Ù˜Z[	Ë	Û˜I×Kš[˜ÛY\Êš[™[™Ô™\Ý[
-JHÂˆ™\ËœÝ]\Ê
-KšœÛÛŠÈ\œ›ÜŽˆ	Ò[˜[Yš[™[™È™\Ý[	ÈJNÈ™]\›‚ˆBˆÛÛœÝ™[Û™ÜÔ™\ÈH]ØZ]]Y\žJˆÑSPÕ\‹šY\‹˜ÛÛ\]YØ]ˆ”“ÓHX›XËš[œÜXÝ[Û—Ü™XÛÜ™È\‚ˆ“ÒSˆX›XËÛÜš×ÛÜ™\œÈÛÈÓˆÛËšYH\‹ÛÜš×ÛÜ™\—ÚYˆ“ÒSˆX›XËÚWØÚXÚÛ\ÝÚ][\ÈÚBˆÓˆÚKšYH	ˆS‘ÚKÛÜš×Ú[œÝXÝ[Û—ÚYHÛËÛÜš×Ú[œÝXÝ[Û—ÚYˆS‘ÚK[˜[ÚYH	ÂˆÒT‘H\‹šYH	BˆS‘\‹ÛÜš×ÛÜ™\—ÚYH	‚ˆS‘\‹[˜[ÚYH	ÂˆS‘ÛË[˜[ÚYH	ØˆÚ[œÜXÝ[Û”™XÛÜ™Y™\Kœ\˜[\ËšY™\K\Ù\ˆK[˜[YÚXÚÛ\Ý][RYBˆ
-BˆYˆ
-™[Û™ÜÔ™\Ëœ›ÝÜË›[™ÝOOH
-HÂˆ™\ËœÝ]\Ê
-KšœÛÛŠÈ\œ›ÜŽˆ	Ò[œÜXÝ[Ûˆ™XÛÜ™›Ý›Ý[™	ÈJNÈ™]\›‚ˆBˆYˆ
-™[Û™ÜÔ™\Ëœ›ÝÜÖÌK˜ÛÛ\]YØ]
-HÂˆ™\ËœÝ]\ÊJKšœÛÛŠÈ\œ›ÜŽˆ	ÐÛÛ\]Y[œÜXÝ[ÛœÈØ[››Ý™HÚ[™ÙY	ÈJNÈ™]\›‚ˆB‚ˆÛÛœÝ™\Ý[H]ØZ]]Y\žJˆS”ÑT•S•ÈX›XËš[œÜXÝ[Û—Ùš[™[™ÜÂˆ
-[œÜXÝ[Û—Ü™XÛÜ™ÚYÚXÚÛ\ÝÚ][WÚY™\Ý[›Ý\Ë[˜[ÚYØ\\™YÝ˜[YJBˆSQTÈ
-	K	‹	Ë		K	ŠBˆÓˆÓÓ‘“PÕ
-[œÜXÝ[Û—Ü™XÛÜ™ÚYÚXÚÛ\ÝÚ][WÚY
-BˆÈTUHÑU™\Ý[HVÓQQœ™\Ý[›Ý\ÈHVÓQQ››Ý\ËØ\\™YÝ˜[YHHVÓQQ˜Ø\\™YÝ˜[YK\]YØ]H“ÕÊ
-Bˆ‘UT“’S‘È
-˜ˆÚ[œÜXÝ[Û”™XÛÜ™YÚXÚÛ\Ý][RYš[™[™Ô™\Ý[›Ý\È[™\K\Ù\ˆK[˜[YØ\\™Y˜[YHÏÈ[Bˆ
-B‚ˆ]ØZ]™XÛÝ[[œÜXÝ[ÛŠ[œÜXÝ[Û”™XÛÜ™Y™\K\Ù\ˆK[˜[Y
-Bˆ]ØZ]]Y]ÙÊÂˆ[˜[Yˆ™\K\Ù\ˆK[˜[Yˆ\Ù\’Yˆ™\K\Ù\ˆKšYˆXÝ[ÛŽˆ	Ú[œÜXÝ[Û‹™š[™[™ËœØ]™Y	Ëˆ[]U\Nˆ	Ú[œÜXÝ[Û—Ùš[™[™ÜÉËˆ[]RYˆ™\Ý[œ›ÝÜÖÌKšYˆÙ]™\š]Nˆš[™[™Ô™\Ý[OOH	Ù˜Z[	ÈÈ	ÝØ\›š[™ÉÈˆ	Ú[™›ÉËˆ]Z[ˆÈÚXÚÛ\ÝÚ][WÚYˆÚXÚÛ\Ý][RY™\Ý[ˆš[™[™Ô™\Ý[KˆJB‚ˆ™\ËšœÛÛŠÈ]Nˆ™\Ý[œ›ÝÜÖÌHJBˆHØ]Ú
-\œŠHÈ™^
-\œŠHBŸJB‚‹ËÈÔÕØ\KÚ[œÜXÝ[ÛœËÎšYÙš[™[™ÜËÜÝÈH\œÚ\ÝÝÈ]šY[˜ÙH›ÜˆHš[™[™Âœ›Ý]\‹œÜÝ
-	ËÎšYÙš[™[™ÜËÜÝÉË™\]Z\™P]]\Þ[˜È
-™\Nˆ]]™\]Y\Ý™\Ë™^
-HOˆÂˆžHÂˆÛÛœÝÈ[œÜXÝ[Û”™XÛÜ™YÚXÚÛ\Ý][RY[XYÙQ]U\›HH™\K˜›ÙH\ÈÂˆ[œÜXÝ[Û”™XÛÜ™YˆÝš[™ÂˆÚXÚÛ\Ý][RYˆÝš[™Âˆ[XYÙQ]U\›ˆÝš[™ÂˆBˆYˆ
-\[Ùˆ[XYÙQ]U\›OOH	ÜÝš[™ÉÈ[XYÙQ]U\››[™Ýˆ—ÎÌK×™]Nš[XYÙWÊ™ßœYßÙXœ
-NØ˜\ÙMÐKV˜K^ŒNJË×JÏ^ÌŸIË\Ý
-[XYÙQ]U\›
-JHÂˆ™\ËœÝ]\Ê
-KšœÛÛŠÈ\œ›ÜŽˆ	ÐH˜\ÙM‘Ë”QÈÜˆÙX”[XYÙH[™\ˆˆPˆ\È™\]Z\™Y	ÈJNÈ™]\›‚ˆB‚ˆÛÛœÝ™[Û™ÜÔ™\ÈH]ØZ]]Y\žJˆÑSPÕ\‹šY\‹˜ÛÛ\]YØ]ˆ”“ÓHX›XËš[œÜXÝ[Û—Ü™XÛÜ™È\‚ˆ“ÒSˆX›XËÛÜš×ÛÜ™\œÈÛÈÓˆÛËšYH\‹ÛÜš×ÛÜ™\—ÚYˆ“ÒSˆX›XËÚWØÚXÚÛ\ÝÚ][\ÈÚBˆÓˆÚKšYH	ˆS‘ÚKÛÜš×Ú[œÝXÝ[Û—ÚYHÛËÛÜš×Ú[œÝXÝ[Û—ÚYˆS‘ÚK[˜[ÚYH	ÂˆÒT‘H\‹šYH	BˆS‘\‹ÛÜš×ÛÜ™\—ÚYH	‚ˆS‘\‹[˜[ÚYH	ÂˆS‘ÛË[˜[ÚYH	ØˆÚ[œÜXÝ[Û”™XÛÜ™Y™\Kœ\˜[\ËšY™\K\Ù\ˆK[˜[YÚXÚÛ\Ý][RYBˆ
-BˆYˆ
-™[Û™ÜÔ™\Ëœ›ÝÜË›[™ÝOOH
-HÂˆ™\ËœÝ]\Ê
-KšœÛÛŠÈ\œ›ÜŽˆ	Ò[œÜXÝ[Ûˆ™XÛÜ™›Ý›Ý[™	ÈJNÈ™]\›‚ˆBˆYˆ
-™[Û™ÜÔ™\Ëœ›ÝÜÖÌK˜ÛÛ\]YØ]
-HÂˆ™\ËœÝ]\ÊJKšœÛÛŠÈ\œ›ÜŽˆ	ÐÛÛ\]Y[œÜXÝ[ÛœÈØ[››Ý™HÚ[™ÙY	ÈJNÈ™]\›‚ˆB‚ˆÛÛœÝ™\Ý[H]ØZ]]Y\žJˆS”ÑT•S•ÈX›XËš[œÜXÝ[Û—Ùš[™[™ÜÂˆ
-[œÜXÝ[Û—Ü™XÛÜ™ÚYÚXÚÛ\ÝÚ][WÚY[˜[ÚYÝ×Ý\›ÊBˆSQTÈ
-	K	‹	ËT”VVÉNŽ^×JBˆÓˆÓÓ‘“PÕ
-[œÜXÝ[Û—Ü™XÛÜ™ÚYÚXÚÛ\ÝÚ][WÚY
-BˆÈTUHÑUÝ×Ý\›ÈH\œ˜^WØ\[™
-ÓÐSTÐÑJX›XËš[œÜXÝ[Û—Ùš[™[™ÜËœÝ×Ý\›ËT”VV×NŽ^×JK	
-Kˆ\]YØ]H“ÕÊ
-Bˆ‘UT“’S‘È
-˜ˆÚ[œÜXÝ[Û”™XÛÜ™YÚXÚÛ\Ý][RY™\K\Ù\ˆK[˜[Y[XYÙQ]U\›Bˆ
-B‚ˆ]ØZ]]Y]ÙÊÂˆ[˜[Yˆ™\K\Ù\ˆK[˜[Yˆ\Ù\’Yˆ™\K\Ù\ˆKšYˆXÝ[ÛŽˆ	Ú[œÜXÝ[Û‹œÝË˜]XÚY	Ëˆ[]U\Nˆ	Ú[œÜXÝ[Û—Ùš[™[™ÜÉËˆ[]RYˆ™\Ý[œ›ÝÜÖÌKšYˆ]Z[ˆÈÚXÚÛ\ÝÚ][WÚYˆÚXÚÛ\Ý][RYKˆJB‚ˆ™\ËšœÛÛŠÈ]Nˆ™\Ý[œ›ÝÜÖÌHJBˆHØ]Ú
-\œŠHÈ™^
-\œŠHBŸJB‚‹ËÈÔÕØ\KÚ[œÜXÝ[ÛœËÎšYØÛÛ\]Bœ›Ý]\‹œÜÝ
-	ËÎšYØÛÛ\]IË™\]Z\™P]]\Þ[˜È
-™\Nˆ]]™\]Y\Ý™\Ë™^
-HOˆÂˆÛÛœÝÛY[H]ØZ]ÛÛ˜ÛÛ›™XÝ
+router.patch('/:id/assignment', async (req: AuthRequest, res) => {
+  const result = await query(
+    "UPDATE public.work_orders SET assigned_to=$1 WHERE id=$2 AND tenant_id=$3 AND status='open' RETURNING *",
+    [req.body.assignedTo || null, req.params.id, req.user!.tenantId],
+  )
+  if (!result.rows.length) {
+    res
+      .status(409)
+      .json({ error: 'Only an accessible work order that has not started can be assigned' })
+    return
+  }
+  res.json({ data: result.rows[0] })
+})
 
-BˆžHÂˆÛÛœÝÈ[œÜXÝ[Û”™XÛÜ™YÚYÛ˜]\™Q]U\›HH™\K˜›ÙH\ÈÂˆ[œÜXÝ[Û”™XÛÜ™YˆÝš[™ÂˆÚYÛ˜]\™Q]U\›ÎˆÝš[™ÂˆBˆYˆ
-]˜[YÚYÛ˜]\™JÚYÛ˜]\™Q]U\›
-JHÂˆ™\ËœÝ]\Ê
-KšœÛÛŠÈ\œ›ÜŽˆ	ÔÚYÛ˜]\™H\È™\]Z\™YÈÛÛ\]H[ˆ[œÜXÝ[Û‰ÈJNÈ™]\›‚ˆB‚ˆ]ØZ]™YÚ[XÝÜ•˜[œØXÝ[ÛŠÛY[
-B‚ˆÛÛœÝ™XÛÜ™™\ÈH]ØZ]ÛY[œ]Y\žJˆÑSPÕ\‹Š‹ÛËÛ×Û[X™\‹ÛË˜\ÜÙ]Û˜[YKÛË›ØØ][Û‹ÛË˜\ÜÚYÛ™YÝËÛËÛÜš×Ú[œÝXÝ[Û—ÚYˆ”“ÓHX›XËš[œÜXÝ[Û—Ü™XÛÜ™È\‚ˆ“ÒSˆX›XËÛÜš×ÛÜ™\œÈÛÈÓˆÛËšYH\‹ÛÜš×ÛÜ™\—ÚYˆÒT‘H\‹šYH	BˆS‘\‹ÛÜš×ÛÜ™\—ÚYH	‚ˆS‘\‹[˜[ÚYH	ÂˆS‘ÛË[˜[ÚYH	Âˆ“ÔˆTUXˆÚ[œÜXÝ[Û”™XÛÜ™Y™\Kœ\˜[\ËšY™\K\Ù\ˆK[˜[YBˆ
-BˆYˆ
-™XÛÜ™™\Ëœ›ÝÜË›[™ÝOOH
-HÂˆ]ØZ]ÛY[œ]Y\žJ	Ô“ÓPÒÉÊBˆ™\ËœÝ]\Ê
-KšœÛÛŠÈ\œ›ÜŽˆ	Ò[œÜXÝ[Ûˆ™XÛÜ™›Ý›Ý[™	ÈJNÈ™]\›‚ˆBˆÛÛœÝ™XÛÜ™H™XÛÜ™™\Ëœ›ÝÜÖÌBˆYˆ
-™XÛÜ™˜ÛÛ\]YØ]
-HÂˆ]ØZ]ÛY[œ]Y\žJ	Ô“ÓPÒÉÊBˆ™\ËœÝ]\ÊJKšœÛÛŠÈ\œ›ÜŽˆ	Õ\È[œÜXÝ[Ûˆ\È[™XYHÛÛ\]IÈJNÈ™]\›‚ˆB‚ˆÛÛœÝÛÝ[™\ÈH]ØZ]ÛY[œ]Y\žJˆÑSPÕˆÓÕS•
-ÚKšY
-H’STˆ
-ˆÒT‘HÓÐSTÐÑJÚK™šY[Ý\K	Ü\Ü×Ù˜Z[	ÊHˆ	ÚXY[™ÉÂˆ
-NŽš[TÈÝ[Ú][\ËˆÓÕS•
-ÚKšY
-H’STˆ
-ˆÒT‘HÓÐSTÐÑJÚK™šY[Ý\K	Ü\Ü×Ù˜Z[	ÊHˆ	ÚXY[™ÉÂˆS‘ÚKœ™\]Z\™YTÈTÕSÕ”“ÓH˜[ÙBˆ
-NŽš[TÈ™\]Z\™YÝÝ[ˆÓÕS•
-ÚKšY
-H’STˆ
-ˆÒT‘HÓÐSTÐÑJÚK™šY[Ý\K	Ü\Ü×Ù˜Z[	ÊHˆ	ÚXY[™ÉÂˆS‘ÚKœ™\]Z\™YTÈTÕSÕ”“ÓH˜[ÙBˆS‘‹œ™\Ý[Sˆ
-	Ü\ÜÉË	Ù˜Z[	Ë	Û˜IÊBˆ
-NŽš[TÈ™\]Z\™YØ[œÝÙ\™YˆÓÕS•
-ÚKšY
-H’STˆ
-ÒT‘H‹œ™\Ý[H	Ü\ÜÉÊNŽš[TÈ\ÜÙYˆÓÕS•
-ÚKšY
-H’STˆ
-ÒT‘H‹œ™\Ý[H	Ù˜Z[	ÊNŽš[TÈ˜Z[YˆÓÕS•
-ÚKšY
-H’STˆ
-ÒT‘H‹œ™\Ý[H	Û˜IÊNŽš[TÈ˜Bˆ”“ÓHX›XËÛÜš×ÛÜ™\œÈÛÂˆ“ÒSˆX›XËÚWØÚXÚÛ\ÝÚ][\ÈÚBˆÓˆÚKÛÜš×Ú[œÝXÝ[Û—ÚYHÛËÛÜš×Ú[œÝXÝ[Û—ÚYˆS‘ÚK[˜[ÚYHÛË[˜[ÚYˆQ•“ÒSˆX›XËš[œÜXÝ[Û—Ùš[™[™ÜÈ‚ˆÓˆ‹š[œÜXÝ[Û—Ü™XÛÜ™ÚYH	BˆS‘‹˜ÚXÚÛ\ÝÚ][WÚYHÚKšYˆS‘‹[˜[ÚYHÛË[˜[ÚYˆÒT‘HÛËšYH	‚ˆS‘ÛË[˜[ÚYH	ØˆÚ[œÜXÝ[Û”™XÛÜ™Y™\Kœ\˜[\ËšY™\K\Ù\ˆK[˜[YBˆ
-BˆÛÛœÝÛÝ[ÈHÛÝ[™\Ëœ›ÝÜÖÌBˆYˆ
-ÛÝ[Ëœ™\]Z\™YØ[œÝÙ\™YÛÝ[Ëœ™\]Z\™YÝÝ[ÛÝ[Ëœ\ÜÙY
-ÈÛÝ[Ë™˜Z[Y
-ÈÛÝ[Ë›˜HJHÂˆ]ØZ]ÛY[œ]Y\žJ	Ô“ÓPÒÉÊBˆ™\ËœÝ]\ÊJKšœÛÛŠÂˆ\œ›ÜŽˆÛÛ\]H[™\]Z\™YÚXÚÛ\Ý][\È™Y›Ü™HÚYÛš[™È
-	ØÛÝ[Ëœ™\]Z\™YØ[œÝÙ\™YKÉØÛÝ[Ëœ™\]Z\™YÝÝ[HÛÛ\]JXˆJNÈ™]\›‚ˆBˆÛÛœÝÝ™\˜[™\Ý[HÛÝ[Ë™˜Z[YˆÈ	Ù˜Z[	ÈˆÛÝ[Ëœ\ÜÙYˆÈ	Ü\ÜÉÈˆ	Û˜IÂˆÛÛœÝÛ˜\ÚÝ™\ÈH]ØZ]ÛY[œ]Y\žJˆÑSPÕÚKšYÚKš][WÛ›ËÚK™\ØÜš\[Û‹ÚK˜XØÙ\[˜ÙWØÜš]\šXKÚK™šY[Ý\KˆÚK›Z[—Ý˜[YKÚK›X^Ý˜[YK‹œ™\Ý[‹››Ý\Ë‹˜Ø\\™YÝ˜[YK‹œÝ×Ý\›Âˆ”“ÓHX›XËÛÜš×ÛÜ™\œÈÛÂˆ“ÒSˆX›XËÚWØÚXÚÛ\ÝÚ][\ÈÚHÓˆÚKÛÜš×Ú[œÝXÝ[Û—ÚYHÛËÛÜš×Ú[œÝXÝ[Û—ÚYS‘ÚK[˜[ÚYHÛË[˜[ÚYˆQ•“ÒSˆX›XËš[œÜXÝ[Û—Ùš[™[™ÜÈˆÓˆ‹˜ÚXÚÛ\ÝÚ][WÚYHÚKšYS‘‹š[œÜXÝ[Û—Ü™XÛÜ™ÚYH	BˆÒT‘HÛËšYH	ˆS‘ÛË[˜[ÚYH	ÈÔ‘Tˆ–HÚKœÛÜÛÜ™\‹ÚKšYˆÚ[œÜXÝ[Û”™XÛÜ™Y™\Kœ\˜[\ËšY™\K\Ù\ˆK[˜[YJBˆÛÛœÝÚYÛ™Y^[ØYHÈ™\œÚ[ÛŽˆK[œÜXÝ[Û”™XÛÜ™YÚYÛ™\’Yˆ™\K\Ù\ˆKšYÛÜšÒ[œÝXÝ[Û’Yˆ™XÛÜ™ÛÜš×Ú[œÝXÝ[Û—ÚYÛÜšÓÜ™\“[X™\Žˆ™XÛÜ™Û×Û[X™\‹\ÜÙ]˜[YNˆ™XÛÜ™˜\ÜÙ]Û˜[YKØØ][ÛŽˆ™XÛÜ™›ØØ][Û‹][\ÎˆÛ˜\ÚÝ™\Ëœ›ÝÜËÚYÛ˜]\™Q]U\›BˆÛÛœÝÚYÛ˜]\™R\ÚHÜž\Âˆ˜Ü™X]R\Ú
-	ÜÚLM‰ÊBˆ\]JØ[›ÛšXØ[œÛÛŠÚYÛ™Y^[ØY
-JBˆ™YÙ\Ý
-	Ú^	ÊB‚ˆ]ØZ]ÛY[œ]Y\žJˆTUHX›XËš[œÜXÝ[Û—Ü™XÛÜ™ÂˆÑUÝ™\˜[Ü™\Ý[H	KˆÛÛ\]YØ]H“ÕÊ
-Kˆ\ÜÙYÚ][\ÈH	‹ˆ˜Z[YÚ][\ÈH	Ëˆ˜WÚ][\ÈH	ˆÝ[Ú][\ÈH	KˆÚYÛ™YØžHH	‹ˆÚYÛ™YØ]H“ÕÊ
-KˆÚYÛ˜]\™WÙ]WÝ\›H	ËˆÚYÛ˜]\™WÚ\ÚH	ˆÚYÛ™YÜ^[ØYH	LŽšœÛÛ˜‹ˆ\]YØ]H“ÕÊ
-BˆÒT‘HYH	XˆÂˆÝ™\˜[™\Ý[ˆÛÝ[Ëœ\ÜÙYˆÛÝ[Ë™˜Z[YˆÛÝ[Ë›˜KˆÛÝ[ËÝ[Ú][\Ëˆ™\K\Ù\ˆKšYˆÚYÛ˜]\™Q]U\›ˆÚYÛ˜]\™R\Úˆ[œÜXÝ[Û”™XÛÜ™Yˆ”ÓÓ‹œÝš[™ÚYžJÚYÛ™Y^[ØY
-KˆBˆ
-Bˆ]ØZ]ÛY[œ]Y\žJˆTUHX›XËÛÜš×ÛÜ™\œÂˆÑUÝ]\ÈH	ØÛÛ\]IËÛÛ\]YØ]H“ÕÊ
-K\]YØ]H“ÕÊ
-BˆÒT‘HYH	HS‘[˜[ÚYH	˜ˆÜ™\Kœ\˜[\ËšY™\K\Ù\ˆK[˜[YBˆ
-B‚ˆ]ØZ]ÛY[œ]Y\žJ	ÐÓÓSRU	ÊB‚ˆ]ØZ]]Y]ÙÊÂˆ[˜[Yˆ™\K\Ù\ˆK[˜[Yˆ\Ù\’Yˆ™\K\Ù\ˆKšYˆXÝ[ÛŽˆ	Ú[œÜXÝ[Û‹˜ÛÛ\]Y	Ëˆ[]U\Nˆ	Ú[œÜXÝ[Û—Ü™XÛÜ™ÉËˆ[]RYˆ[œÜXÝ[Û”™XÛÜ™YˆÙ]™\š]NˆÝ™\˜[™\Ý[OOH	Ù˜Z[	ÈÈ	ÝØ\›š[™ÉÈˆ	Ú[™›ÉËˆ]Z[ˆÂˆÛ×Û[X™\Žˆ™XÛÜ™Û×Û[X™\‹ˆ\ÜÙYˆÛÝ[Ëœ\ÜÙYˆ˜Z[YˆÛÝ[Ë™˜Z[Yˆ˜NˆÛÝ[Ë›˜KˆÚYÛ˜]\™WÚ\ÚˆÚYÛ˜]\™R\ÚˆKˆJB‚ˆYˆ
-Ý™\˜[™\Ý[OOH	Ù˜Z[	ÊHÂˆ]ØZ]›ÝYžT›Û\Ê™\K\Ù\ˆK[˜[YÉØYZ[‰Ë	Ø\›Ý™\‰×KÂˆ]Nˆ[œÜXÝ[Ûˆ˜Z[YH	Ü™XÛÜ™Û×Û[X™\ŸXˆY\ÜØYÙNˆ	Ü™XÛÜ™˜\ÜÙ]Û˜[Y_IÜ™XÛÜ™›ØØ][ÛˆÈ]	Ü™XÛÜ™›ØØ][ÛŸXˆ	ÉßHÛÛ\]YÚ]	ØÛÝ[Ë™˜Z[YH˜Z[Y][JÊK˜ˆÙ]™\š]Nˆ	ÝØ\›š[™ÉËˆ[]U\Nˆ	Ú[œÜXÝ[Û—Ü™XÛÜ™ÉËˆ[]RYˆ[œÜXÝ[Û”™XÛÜ™YˆJBˆB‚ˆ™\ËšœÛÛŠÂˆ]NˆÂˆÝXØÙ\ÜÎˆYKˆÝ™\˜[™\Ý[ˆ\ÜÙYˆÛÝ[Ëœ\ÜÙYˆ˜Z[YˆÛÝ[Ë™˜Z[Yˆ˜NˆÛÝ[Ë›˜KˆÚYÛ˜]\™R\ÚˆKˆJBˆHØ]Ú
-\œŠHÂˆ]ØZ]ÛY[œ]Y\žJ	Ô“ÓPÒÉÊK˜Ø]Ú
+// GET /api/inspections/:id/record - latest inspection record for a work order
+router.get('/:id/record', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const recordRes = await query(
+      `SELECT ir.*
+       FROM public.inspection_records ir
+       JOIN public.work_orders wo ON wo.id = ir.work_order_id
+       WHERE ir.work_order_id = $1
+         AND ir.tenant_id = $2
+         AND wo.tenant_id = $2
+       ORDER BY ir.created_at DESC
+       LIMIT 1`,
+      [req.params.id, req.user!.tenantId],
+    )
+    if (recordRes.rows.length === 0) {
+      res.json({ data: null })
+      return
+    }
 
+    const record = recordRes.rows[0]
+    const findingsRes = await query(
+      `SELECT id, result, notes, captured_value, photo_urls,
+              ai_root_cause, ai_failure_class, ai_failure_code, ai_recommended_action,
+              ai_validation_status, ai_validation_confidence, ai_validation_reason,
+              ai_validation_recommended_result, ai_validation_evidence,
+              checklist_item_id
+       FROM public.inspection_findings
+       WHERE inspection_record_id = $1
+         AND tenant_id = $2
+       ORDER BY created_at ASC`,
+      [record.id, req.user!.tenantId],
+    )
 
-HOˆ[™Yš[™Y
-Bˆ™^
-\œŠBˆHš[˜[HÂˆÛY[œ™[X\ÙJ
-BˆBŸJB‚˜\Þ[˜È[˜Ý[Ûˆ™XÛÝ[[œÜXÝ[ÛŠ[œÜXÝ[Û”™XÛÜ™YˆÝš[™Ë[˜[YˆÝš[™ÊHÂˆÛÛœÝÛÝ[™\ÈH]ØZ]]Y\žJˆÑSPÕˆÓÕS•
-ÚKšY
-H’STˆ
-ˆÒT‘HÓÐSTÐÑJÚK™šY[Ý\K	Ü\Ü×Ù˜Z[	ÊHˆ	ÚXY[™ÉÂˆ
-NŽš[TÈÝ[Ú][\ËˆÓÕS•
-ÚKšY
-H’STˆ
-ÒT‘H‹œ™\Ý[H	Ü\ÜÉÊNŽš[TÈ\ÜÙYˆÓÕS•
-ÚKšY
-H’STˆ
-ÒT‘H‹œ™\Ý[H	Ù˜Z[	ÊNŽš[TÈ˜Z[YˆÓÕS•
-ÚKšY
-H’STˆ
-ÒT‘H‹œ™\Ý[H	Û˜IÊNŽš[TÈ˜Bˆ”“ÓHX›XËš[œÜXÝ[Û—Ü™XÛÜ™È\‚ˆ“ÒSˆX›XËÛÜš×ÛÜ™\œÈÛÂˆÓˆÛËšYH\‹ÛÜš×ÛÜ™\—ÚYˆS‘ÛË[˜[ÚYH\‹[˜[ÚYˆ“ÒSˆX›XËÚWØÚXÚÛ\ÝÚ][\ÈÚBˆÓˆÚKÛÜš×Ú[œÝXÝ[Û—ÚYHÛËÛÜš×Ú[œÝXÝ[Û—ÚYˆS‘ÚK[˜[ÚYH\‹[˜[ÚYˆQ•“ÒSˆX›XËš[œÜXÝ[Û—Ùš[™[™ÜÈ‚ˆÓˆ‹š[œÜXÝ[Û—Ü™XÛÜ™ÚYH\‹šYˆS‘‹˜ÚXÚÛ\ÝÚ][WÚYHÚKšYˆS‘‹[˜[ÚYH\‹[˜[ÚYˆÒT‘H\‹šYH	BˆS‘\‹[˜[ÚYH	˜ˆÚ[œÜXÝ[Û”™XÛÜ™Y[˜[YBˆ
-BˆÛÛœÝÛÝ[ÈHÛÝ[™\Ëœ›ÝÜÖÌBˆ]ØZ]]Y\žJˆTUHX›XËš[œÜXÝ[Û—Ü™XÛÜ™ÂˆÑU\ÜÙYÚ][\ÈH	K˜Z[YÚ][\ÈH	‹˜WÚ][\ÈH	ËÝ[Ú][\ÈH	\]YØ]H“ÕÊ
-BˆÒT‘HYH	HS‘[˜[ÚYH	˜ˆØÛÝ[Ëœ\ÜÙYÛÝ[Ë™˜Z[YÛÝ[Ë›˜KÛÝ[ËÝ[Ú][\Ë[œÜXÝ[Û”™XÛÜ™Y[˜[YBˆ
-BŸB‚™^ÜY˜][›Ý]\‚
+    res.json({ data: { ...record, inspection_findings: findingsRes.rows } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/inspections/:id - single work order with checklist items
+router.get('/:id', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const [woResult, itemsResult] = await Promise.all([
+      query(
+        `SELECT wo.*, u.name AS assigned_to_name,
+                wi.wi_number, wi.title AS wi_title, wi.revision
+         FROM   public.work_orders wo
+         LEFT JOIN public.users u  ON u.id = wo.assigned_to
+         LEFT JOIN public.work_instructions wi ON wi.id = wo.work_instruction_id
+         WHERE  wo.id = $1 AND wo.tenant_id = $2`,
+        [req.params.id, req.user!.tenantId],
+      ),
+      query(
+        `SELECT ci.*
+         FROM   public.wi_checklist_items ci
+         JOIN   public.work_orders wo ON wo.work_instruction_id = ci.work_instruction_id
+         WHERE  wo.id = $1
+           AND  wo.tenant_id = $2
+         ORDER  BY ci.sort_order`,
+        [req.params.id, req.user!.tenantId],
+      ),
+    ])
+
+    if (woResult.rows.length === 0) {
+      res.status(404).json({ error: 'Work order not found' })
+      return
+    }
+    res.json({ data: { ...woResult.rows[0], checklist_items: itemsResult.rows } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/inspections - create work order
+router.post('/', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const { assetId, priority, dueDate, assignedTo, workInstructionId, notes } = req.body
+    const allowedPriorities = new Set(['low', 'medium', 'high', 'critical'])
+    const normalizedPriority = priority || 'medium'
+    if (!assetId || typeof assetId !== 'string') {
+      res.status(400).json({ error: 'A registered asset is required' })
+      return
+    }
+    const assetRes = await query(
+      `SELECT id, name, location, department_id FROM public.assets WHERE id = $1 AND tenant_id = $2`,
+      [assetId, req.user!.tenantId],
+    )
+    if (assetRes.rows.length === 0) {
+      res.status(400).json({ error: 'Asset must belong to your tenant' })
+      return
+    }
+    const asset = assetRes.rows[0]
+    if (!allowedPriorities.has(normalizedPriority)) {
+      res.status(400).json({ error: 'Invalid work order priority' })
+      return
+    }
+    if (assignedTo) {
+      const userRes = await query(
+        `SELECT id FROM public.users WHERE id = $1 AND tenant_id = $2 AND active = true`,
+        [assignedTo, req.user!.tenantId],
+      )
+      if (userRes.rows.length === 0) {
+        res.status(400).json({ error: 'Assigned user must be active in your tenant' })
+        return
+      }
+    }
+    if (!workInstructionId) {
+      res.status(400).json({ error: 'Work instruction is required for every work order' })
+      return
+    }
+    const wiRes = await query(
+      `SELECT wi.id,
+              COUNT(ci.id) FILTER (
+                WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+              )::int AS checkable_item_count
+       FROM public.work_instructions wi
+       LEFT JOIN public.wi_checklist_items ci
+         ON ci.work_instruction_id = wi.id
+        AND ci.tenant_id = wi.tenant_id
+       WHERE wi.id = $1
+         AND wi.tenant_id = $2
+         AND wi.status IN ('active','expiring')
+         AND (wi.effective_date IS NULL OR wi.effective_date <= CURRENT_DATE)
+         AND wi.department_id = $3
+         AND (wi.expiry_date IS NULL OR wi.expiry_date >= CURRENT_DATE)
+       GROUP BY wi.id`,
+      [workInstructionId, req.user!.tenantId, asset.department_id],
+    )
+    if (wiRes.rows.length === 0) {
+      res.status(400).json({ error: 'Work instruction must belong to your tenant' })
+      return
+    }
+    if ((wiRes.rows[0].checkable_item_count ?? 0) < 1) {
+      res.status(400).json({ error: 'Selected work instruction has no checklist items' })
+      return
+    }
+
+    const client = await pool.connect()
+    let workOrder: Record<string, any>
+    try {
+      await beginActorTransaction(client)
+      // Serialize numbering per tenant so concurrent creates cannot receive the same WO number.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        req.user!.tenantId,
+      ])
+      const numberRes = await client.query(
+        `SELECT COALESCE(MAX((substring(wo_number FROM '[0-9]+'))::int), 0) AS highest
+         FROM public.work_orders WHERE tenant_id = $1`,
+        [req.user!.tenantId],
+      )
+      const nextNumber = Number(numberRes.rows[0].highest) + 1
+      const woNumber = `WO-${String(nextNumber).padStart(4, '0')}`
+      const result = await client.query(
+        `INSERT INTO public.work_orders
+           (wo_number, tenant_id, asset_name, asset_record_id, location, priority, due_date, assigned_to, work_instruction_id, notes, status, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open',$11)
+         RETURNING *`,
+        [
+          woNumber,
+          req.user!.tenantId,
+          asset.name,
+          asset.id,
+          asset.location,
+          normalizedPriority,
+          dueDate || null,
+          assignedTo || null,
+          workInstructionId,
+          notes || null,
+          req.user!.id,
+        ],
+      )
+      await client.query('COMMIT')
+      workOrder = result.rows[0]
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined)
+      throw err
+    } finally {
+      client.release()
+    }
+
+    await auditLog({
+      tenantId: req.user!.tenantId,
+      userId: req.user!.id,
+      action: 'work_order.created',
+      entityType: 'work_orders',
+      entityId: workOrder.id,
+      detail: {
+        wo_number: workOrder.wo_number,
+        asset_name: workOrder.asset_name,
+        asset_id: workOrder.asset_record_id,
+      },
+    })
+    if (assignedTo) {
+      await createNotification({
+        tenantId: req.user!.tenantId,
+        userId: assignedTo,
+        title: `New Work Order Assigned - ${workOrder.wo_number}`,
+        message: `${workOrder.asset_name}${workOrder.location ? ` at ${workOrder.location}` : ''} has been assigned to you.`,
+        severity: priority === 'critical' || priority === 'high' ? 'warning' : 'info',
+        entityType: 'work_orders',
+        entityId: workOrder.id,
+      })
+    }
+
+    res.status(201).json({ data: workOrder })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PATCH /api/inspections/:id/work-instruction - attach or replace the inspection checklist
+router.patch('/:id/work-instruction', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const { workInstructionId } = req.body as { workInstructionId?: string }
+    if (!workInstructionId) {
+      res.status(400).json({ error: 'Work instruction is required' })
+      return
+    }
+
+    const [woRes, wiRes] = await Promise.all([
+      query(
+        `SELECT id, wo_number, status
+         FROM public.work_orders
+         WHERE id = $1 AND tenant_id = $2`,
+        [req.params.id, req.user!.tenantId],
+      ),
+      query(
+        `SELECT wi.id, wi.wi_number,
+                COUNT(ci.id) FILTER (
+                  WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+                )::int AS checkable_item_count
+         FROM public.work_instructions wi
+         LEFT JOIN public.wi_checklist_items ci
+           ON ci.work_instruction_id = wi.id
+          AND ci.tenant_id = wi.tenant_id
+         WHERE wi.id = $1
+           AND wi.tenant_id = $2
+           AND wi.status IN ('active','expiring')
+           AND (wi.effective_date IS NULL OR wi.effective_date <= CURRENT_DATE)
+           AND (wi.expiry_date IS NULL OR wi.expiry_date >= CURRENT_DATE)
+         GROUP BY wi.id, wi.wi_number`,
+        [workInstructionId, req.user!.tenantId],
+      ),
+    ])
+
+    if (woRes.rows.length === 0) {
+      res.status(404).json({ error: 'Work order not found' })
+      return
+    }
+    if (woRes.rows[0].status === 'complete') {
+      res.status(409).json({ error: 'Completed work orders cannot be reassigned' })
+      return
+    }
+    if (wiRes.rows.length === 0) {
+      res.status(400).json({ error: 'Work instruction must belong to your tenant' })
+      return
+    }
+    if ((wiRes.rows[0].checkable_item_count ?? 0) < 1) {
+      res.status(400).json({ error: 'Selected work instruction has no checklist items' })
+      return
+    }
+
+    const result = await query(
+      `UPDATE public.work_orders
+       SET work_instruction_id = $1, updated_at = NOW()
+       WHERE id = $2 AND tenant_id = $3
+       RETURNING *`,
+      [workInstructionId, req.params.id, req.user!.tenantId],
+    )
+
+    await auditLog({
+      tenantId: req.user!.tenantId,
+      userId: req.user!.id,
+      action: 'work_order.work_instruction.assigned',
+      entityType: 'work_orders',
+      entityId: req.params.id,
+      detail: {
+        wo_number: woRes.rows[0].wo_number,
+        wi_number: wiRes.rows[0].wi_number,
+      },
+    })
+
+    res.json({ data: result.rows[0] })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PATCH /api/inspections/:id/status
+router.patch('/:id/status', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const { status } = req.body as { status: string }
+    const allowedStatuses = new Set(['cancelled'])
+    if (!allowedStatuses.has(status)) {
+      res.status(400).json({ error: 'Invalid work order status' })
+      return
+    }
+    const completed: string | null = null
+    const result = await query(
+      `UPDATE public.work_orders
+       SET    status = $1, completed_at = $2, updated_at = NOW()
+       WHERE  id = $3 AND tenant_id = $4
+       RETURNING *`,
+      [status, completed, req.params.id, req.user!.tenantId],
+    )
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    await auditLog({
+      tenantId: req.user!.tenantId,
+      userId: req.user!.id,
+      action: 'work_order.status.updated',
+      entityType: 'work_orders',
+      entityId: req.params.id,
+      detail: { status },
+    })
+    res.json({ data: result.rows[0] })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/inspections/:id/start - create or resume an inspection record
+router.post('/:id/start', requireAuth, async (req: AuthRequest, res, next) => {
+  const client = await pool.connect()
+  try {
+    const { totalItems } = req.body
+    await beginActorTransaction(client)
+
+    const woRes = await client.query(
+      `SELECT id, wo_number, asset_name, status, work_instruction_id
+       FROM public.work_orders
+       WHERE id = $1 AND tenant_id = $2
+       FOR UPDATE`,
+      [req.params.id, req.user!.tenantId],
+    )
+    if (woRes.rows.length === 0) {
+      await client.query('ROLLBACK')
+      res.status(404).json({ error: 'Work order not found' })
+      return
+    }
+    if (['complete', 'cancelled'].includes(woRes.rows[0].status)) {
+      await client.query('ROLLBACK')
+      res.status(409).json({ error: 'Closed work orders cannot be started' })
+      return
+    }
+    if (!woRes.rows[0].work_instruction_id) {
+      await client.query('ROLLBACK')
+      res.status(409).json({
+        error: 'Assign a work instruction with checklist items before starting this inspection',
+      })
+      return
+    }
+    const totalRes = await client.query(
+      `SELECT COUNT(*)::int AS total_items
+       FROM public.wi_checklist_items ci
+       JOIN public.work_orders wo ON wo.work_instruction_id = ci.work_instruction_id
+       WHERE wo.id = $1
+         AND wo.tenant_id = $2
+         AND ci.tenant_id = $2
+         AND COALESCE(ci.field_type, 'pass_fail') <> 'heading'`,
+      [req.params.id, req.user!.tenantId],
+    )
+    const serverTotalItems = totalRes.rows[0]?.total_items ?? totalItems ?? 0
+    if (serverTotalItems < 1) {
+      await client.query('ROLLBACK')
+      res.status(409).json({ error: 'The linked work instruction has no checklist items' })
+      return
+    }
+
+    const existingRes = await client.query(
+      `SELECT *
+       FROM public.inspection_records
+       WHERE work_order_id = $1 AND tenant_id = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [req.params.id, req.user!.tenantId],
+    )
+    if (existingRes.rows[0]?.completed_at) {
+      await client.query('ROLLBACK')
+      res.status(409).json({ error: 'This work order already has a completed inspection' })
+      return
+    }
+
+    let record = existingRes.rows[0]
+    if (record) {
+      const updatedRecordRes = await client.query(
+        `UPDATE public.inspection_records
+         SET total_items = $1, updated_at = NOW()
+         WHERE id = $2 AND tenant_id = $3
+         RETURNING *`,
+        [serverTotalItems, record.id, req.user!.tenantId],
+      )
+      record = updatedRecordRes.rows[0]
+    } else {
+      record = (
+        await client.query(
+          `INSERT INTO public.inspection_records
+           (work_order_id, inspector_id, tenant_id, total_items, started_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         RETURNING *`,
+          [req.params.id, req.user!.id, req.user!.tenantId, serverTotalItems],
+        )
+      ).rows[0]
+    }
+
+    await client.query(
+      `UPDATE public.work_orders
+       SET status = 'in_progress', updated_at = NOW()
+       WHERE id = $1 AND tenant_id = $2`,
+      [req.params.id, req.user!.tenantId],
+    )
+    await client.query('COMMIT')
+
+    await auditLog({
+      tenantId: req.user!.tenantId,
+      userId: req.user!.id,
+      action: existingRes.rows[0] ? 'inspection.resumed' : 'inspection.started',
+      entityType: 'inspection_records',
+      entityId: record.id,
+      detail: { work_order_id: req.params.id, wo_number: woRes.rows[0].wo_number },
+    })
+
+    res.json({ data: { ...record, inspection_findings: [] } })
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined)
+    next(err)
+  } finally {
+    client.release()
+  }
+})
+
+// POST /api/inspections/:id/findings - upsert a checklist finding
+router.post('/:id/findings', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const {
+      inspectionRecordId,
+      checklistItemId,
+      result: findingResult,
+      notes,
+      capturedValue,
+    } = req.body
+    if (!['pass', 'fail', 'na'].includes(findingResult)) {
+      res.status(400).json({ error: 'Invalid finding result' })
+      return
+    }
+    const belongsRes = await query(
+      `SELECT ir.id, ir.completed_at
+       FROM public.inspection_records ir
+       JOIN public.work_orders wo ON wo.id = ir.work_order_id
+       JOIN public.wi_checklist_items ci
+         ON ci.id = $4
+        AND ci.work_instruction_id = wo.work_instruction_id
+        AND ci.tenant_id = $3
+       WHERE ir.id = $1
+         AND ir.work_order_id = $2
+         AND ir.tenant_id = $3
+         AND wo.tenant_id = $3`,
+      [inspectionRecordId, req.params.id, req.user!.tenantId, checklistItemId],
+    )
+    if (belongsRes.rows.length === 0) {
+      res.status(404).json({ error: 'Inspection record not found' })
+      return
+    }
+    if (belongsRes.rows[0].completed_at) {
+      res.status(409).json({ error: 'Completed inspections cannot be changed' })
+      return
+    }
+
+    const result = await query(
+      `INSERT INTO public.inspection_findings
+         (inspection_record_id, checklist_item_id, result, notes, tenant_id, captured_value)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (inspection_record_id, checklist_item_id)
+       DO UPDATE SET result = EXCLUDED.result, notes = EXCLUDED.notes, captured_value = EXCLUDED.captured_value, updated_at = NOW()
+       RETURNING *`,
+      [
+        inspectionRecordId,
+        checklistItemId,
+        findingResult,
+        notes || null,
+        req.user!.tenantId,
+        capturedValue ?? null,
+      ],
+    )
+
+    await recountInspection(inspectionRecordId, req.user!.tenantId)
+    await auditLog({
+      tenantId: req.user!.tenantId,
+      userId: req.user!.id,
+      action: 'inspection.finding.saved',
+      entityType: 'inspection_findings',
+      entityId: result.rows[0].id,
+      severity: findingResult === 'fail' ? 'warning' : 'info',
+      detail: { checklist_item_id: checklistItemId, result: findingResult },
+    })
+
+    res.json({ data: result.rows[0] })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/inspections/:id/findings/photo - persist photo evidence for a finding
+router.post('/:id/findings/photo', requireAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const { inspectionRecordId, checklistItemId, imageDataUrl } = req.body as {
+      inspectionRecordId: string
+      checklistItemId: string
+      imageDataUrl: string
+    }
+    if (
+      typeof imageDataUrl !== 'string' ||
+      imageDataUrl.length > 2_800_000 ||
+      !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(imageDataUrl)
+    ) {
+      res.status(400).json({ error: 'A base64 PNG, JPEG or WebP image under 2 MB is required' })
+      return
+    }
+
+    const belongsRes = await query(
+      `SELECT ir.id, ir.completed_at
+       FROM public.inspection_records ir
+       JOIN public.work_orders wo ON wo.id = ir.work_order_id
+       JOIN public.wi_checklist_items ci
+         ON ci.id = $4
+        AND ci.work_instruction_id = wo.work_instruction_id
+        AND ci.tenant_id = $3
+       WHERE ir.id = $1
+         AND ir.work_order_id = $2
+         AND ir.tenant_id = $3
+         AND wo.tenant_id = $3`,
+      [inspectionRecordId, req.params.id, req.user!.tenantId, checklistItemId],
+    )
+    if (belongsRes.rows.length === 0) {
+      res.status(404).json({ error: 'Inspection record not found' })
+      return
+    }
+    if (belongsRes.rows[0].completed_at) {
+      res.status(409).json({ error: 'Completed inspections cannot be changed' })
+      return
+    }
+
+    const result = await query(
+      `INSERT INTO public.inspection_findings
+         (inspection_record_id, checklist_item_id, tenant_id, photo_urls)
+       VALUES ($1, $2, $3, ARRAY[$4]::text[])
+       ON CONFLICT (inspection_record_id, checklist_item_id)
+       DO UPDATE SET photo_urls = array_append(COALESCE(public.inspection_findings.photo_urls, ARRAY[]::text[]), $4),
+                     updated_at = NOW()
+       RETURNING *`,
+      [inspectionRecordId, checklistItemId, req.user!.tenantId, imageDataUrl],
+    )
+
+    await auditLog({
+      tenantId: req.user!.tenantId,
+      userId: req.user!.id,
+      action: 'inspection.photo.attached',
+      entityType: 'inspection_findings',
+      entityId: result.rows[0].id,
+      detail: { checklist_item_id: checklistItemId },
+    })
+
+    res.json({ data: result.rows[0] })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/inspections/:id/complete
+router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) => {
+  const client = await pool.connect()
+  try {
+    const { inspectionRecordId, signatureDataUrl } = req.body as {
+      inspectionRecordId: string
+      signatureDataUrl?: string
+    }
+    if (!validSignature(signatureDataUrl)) {
+      res.status(400).json({ error: 'Signature is required to complete an inspection' })
+      return
+    }
+
+    await beginActorTransaction(client)
+
+    const recordRes = await client.query(
+      `SELECT ir.*, wo.wo_number, wo.asset_name, wo.location, wo.assigned_to, wo.work_instruction_id, wo.asset_number_snapshot, wo.department_id, wo.department_name_snapshot,
+              (SELECT revision FROM public.work_instructions WHERE id=wo.work_instruction_id) AS form_revision
+       FROM public.inspection_records ir
+       JOIN public.work_orders wo ON wo.id = ir.work_order_id
+       WHERE ir.id = $1
+         AND ir.work_order_id = $2
+         AND ir.tenant_id = $3
+         AND wo.tenant_id = $3
+       FOR UPDATE`,
+      [inspectionRecordId, req.params.id, req.user!.tenantId],
+    )
+    if (recordRes.rows.length === 0) {
+      await client.query('ROLLBACK')
+      res.status(404).json({ error: 'Inspection record not found' })
+      return
+    }
+    const record = recordRes.rows[0]
+    if (record.completed_at) {
+      await client.query('ROLLBACK')
+      res.status(409).json({ error: 'This inspection is already complete' })
+      return
+    }
+
+    const countRes = await client.query(
+      `SELECT
+         COUNT(ci.id) FILTER (
+           WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+         )::int AS total_items,
+         COUNT(ci.id) FILTER (
+           WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+             AND ci.required IS DISTINCT FROM false
+         )::int AS required_total,
+         COUNT(ci.id) FILTER (
+           WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+             AND ci.required IS DISTINCT FROM false
+             AND f.result IN ('pass', 'fail', 'na')
+         )::int AS required_answered,
+         COUNT(ci.id) FILTER (WHERE f.result = 'pass')::int AS passed,
+         COUNT(ci.id) FILTER (WHERE f.result = 'fail')::int AS failed,
+         COUNT(ci.id) FILTER (WHERE f.result = 'na')::int   AS na
+       FROM public.work_orders wo
+       JOIN public.wi_checklist_items ci
+         ON ci.work_instruction_id = wo.work_instruction_id
+        AND ci.tenant_id = wo.tenant_id
+       LEFT JOIN public.inspection_findings f
+         ON f.inspection_record_id = $1
+        AND f.checklist_item_id = ci.id
+        AND f.tenant_id = wo.tenant_id
+       WHERE wo.id = $2
+         AND wo.tenant_id = $3`,
+      [inspectionRecordId, req.params.id, req.user!.tenantId],
+    )
+    const counts = countRes.rows[0]
+    if (
+      counts.required_answered < counts.required_total ||
+      counts.passed + counts.failed + counts.na < 1
+    ) {
+      await client.query('ROLLBACK')
+      res.status(409).json({
+        error: `Complete all required checklist items before signing (${counts.required_answered}/${counts.required_total} complete)`,
+      })
+      return
+    }
+    const overallResult = counts.failed > 0 ? 'fail' : counts.passed > 0 ? 'pass' : 'na'
+    const snapshotRes = await client.query(
+      `SELECT ci.id, ci.item_no, ci.description, ci.acceptance_criteria, ci.field_type,
+              ci.min_value, ci.max_value, ci.required, ci.options_json, ci.conditional_json, f.result, f.notes, f.captured_value, f.photo_urls
+       FROM public.work_orders wo
+       JOIN public.wi_checklist_items ci ON ci.work_instruction_id = wo.work_instruction_id AND ci.tenant_id = wo.tenant_id
+       LEFT JOIN public.inspection_findings f ON f.checklist_item_id = ci.id AND f.inspection_record_id = $1
+       WHERE wo.id = $2 AND wo.tenant_id = $3 ORDER BY ci.sort_order, ci.id`,
+      [inspectionRecordId, req.params.id, req.user!.tenantId],
+    )
+    for (const item of snapshotRes.rows) {
+      if (item.field_type === 'heading' || !item.result) continue
+      const policy = item.conditional_json ? JSON.parse(item.conditional_json) : {}
+      let issue = ''
+      if (
+        item.result === 'na' &&
+        (item.required !== false || policy.naReasonRequired) &&
+        !item.notes?.trim()
+      )
+        issue = 'N/A needs a reason'
+      if (item.result !== 'na') {
+        if (
+          item.required !== false &&
+          [
+            'text',
+            'textarea',
+            'dropdown',
+            'select',
+            'yes_no',
+            'date',
+            'signature',
+            'table',
+            'multiselect',
+            'checkbox',
+          ].includes(item.field_type) &&
+          !item.captured_value?.trim()
+        )
+          issue = 'A response is required'
+        if (
+          ['number', 'measurement'].includes(item.field_type) &&
+          (!item.captured_value?.trim() || !Number.isFinite(Number(item.captured_value)))
+        )
+          issue = 'A numeric reading is required'
+        if (item.result === 'fail' && policy.notesOnFail && !item.notes?.trim())
+          issue = 'Failure notes are required'
+        if (
+          ((item.result === 'fail' && policy.photoOnFail) ||
+            (item.field_type === 'photo' && item.required !== false)) &&
+          !item.photo_urls?.length
+        )
+          issue = 'Photo evidence is required'
+        if (
+          item.field_type === 'signature' &&
+          item.required !== false &&
+          !validSignature(item.captured_value)
+        )
+          issue = 'A valid question signature is required'
+        if (
+          ['dropdown', 'select'].includes(item.field_type) &&
+          item.captured_value &&
+          !JSON.parse(item.options_json || '[]').includes(item.captured_value)
+        )
+          issue = 'Choose a listed response option'
+        if (
+          item.field_type === 'yes_no' &&
+          item.required !== false &&
+          !['Yes', 'No', 'yes', 'no'].includes(item.captured_value)
+        )
+          issue = 'Choose Yes or No'
+        if (
+          item.field_type === 'date' &&
+          item.captured_value &&
+          (!/^\d{4}-\d{2}-\d{2}$/.test(item.captured_value) ||
+            Number.isNaN(Date.parse(item.captured_value)) ||
+            new Date(item.captured_value).toISOString().slice(0, 10) !== item.captured_value)
+        )
+          issue = 'A valid date is required'
+        if (['multiselect', 'table'].includes(item.field_type) && item.required !== false) {
+          try {
+            const value = JSON.parse(item.captured_value || 'null')
+            if (
+              item.field_type === 'multiselect' &&
+              (!Array.isArray(value) ||
+                !value.length ||
+                value.some((v) => !JSON.parse(item.options_json || '[]').includes(v)))
+            )
+              issue = 'Choose at least one listed response'
+            if (
+              item.field_type === 'table' &&
+              (!value ||
+                typeof value !== 'object' ||
+                !Object.values(value).some((v) => String(v).trim()))
+            )
+              issue = 'Complete the response table'
+          } catch {
+            issue = 'A valid structured response is required'
+          }
+        }
+      }
+      if (issue) {
+        await client.query('ROLLBACK')
+        res.status(409).json({ error: 'Question ' + item.item_no + ': ' + issue })
+        return
+      }
+    }
+    const signedPayload = {
+      version: 2,
+      inspectionRecordId,
+      signerId: req.user!.id,
+      workInstructionId: record.work_instruction_id,
+      formRevision: record.form_revision,
+      workOrderNumber: record.wo_number,
+      assetNumber: record.asset_number_snapshot,
+      assetName: record.asset_name,
+      departmentId: record.department_id,
+      departmentName: record.department_name_snapshot,
+      location: record.location,
+      items: snapshotRes.rows,
+      signatureDataUrl,
+    }
+    const signatureHash = crypto
+      .createHash('sha256')
+      .update(canonicalJson(signedPayload))
+      .digest('hex')
+
+    await client.query(
+      `UPDATE public.inspection_records
+       SET overall_result = $1,
+           completed_at = NOW(),
+           passed_items = $2,
+           failed_items = $3,
+           na_items = $4,
+           total_items = $5,
+           signed_by = $6,
+           signed_at = NOW(),
+           signature_data_url = $7,
+           signature_hash = $8,
+           signed_payload = $10::jsonb,
+           updated_at = NOW()
+       WHERE id = $9`,
+      [
+        overallResult,
+        counts.passed,
+        counts.failed,
+        counts.na,
+        counts.total_items,
+        req.user!.id,
+        signatureDataUrl,
+        signatureHash,
+        inspectionRecordId,
+        JSON.stringify(signedPayload),
+      ],
+    )
+    await client.query(
+      `UPDATE public.work_orders
+       SET status = 'complete', completed_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND tenant_id = $2`,
+      [req.params.id, req.user!.tenantId],
+    )
+
+    await client.query('COMMIT')
+
+    await auditLog({
+      tenantId: req.user!.tenantId,
+      userId: req.user!.id,
+      action: 'inspection.completed',
+      entityType: 'inspection_records',
+      entityId: inspectionRecordId,
+      severity: overallResult === 'fail' ? 'warning' : 'info',
+      detail: {
+        wo_number: record.wo_number,
+        passed: counts.passed,
+        failed: counts.failed,
+        na: counts.na,
+        signature_hash: signatureHash,
+      },
+    })
+
+    if (overallResult === 'fail') {
+      await notifyRoles(req.user!.tenantId, ['admin', 'approver'], {
+        title: `Inspection Failed - ${record.wo_number}`,
+        message: `${record.asset_name}${record.location ? ` at ${record.location}` : ''} completed with ${counts.failed} failed item(s).`,
+        severity: 'warning',
+        entityType: 'inspection_records',
+        entityId: inspectionRecordId,
+      })
+    }
+
+    res.json({
+      data: {
+        success: true,
+        overallResult,
+        passed: counts.passed,
+        failed: counts.failed,
+        na: counts.na,
+        signatureHash,
+      },
+    })
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined)
+    next(err)
+  } finally {
+    client.release()
+  }
+})
+
+async function recountInspection(inspectionRecordId: string, tenantId: string) {
+  const countRes = await query(
+    `SELECT
+       COUNT(ci.id) FILTER (
+         WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
+       )::int AS total_items,
+       COUNT(ci.id) FILTER (WHERE f.result = 'pass')::int AS passed,
+       COUNT(ci.id) FILTER (WHERE f.result = 'fail')::int AS failed,
+       COUNT(ci.id) FILTER (WHERE f.result = 'na')::int   AS na
+     FROM public.inspection_records ir
+     JOIN public.work_orders wo
+       ON wo.id = ir.work_order_id
+      AND wo.tenant_id = ir.tenant_id
+     JOIN public.wi_checklist_items ci
+       ON ci.work_instruction_id = wo.work_instruction_id
+      AND ci.tenant_id = ir.tenant_id
+     LEFT JOIN public.inspection_findings f
+       ON f.inspection_record_id = ir.id
+      AND f.checklist_item_id = ci.id
+      AND f.tenant_id = ir.tenant_id
+     WHERE ir.id = $1
+       AND ir.tenant_id = $2`,
+    [inspectionRecordId, tenantId],
+  )
+  const counts = countRes.rows[0]
+  await query(
+    `UPDATE public.inspection_records
+     SET passed_items = $1, failed_items = $2, na_items = $3, total_items = $4, updated_at = NOW()
+     WHERE id = $5 AND tenant_id = $6`,
+    [counts.passed, counts.failed, counts.na, counts.total_items, inspectionRecordId, tenantId],
+  )
+}
+
+export default router

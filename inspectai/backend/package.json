@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
-    "test": "npm run build && node test/assetValidation.test.mjs && node test/aiProvider.test.mjs && node test/release.integration.cjs",
+    "test": "npm run build && node test/assetValidation.test.mjs && node test/aiProvider.test.mjs && node test/release.integration.cjs && node test/departments-demo.integration.cjs",
+    "seed:rail-demo": "npm run build && node scripts/seed-rail-demo.mjs",
     "load-test": "node scripts/load-test.mjs",
     "benchmark:api": "node scripts/benchmark-api.mjs",
     "verify:staging": "node scripts/verify-staging.mjs",
@@ -28,7 +29,6 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
     "pg": "^8.20.0",
-    "read-excel-file": "^9.3.12",
     "zod": "^4.6.7"
   },
   "devDependencies": {

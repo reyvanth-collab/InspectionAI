@@ -11,7 +11,7 @@ const router = Router()
 const loginRateLimit = createRateLimiter(10, 15 * 60 * 1000)
 
 const LoginSchema = z.object({
-  email:    z.string().email(),
+  email: z.string().email(),
   password: z.string().min(1),
 })
 
@@ -35,13 +35,13 @@ router.post('/login', loginRateLimit, async (req, res, next) => {
     // never a password hash. Authorization stays in the application profile.
     const result = await query(
       `SELECT u.id, u.name, u.email, u.role, u.staff_id, u.tenant_id,
-              av.auth_version
+              av.auth_version, u.capabilities, u.primary_department_id
        FROM public.users u
        JOIN inspectai_private.session_versions av ON av.id = u.id
        WHERE u.id = $1
          AND u.active = true
        LIMIT 1`,
-      [authenticatedId]
+      [authenticatedId],
     )
 
     if (result.rows.length === 0) {
@@ -52,31 +52,33 @@ router.post('/login', loginRateLimit, async (req, res, next) => {
     const user = result.rows[0]
 
     const token = signToken({
-      id:       user.id,
-      email:    user.email,
-      role:     user.role,
-      staffId:  user.staff_id,
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      staffId: user.staff_id,
       tenantId: user.tenant_id,
-      name:     user.name,
+      name: user.name,
       authVersion: user.auth_version,
     })
 
     res.json({
       token,
       user: {
-        id:       user.id,
-        name:     user.name,
-        email:    user.email,
-        role:     user.role,
-        staffId:  user.staff_id,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        staffId: user.staff_id,
         tenantId: user.tenant_id,
+        capabilities: user.capabilities,
+        primaryDepartmentId: user.primary_department_id,
       },
     })
 
     await auditLog({
       tenantId: user.tenant_id,
-      userId:   user.id,
-      action:   'auth.login',
+      userId: user.id,
+      action: 'auth.login',
       entityType: 'users',
       entityId: user.id,
       detail: { email: user.email },
