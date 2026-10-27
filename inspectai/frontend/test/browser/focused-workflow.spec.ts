@@ -7,6 +7,7 @@ async function fixture(page: Page, role = 'inspector') {
   const user = {
     id: 'inspector-1',
     tenantId: 'tenant-1',
+    tenantName: 'Synthetic rail demonstration — not operational',
     role,
     capabilities: role === 'admin' ? ['administrator'] : ['inspector'],
     name: 'Synthetic Inspector',
@@ -225,6 +226,7 @@ test('mocked API: phone navigation and inspection cards remain usable', async ({
 test('mocked API: administrative forms, mobile editor and settings', async ({ page }) => {
   await fixture(page, 'admin')
   await page.goto('/library')
+  await expect(page.getByRole('region', { name: 'Current workspace' })).toContainText('Synthetic rail demonstration — not operational')
   await expect(page.getByRole('heading', { name: 'Inspection Forms', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Synthetic cabinet inspection' })).toBeVisible()
   await page.screenshot({ path: 'test-results/forms-desktop.png', fullPage: true })
@@ -241,4 +243,30 @@ test('mocked API: administrative forms, mobile editor and settings', async ({ pa
   await expect(page.getByRole('heading', { name: 'Signalling', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Activity history', exact: true })).toBeVisible()
   await expect(page.getByText('IBM Maximo', { exact: true })).toHaveCount(0)
+})
+test('mocked API using real seed definitions: all 20 published rail forms open with 10 questions', async ({ page }) => {
+  await fixture(page, 'admin')
+  const { departments, questionsFor } = await import('../../../backend/scripts/rail-demo-data.mjs')
+  const forms = departments.flatMap((department: any) => department.forms.map(([topic, checks]: [string, string[]], index: number) => ({
+    id: `${department.code}-${index + 1}`, wi_number: `DEMO-${department.code}-F${index + 1}`,
+    title: `SYNTHETIC DEMO — ${topic}`, status: 'active', revision: 'Demo 1', department_id: department.code,
+    checklist_item_count: 10, checkable_item_count: 10,
+    wi_checklist_items: questionsFor(topic, checks).map((question: any, n: number) => ({
+      id: `${department.code}-${index + 1}-q${n + 1}`, item_no: question.itemNo,
+      description: question.description, acceptance_criteria: question.acceptanceCriteria,
+      category: question.category, field_type: question.fieldType, sort_order: question.sortOrder,
+      required: question.required, layout_json: question.layoutJson,
+    })),
+  })))
+  await page.route('**/api/departments', route => route.fulfill({ json: { data: departments.map((department: any) => ({ id: department.code, name: department.name, code: department.code, active: true })) } }))
+  await page.route('**/api/work-instructions**', route => {
+    const id = new URL(route.request().url()).pathname.split('/')[3]
+    return route.fulfill({ json: { data: id ? forms.find((form: any) => form.id === id) : forms, meta: { hasMore: false } } })
+  })
+  await page.goto('/library')
+  await expect(page.getByRole('region', { name: 'Current workspace' })).toContainText('Synthetic rail demonstration — not operational')
+  await expect(page.getByRole('heading', { level: 2 })).toHaveCount(20)
+  await expect(page.getByText(/10 items/)).toHaveCount(20)
+  await page.getByRole('link', { name: /SYNTHETIC DEMO — Passenger doors/ }).click()
+  for (const question of forms[0].wi_checklist_items) await expect(page.getByText(question.description, { exact: true })).toBeVisible()
 })

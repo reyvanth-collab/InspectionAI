@@ -120,12 +120,14 @@ let base
     const credentials = await loggedIn.json()
     assert.equal(credentials.user.role, 'admin')
     assert.equal(credentials.user.tenantId, tenant)
+    assert.equal(credentials.user.tenantName, 'Test')
     assert.equal(credentials.user.authVersion, undefined)
-    checks += 4
+    checks += 5
     const me = () =>
       fetch(base + '/auth/me', { headers: { Authorization: 'Bearer ' + credentials.token } })
     assert.equal((await me()).status, 200)
-    checks++
+    assert.equal((await (await me()).json()).data.tenantName, 'Test')
+    checks += 2
     await db.query('UPDATE public.users SET active=false WHERE id=$1', [users.admin.id])
     assert.equal((await login()).status, 401)
     assert.equal((await me()).status, 401)

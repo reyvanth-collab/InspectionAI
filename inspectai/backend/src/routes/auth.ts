@@ -35,7 +35,8 @@ router.post('/login', loginRateLimit, async (req, res, next) => {
     // never a password hash. Authorization stays in the application profile.
     const result = await query(
       `SELECT u.id, u.name, u.email, u.role, u.staff_id, u.tenant_id,
-              av.auth_version, u.capabilities, u.primary_department_id
+              av.auth_version, u.capabilities, u.primary_department_id,
+              (SELECT t.name FROM public.tenants t WHERE t.id=u.tenant_id) AS tenant_name
        FROM public.users u
        JOIN inspectai_private.session_versions av ON av.id = u.id
        WHERE u.id = $1
@@ -70,6 +71,7 @@ router.post('/login', loginRateLimit, async (req, res, next) => {
         role: user.role,
         staffId: user.staff_id,
         tenantId: user.tenant_id,
+        tenantName: user.tenant_name,
         capabilities: user.capabilities,
         primaryDepartmentId: user.primary_department_id,
       },

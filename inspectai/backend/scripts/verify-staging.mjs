@@ -1,5 +1,6 @@
 import dotenv from 'dotenv'
 import pg from 'pg'
+import readiness from '../dist/lib/readiness.js'
 
 dotenv.config()
 
@@ -12,7 +13,9 @@ const client = new pg.Client({ connectionString: process.env.DATABASE_URL })
 const checks = []
 try {
   await client.connect()
-  const requiredTables = ['assets', 'work_orders', 'job_queue', 'audit_logs', 'moms_checklist_steps', 'import_receipts']
+  const controls = await client.query(readiness.READINESS_SQL)
+  checks.push({ check: 'restricted_runtime_and_department_integrity_controls', pass: readiness.databaseReady(controls.rows[0]), ...controls.rows[0] })
+  const requiredTables = ['assets', 'work_orders', 'inspection_records', 'inspection_findings', 'departments', 'department_memberships', 'audit_logs', 'work_instructions']
   const tables = await client.query(
     `SELECT c.relname, c.relrowsecurity
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace

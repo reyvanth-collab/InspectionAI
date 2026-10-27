@@ -4,6 +4,7 @@ export type UserRole = 'admin' | 'approver' | 'inspector' | 'viewer'
 export interface User {
   id: string
   tenantId: string
+  tenantName?: string
   name: string
   email: string
   staffId: string

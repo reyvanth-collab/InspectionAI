@@ -20,6 +20,7 @@ import assetsRouter from './routes/assets'
 import { errorHandler } from './middleware/errorHandler'
 import { validateProductionConfig } from './lib/config'
 import { query } from './lib/db'
+import { READINESS_SQL, databaseReady } from './lib/readiness'
 import { requestContext } from './middleware/requestContext'
 
 dotenv.config()
@@ -77,10 +78,8 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/ready', async (_req, res) => {
   try {
-    const guards = await query(
-      `SELECT count(*)::int AS count FROM pg_trigger WHERE NOT tgisinternal AND tgname IN ('guard_finding','guard_signed_record','guard_work_order','guard_instruction_items','guard_instruction_revision')`,
-    )
-    if (guards.rows[0].count !== 5) throw new Error('Integrity migration is missing')
+    const controls = await query(READINESS_SQL)
+    if (!databaseReady(controls.rows[0])) throw new Error('Required database controls are missing')
     res.json({ status: 'ready', database: 'ok' })
   } catch {
     res.status(503).json({ status: 'not_ready', database: 'unavailable' })

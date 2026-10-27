@@ -141,6 +141,7 @@ export function TopNav({ title, breadcrumb }: TopNavProps) {
                 <div className="border-b border-border bg-bg-3/45 px-3 py-3">
                   <p className="truncate text-[13px] font-medium text-text">{user.name}</p>
                   <p className="truncate text-[11px] text-text-3">{user.email}</p>
+                  {user.tenantName && <p className="text-xs text-text-2 mt-2 break-words">Workspace: {user.tenantName}</p>}
                 </div>
                 <MenuLink
                   to="/settings?tab=profile"

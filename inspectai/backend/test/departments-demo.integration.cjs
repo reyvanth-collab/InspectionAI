@@ -33,6 +33,7 @@ const express = require('express'),
   const app = express()
   app.use(express.json({ limit: '10mb' }))
   for (const [path, file] of [
+    ['auth', 'auth'],
     ['assets', 'assets'],
     ['work-instructions', 'workInstructions'],
     ['inspections', 'inspections'],
@@ -137,6 +138,25 @@ const express = require('express'),
     const counts = await seedWorkflow({ request: call, departmentIds, personas })
     assert.deepEqual(counts, { assets: 60, distinctForms: 20, workOrders: 20 })
     checks++
+    const { verifyRailDemo } = await import('../scripts/verify-rail-demo-data.mjs')
+    const visibleDemo = await verifyRailDemo(path => call('admin', 'GET', path))
+    assert.equal(visibleDemo.assets, 60)
+    assert.equal(visibleDemo.publishedForms, 20)
+    assert.equal(visibleDemo.minimumQuestions, 10)
+    assert.equal(visibleDemo.workOrders, 20)
+    await assert.rejects(verifyRailDemo(path => call('RS-inspector', 'GET', path)), /department-limited/)
+    await assert.rejects(verifyRailDemo(async () => ({ data: { tenantId: crypto.randomUUID(), capabilities: ['administrator'] } })), /different workspace/)
+    await assert.rejects(verifyRailDemo(async path => {
+      const result = await call('admin', 'GET', path)
+      if (path.startsWith('/work-instructions')) result.data[0].checkable_item_count = 1
+      return result
+    }), /10 answerable questions/)
+    await assert.rejects(verifyRailDemo(async path => {
+      const result = await call('admin', 'GET', path)
+      if (path.startsWith('/assets')) result.data.pop()
+      return result
+    }), /60 sample assets/)
+    checks += 8
     const size = async () =>
       (
         await db.query(
@@ -480,6 +500,34 @@ const express = require('express'),
     checks++
     await request('RS-inspector', 'GET', '/users/assignable', undefined, 403)
     await request('admin', 'GET', '/moms', undefined, 404)
+    // All report pages must match the full scoped report, including tied rows.
+    for (const endpoint of ['wi-compliance', 'inspection-summary', 'defect-analysis']) {
+      const complete = await call('admin', 'GET', '/reports/' + endpoint)
+      assert(complete.data.length > 1, endpoint + ' requires multiple fixture rows')
+      const collected = []
+      for (let n = 1; n <= complete.data.length + 1; n++) {
+        const part = await call('admin', 'GET', '/reports/' + endpoint + '?pageSize=1&page=' + n)
+        assert.equal(part.meta.pageSize, 1)
+        collected.push(...part.data)
+        if (!part.meta.hasMore) break
+      }
+      assert.deepEqual(collected, complete.data, endpoint + ' pages must equal full report')
+      checks += 2
+    }
+    const { READINESS_SQL, databaseReady } = require('../dist/lib/readiness')
+    assert(databaseReady((await db.query(READINESS_SQL)).rows[0]))
+    await db.exec('RESET ROLE')
+    assert.equal(databaseReady((await db.query(READINESS_SQL)).rows[0]), false, 'privileged connections cannot be ready')
+    for (const damage of [
+      'ALTER TABLE public.inspection_findings DISABLE TRIGGER guard_finding',
+      'ALTER TABLE public.departments DISABLE ROW LEVEL SECURITY',
+      'DROP POLICY asset_scope ON public.assets',
+    ]) {
+      await db.exec('BEGIN; ' + damage + '; SET LOCAL ROLE inspectai_runtime;')
+      assert.equal(databaseReady((await db.query(READINESS_SQL)).rows[0]), false, damage)
+      await db.exec('ROLLBACK')
+    }
+    checks += 5
     console.log(
       `PASS ${checks} department, lifecycle, audit, seed and permission assertions against PostgreSQL (PGlite); seed repeated without creating extra assets/forms/orders/signatures`,
     )
