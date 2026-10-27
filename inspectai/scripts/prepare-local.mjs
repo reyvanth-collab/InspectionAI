@@ -31,7 +31,7 @@ try {
   }
   // Only copy existing local configuration into a new checkout. Never overwrite,
   // print, commit or substitute example values for a configured environment.
-  for (const relative of ['inspectai/backend/.env', 'inspectai/frontend/.env']) {
+  for (const relative of ['inspectai/backend/.env', 'inspectai/frontend/.env', 'inspectai/backend/.env.rail-demo.json']) {
     const source = path.join(root, relative), destination = path.join(target, relative)
     if (existsSync(source) && !existsSync(destination)) {
       const ignored = execFileSync('git', ['-C', target, 'check-ignore', '--', relative], { encoding: 'utf8' }).trim()
@@ -41,6 +41,7 @@ try {
       console.log(`Preserved local configuration: ${relative}`)
     }
   }
+  if (!existsSync(path.join(target, 'inspectai/backend/.env.rail-demo.json'))) console.log('Demo access file was not found. See inspectai/docs/RAIL_DEMO.md before testing the sample records. A regular or verification account will not show the rail-demo workspace.')
   console.log(`Ready: ${target}\nCommit: ${git(target, 'rev-parse', '--short', 'HEAD')}\nOpen this folder in VS Code. Follow inspectai/docs/LOCAL_WINDOWS.md. No database changes or installs were run.`)
 } catch (error) {
   // Git failures may contain local paths, but never print environment contents.

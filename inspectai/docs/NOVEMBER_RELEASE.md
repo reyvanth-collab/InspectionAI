@@ -122,3 +122,15 @@ Follow `LOCAL_WINDOWS.md` to create/update the sibling checkout. Then:
    on a child branch with tests instead of replacing the release tree.
 6. Record the commit tested and exact external gates remaining. Open a review PR;
    do not merge or deploy merely because local checks pass.
+
+## Demo visibility follow-up — 27 October
+
+A separate verification workspace contains three tiny one-question forms; the
+full fictional rail dataset is in its own tenant. Signing in with the wrong
+workspace's account must not reveal another tenant's samples. The UI now shows
+the backend-supplied workspace name after login and reload. The local checkout
+helper preserves the ignored demo credential file, and `npm run check:rail-demo`
+verifies visible counts through the normal authenticated API before UI testing.
+Use `personas.admin` locally to inspect the entire demo, and department personas
+to test restricted access. See `RAIL_DEMO.md`. No cross-tenant access, shared
+password, customer records or signed inspections were changed.

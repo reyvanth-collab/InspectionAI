@@ -33,6 +33,7 @@ const express = require('express'),
   const app = express()
   app.use(express.json({ limit: '10mb' }))
   for (const [path, file] of [
+    ['auth', 'auth'],
     ['assets', 'assets'],
     ['work-instructions', 'workInstructions'],
     ['inspections', 'inspections'],
@@ -137,6 +138,25 @@ const express = require('express'),
     const counts = await seedWorkflow({ request: call, departmentIds, personas })
     assert.deepEqual(counts, { assets: 60, distinctForms: 20, workOrders: 20 })
     checks++
+    const { verifyRailDemo } = await import('../scripts/verify-rail-demo-data.mjs')
+    const visibleDemo = await verifyRailDemo(path => call('admin', 'GET', path))
+    assert.equal(visibleDemo.assets, 60)
+    assert.equal(visibleDemo.publishedForms, 20)
+    assert.equal(visibleDemo.minimumQuestions, 10)
+    assert.equal(visibleDemo.workOrders, 20)
+    await assert.rejects(verifyRailDemo(path => call('RS-inspector', 'GET', path)), /department-limited/)
+    await assert.rejects(verifyRailDemo(async () => ({ data: { tenantId: crypto.randomUUID(), capabilities: ['administrator'] } })), /different workspace/)
+    await assert.rejects(verifyRailDemo(async path => {
+      const result = await call('admin', 'GET', path)
+      if (path.startsWith('/work-instructions')) result.data[0].checkable_item_count = 1
+      return result
+    }), /10 answerable questions/)
+    await assert.rejects(verifyRailDemo(async path => {
+      const result = await call('admin', 'GET', path)
+      if (path.startsWith('/assets')) result.data.pop()
+      return result
+    }), /60 sample assets/)
+    checks += 8
     const size = async () =>
       (
         await db.query(

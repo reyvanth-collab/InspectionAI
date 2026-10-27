@@ -19,6 +19,43 @@ The fixture supplies 60 assets, 20 distinct rail forms with 10 meaningful questi
 | Station Electrical | 6 | 2 |
 | Depot Equipment | 4 | 2 |
 
+## See the full sample data in the app
+
+Pulling code and signing in with an existing account does **not** switch the
+account's workspace. The verification-workflow workspace contains deliberately
+tiny one-question forms used by automated checks. Those are not the rail sample
+forms. Customer/legacy workspaces also do not share the rail-demo records.
+
+1. Start the updated backend and frontend using `LOCAL_WINDOWS.md`.
+2. Preserve/copy the existing ignored `backend/.env.rail-demo.json` from the
+   original checkout. The update helper now copies it when present and never
+   overwrites a destination file. If it is missing, use the guarded provisioning
+   instructions below; do not invent a password or place credentials in Git.
+3. In the backend terminal run **`npm run check:rail-demo`**. This uses the
+   fixture's administrator through the normal login API and verifies the data
+   through the same permission-enforced APIs as the UI. It prints counts and
+   workspace name, never passwords or tokens. It checks 60 sample assets, 20
+   published sample forms, at least 10 answerable questions on each form, and
+   20 work orders. It does not reseed or change inspection content; normal login
+   creates an authentication audit event.
+4. Sign out of the app. Open the ignored JSON file **locally** and use
+   `personas.admin.email` and `personas.admin.password` on the normal login page.
+   Do not paste credentials into chat. Confirm the visible workspace is
+   **Synthetic rail demonstration — not operational**.
+5. Open Assets with search cleared and status **All statuses**. Open Inspection Forms
+   with department **All departments**, search cleared, **Created by me** disabled and
+   **Published** selected: expect 20 published forms with 10 questions each.
+   The All forms tab also includes three additional revisions.
+6. Open Inspections, clear search and select **All statuses** for the 20
+   seeded work orders. Department-specific author,
+   reviewer and inspector accounts deliberately see only permitted subsets.
+
+The current workspace name is supplied by the backend on sign-in and session
+reload and is visible on every working page and in the account menu. It is
+informational; authorisation still uses the authenticated tenant, department,
+capability and assignment checks. There is no cross-tenant switch or shared
+demo password.
+
 ## Credentials and personas
 
 Generated, unique passwords and synthetic emails are saved only in ignored `backend/.env.rail-demo.json`. Open that file locally; do not paste it into chat or commit it. Persona keys include `admin`, `viewer`, `cross-reviewer` and department-specific keys such as `RS-author`, `RS-reviewer`, `RS-inspector`, `SIG-author`, etc. The cross-reviewer has explicit Signalling and Rolling Stock memberships. Authors have author/viewer capabilities and no administrator or approval capability. Reviewers have reviewer/viewer capabilities and no author capability. Inspectors are assigned within their own department.

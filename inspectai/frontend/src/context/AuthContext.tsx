@@ -79,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: string
         staffId: string
         tenantId: string
+        tenantName?: string
         capabilities?: string[]
         primaryDepartmentId?: string
       }
@@ -91,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser({
       id: userData.id,
       tenantId: userData.tenantId ?? '',
+      tenantName: userData.tenantName,
       staffId: userData.staffId ?? '',
       name,
       email: userData.email,

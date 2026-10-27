@@ -10,6 +10,7 @@ export interface AuthRequest extends Request {
     role: string
     staffId: string
     tenantId: string
+    tenantName: string
     name: string
     capabilities: string[]
     primaryDepartmentId: string
@@ -26,7 +27,8 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   try {
     const claims = verifyToken(token)
     const result = await query(
-      `SELECT u.id, u.email, u.name, u.role, u.staff_id, u.tenant_id, u.capabilities, u.primary_department_id, av.auth_version
+      `SELECT u.id, u.email, u.name, u.role, u.staff_id, u.tenant_id, u.capabilities, u.primary_department_id, av.auth_version,
+              (SELECT t.name FROM public.tenants t WHERE t.id=u.tenant_id) AS tenant_name
        FROM public.users u JOIN inspectai_private.session_versions av ON av.id = u.id
        WHERE u.id = $1 AND u.tenant_id = $2 AND u.active = true
        LIMIT 1`,
@@ -48,6 +50,7 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       role: user.role,
       staffId: user.staff_id,
       tenantId: user.tenant_id,
+      tenantName: user.tenant_name,
       capabilities: user.capabilities,
       primaryDepartmentId: user.primary_department_id,
     }

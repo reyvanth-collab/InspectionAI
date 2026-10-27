@@ -6,6 +6,7 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
     "test": "npm run build && node test/assetValidation.test.mjs && node test/aiProvider.test.mjs && node test/release.integration.cjs && node test/departments-demo.integration.cjs",
+    "check:rail-demo": "node scripts/check-rail-demo.mjs",
     "seed:rail-demo": "npm run build && node scripts/seed-rail-demo.mjs",
     "load-test": "node scripts/load-test.mjs",
     "benchmark:api": "node scripts/benchmark-api.mjs",

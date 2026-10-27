@@ -20,8 +20,8 @@ node $helper --repo .
 
 The helper creates a sibling `InspectionAI-november` folder on
 `local/november-product`, tracking the release branch. It preserves the original
-checkout, including uncommitted work. Existing ignored backend/frontend `.env`
-files are copied only when the destination does not already have them. Their
+checkout, including uncommitted work. Existing ignored backend/frontend `.env` files and the backend
+`.env.rail-demo.json` demo account file are copied only when the destination does not already have them. Their
 contents are never printed. No database migration, seed, install or app startup
 runs automatically.
 
@@ -110,3 +110,11 @@ npx playwright test --reporter=line
 The build needs real public Supabase configuration. CI uses inert values only
 for mocked browser tests. Live acceptance, email, backup restore, load and
 physical-device checks remain separate release gates.
+
+## Confirm the rail samples before testing
+
+Run `npm run check:rail-demo` from `inspectai/backend` with the backend running.
+Sign out of any verification/customer account and use the demo administrator
+from the ignored credential file locally. Confirm the visible workspace name.
+See `RAIL_DEMO.md` for exact filters and expected counts. A successful pull alone
+does not make another workspace's records visible to the current login.
