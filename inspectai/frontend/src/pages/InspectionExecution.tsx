@@ -120,7 +120,12 @@ export default function InspectionExecution() {
   const { id = '' } = useParams(),
     { user } = useAuth()
   const { data: wo, isLoading, error: loadError, refetch: refreshWO } = useWorkOrder(id),
-    { data: record, refetch: refreshRecord } = useInspectionRecord(id)
+    {
+      data: record,
+      refetch: refreshRecord,
+      isLoading: recordLoading,
+      error: recordError,
+    } = useInspectionRecord(id)
   const start = useStartInspection(),
     complete = useCompleteInspection()
   const [drafts, setDrafts] = useState<Record<string, Draft>>({}),
@@ -158,6 +163,7 @@ export default function InspectionExecution() {
     done = !!record?.completed_at
   const mayEdit =
     !done &&
+    !['complete', 'cancelled'].includes(String(wo?.status)) &&
     ((wo?.assigned_to === user?.id && can(user, 'inspector')) || can(user, 'administrator'))
   async function manage(action: 'assignment' | 'work-instruction') {
     setManaging(true)
@@ -373,8 +379,13 @@ export default function InspectionExecution() {
         frame.src = url
         frame.title = 'Completed inspection report'
         frame.onload = () => {
-          frame.contentWindow?.focus()
-          frame.contentWindow?.print()
+          try {
+            frame.contentWindow?.focus()
+            frame.contentWindow?.print()
+            frame.dataset.printReady = 'true'
+          } catch {
+            setMessage('The report is ready. Download the PDF and use its viewer to print.')
+          }
         }
         document.body.appendChild(frame)
         setTimeout(() => {
@@ -444,16 +455,19 @@ export default function InspectionExecution() {
       )
     }
   }
-  if (isLoading)
+  if (isLoading || recordLoading)
     return (
       <AppLayout>
         <p>Loading inspection…</p>
       </AppLayout>
     )
-  if (!wo || loadError)
+  if (!wo || loadError || (recordError && !record))
     return (
       <AppLayout>
         <p role="alert">This inspection is unavailable or you do not have access.</p>
+        <button onClick={() => void Promise.all([refreshWO(), refreshRecord()])}>
+          Retry loading inspection
+        </button>
         <Link to="/inspections">Back to inspections</Link>
       </AppLayout>
     )

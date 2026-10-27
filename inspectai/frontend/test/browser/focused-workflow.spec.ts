@@ -272,17 +272,47 @@ test('mocked API: unsaved navigation warning, missing evidence and failed upload
   )
 })
 
+test('mocked API: completed record loading never exposes start or edit controls', async ({
+  page,
+}) => {
+  await fixture(page)
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/inspections/wo-1/record', async (route) => {
+    await gate
+    await route.fulfill({
+      json: {
+        data: {
+          id: 'record-1',
+          work_order_id: 'wo-1',
+          completed_at: '2026-10-27T00:00:00Z',
+          overall_result: 'pass',
+          inspection_findings: [],
+        },
+      },
+    })
+  })
+  await page.goto('/inspections/wo-1')
+  await expect(page.getByText('Loading inspection…', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start inspection', exact: true })).toHaveCount(0)
+  release()
+  await expect(page.getByRole('heading', { name: 'Signed inspection', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Review & sign', exact: true })).toHaveCount(0)
+})
+
 test('mocked API: phone navigation and inspection rows remain usable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await fixture(page)
   await page.goto('/inspections')
   await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible()
   await expect(page.getByRole('link', { name: /WO-DEMO-001/ })).toBeVisible()
-  await page.getByRole('button',{name:'Details for WO-DEMO-001',exact:true}).click()
-  await expect(page.getByText('FIC-01 · Northbank',{exact:true}).last()).toBeVisible()
-  const bounds=await page.getByRole('link',{name:'WO-DEMO-001',exact:true}).boundingBox()
+  await page.getByRole('button', { name: 'Details for WO-DEMO-001', exact: true }).click()
+  await expect(page.getByText('FIC-01 · Northbank', { exact: true }).last()).toBeVisible()
+  const bounds = await page.getByRole('link', { name: 'WO-DEMO-001', exact: true }).boundingBox()
   expect(bounds!.x).toBeGreaterThanOrEqual(0)
-  expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(390)
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390)
   await expect(page.getByRole('link', { name: 'MOMS Analytics' })).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Approvals', exact: true })).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)

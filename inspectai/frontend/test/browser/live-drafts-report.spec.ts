@@ -53,7 +53,8 @@ test('live synthetic tenant: incomplete drafts, concurrent conflict, single revi
     page
       .getByRole('heading', { name: 'Signed inspection', exact: true })
       .or(page.getByRole('button', { name: 'Start inspection', exact: true }))
-      .or(page.getByRole('region', { name: 'Question 1', exact: true })),
+      .or(page.getByRole('region', { name: 'Question 1', exact: true }))
+      .first(),
   ).toBeVisible({ timeout: 30000 })
   if (!(await page.getByRole('heading', { name: 'Signed inspection', exact: true }).count())) {
     if (await page.getByRole('button', { name: 'Start inspection', exact: true }).count())
@@ -121,13 +122,11 @@ test('live synthetic tenant: incomplete drafts, concurrent conflict, single revi
         await card
           .getByLabel('Notes', { exact: true })
           .fill('Synthetic damaged cover; demonstration evidence.')
-        await card
-          .getByLabel('Photo evidence', { exact: true })
-          .setInputFiles({
-            name: 'synthetic-evidence.png',
-            mimeType: 'image/png',
-            buffer: Buffer.from(image, 'base64'),
-          })
+        await card.getByLabel('Photo evidence', { exact: true }).setInputFiles({
+          name: 'synthetic-evidence.png',
+          mimeType: 'image/png',
+          buffer: Buffer.from(image, 'base64'),
+        })
       }
       if (n === 5)
         await card
@@ -152,6 +151,21 @@ test('live synthetic tenant: incomplete drafts, concurrent conflict, single revi
   await page.getByRole('button', { name: 'Download report PDF', exact: true }).click()
   await (await download).saveAs('../backend/.env.pdf-checks/live-acceptance.pdf')
   await expect(page.getByRole('button', { name: 'Print report', exact: true })).toBeVisible()
+  await page.evaluate(() => {
+    ;(window as Window & { appPrintCalled?: boolean }).appPrintCalled = false
+    window.print = () => {
+      ;(window as Window & { appPrintCalled?: boolean }).appPrintCalled = true
+    }
+  })
+  await page.getByRole('button', { name: 'Print report', exact: true }).click()
+  await expect(page.locator('iframe[title="Completed inspection report"]')).toHaveAttribute(
+    'data-print-ready',
+    'true',
+    { timeout: 30000 },
+  )
+  expect(
+    await page.evaluate(() => (window as Window & { appPrintCalled?: boolean }).appPrintCalled),
+  ).toBe(false)
   await expect(page.getByRole('button', { name: 'Save response', exact: true })).toHaveCount(0)
   await page.screenshot({ path: 'test-results/live-signed-inspection.png', fullPage: true })
 })

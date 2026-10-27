@@ -21,6 +21,12 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: node scripts/verify-report-layout.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-pdf-layout-${{ github.run_id }}
+          path: inspectai/backend/.env.pdf-checks/
+          include-hidden-files: true
       - run: node --test ../scripts/prepare-local.test.mjs
       - run: npm audit --omit=dev
   frontend:
@@ -56,7 +62,10 @@ jobs:
         run: docker run --rm -e APP_DOMAIN=example.invalid -v "$PWD/inspectai/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
       - name: Production container startup smoke test
         run: |
-          docker run -d --name inspectai-ci -p 4000:4000 --read-only --tmpfs /tmp -e NODE_ENV=production -e JWT_SECRET=ci-only-secret-at-least-forty-eight-characters-long -e FRONTEND_URL=https://example.invalid -e SUPABASE_URL=https://example.invalid -e SUPABASE_SERVICE_ROLE_KEY=inert-ci-key -e DATABASE_URL=postgresql://nobody:invalid@127.0.0.1:9/none inspectai:ci
+          CI_JWT_SECRET=$(openssl rand -hex 48)
+          CI_SUPABASE_KEY=$(openssl rand -hex 32)
+          CI_DATABASE_PASSWORD=$(openssl rand -hex 24)
+          docker run -d --name inspectai-ci -p 4000:4000 --read-only --tmpfs /tmp -e NODE_ENV=production -e JWT_SECRET="$CI_JWT_SECRET" -e FRONTEND_URL=https://example.invalid -e SUPABASE_URL=https://example.invalid -e SUPABASE_SERVICE_ROLE_KEY="$CI_SUPABASE_KEY" -e DATABASE_URL="postgresql://unavailable:$CI_DATABASE_PASSWORD@127.0.0.1:9/unavailable" inspectai:ci
           for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:4000/api/health && break || sleep 1; done
           curl -fsS http://127.0.0.1:4000/login | grep 'root'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/api/missing)" = 404

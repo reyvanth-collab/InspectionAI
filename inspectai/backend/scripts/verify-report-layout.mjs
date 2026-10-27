@@ -29,7 +29,10 @@ for (const name of [
     }
   }
   assert(allText.includes('Completed inspection report'))
-  assert(allText.includes('Snapshot SHA-256'))
+  await fs.writeFile(`.env.pdf-checks/${name}-text.txt`, allText)
+  const compactText = allText.replace(/\s+/g, '')
+  assert(compactText.includes('SnapshotSHA-256'))
+  assert(/[a-f0-9]{64}/.test(compactText), 'signed snapshot hash must be present')
   if (name === 'long-multipage') {
     assert(document.numPages > 3)
     assert(allText.includes('30'))

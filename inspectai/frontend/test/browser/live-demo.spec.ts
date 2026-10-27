@@ -60,7 +60,8 @@ test('live staging: phone checklist, persisted evidence, review and authenticate
     page
       .getByRole('heading', { name: 'Signed inspection', exact: true })
       .or(page.getByRole('button', { name: 'Start inspection', exact: true }))
-      .or(page.getByRole('region', { name: 'Question 1', exact: true })),
+      .or(page.getByRole('region', { name: 'Question 1', exact: true }))
+      .first(),
   ).toBeVisible({ timeout: 30000 })
   if (await page.getByRole('heading', { name: 'Signed inspection', exact: true }).count()) {
     await expect(page.getByText('Recorded result: FAIL', { exact: false }).first()).toBeVisible()
