@@ -17,6 +17,7 @@ jobs:
           cache-dependency-path: inspectai/backend/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm test
+      - run: node --test ../scripts/prepare-local.test.mjs
       - run: npm audit --omit=dev
   frontend:
     runs-on: ubuntu-latest

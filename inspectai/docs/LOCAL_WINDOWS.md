@@ -1,55 +1,111 @@
-# Local development in VS Code (Windows PowerShell)
+# Run or update InspectionAI locally
 
-Install Git and Node.js 24. Open the repository folder in VS Code. For an existing clone:
+Use Git and Node.js **24**. The current product branch is
+`release/november-product-completion`. `main` and the older hardening branch do
+not contain the complete departmental product work. Run the React/Express app,
+not the old standalone HTML prototype.
 
-```powershell
-git fetch origin
-git switch fix/production-release-hardening
-git pull --ff-only
-```
+## Safest update: a separate checkout
 
-The main branch does not contain the release-candidate work. The standalone inspection-app-v9.html is an older prototype, not the app to run.
-
-## Frontend-only preview
+In a PowerShell terminal at the root of your existing InspectionAI clone:
 
 ```powershell
-cd inspectai/frontend
-npm ci
-Copy-Item .env.example .env
-code .env
-npm run dev
+git fetch origin release/november-product-completion
+$helper = Join-Path $env:TEMP 'inspectai-prepare-local.mjs'
+git show origin/release/november-product-completion:inspectai/scripts/prepare-local.mjs | Set-Content -Encoding utf8 $helper
+if ($LASTEXITCODE -ne 0) { throw 'Could not load the update helper' }
+node $helper --repo .
 ```
 
-Populate VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY with the actual staging project's public configuration when available. Placeholder configuration may render the sign-in page, but does not supply a functioning database, account, login, or password-recovery service. Open http://localhost:3000. The development proxy now uses the configured project rather than an old hardcoded project.
+The helper creates a sibling `InspectionAI-november` folder on
+`local/november-product`, tracking the release branch. It preserves the original
+checkout, including uncommitted work. Existing ignored backend/frontend `.env`
+files are copied only when the destination does not already have them. Their
+contents are never printed. No database migration, seed, install or app startup
+runs automatically.
 
-## Full local workflow
+Run the same commands again for a safe fast-forward update. If the new folder
+has edits or divergent commits, the helper stops without discarding them. Ask
+Codex to compare and integrate those changes; do not use `reset --hard`. If the
+local branch name is already in use in another worktree, open that worktree
+(`git worktree list`) rather than creating a duplicate.
 
-A fresh Supabase project must first have the production schema, release migrations, a tenant, and invited auth users with matching public.users profiles. Follow RELEASE.md/NEW_SETUP.md. Running only npm install/dev does not create accounts or a database. Render is not required for local development.
+Open the new folder in VS Code. Before editing, your Codex should read
+`inspectai/docs/NOVEMBER_RELEASE.md`, check `git status`, and use the current
+release branch as its base. Do not merge an old laptop branch over this work.
 
-In a separate VS Code terminal, starting at repository root:
+## Install and start
+
+Use two terminals in the new checkout:
 
 ```powershell
 cd inspectai/backend
 npm ci
-Copy-Item .env.example .env
-code .env
+# Only on a new setup, if .env does not already exist:
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 npm run dev
 ```
 
-Set DATABASE_URL to the migrated staging runtime-role connection, generate JWT_SECRET, retain NODE_ENV=development, PORT=4000 and FRONTEND_URL=http://localhost:3000. Set the actual Supabase backend configuration; remove unused placeholder AI keys and leave optional AI/import flags false. Never put the service-role key in the frontend environment file.
+```powershell
+cd inspectai/frontend
+npm ci
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+npm run dev
+```
 
-For migrations use administrative credentials in a temporary environment variable, not in the web app's .env:
+Open **http://localhost:3000**. The API is on **http://localhost:4000**.
+Stop older instances on these ports first; do not kill unrelated processes.
+Render is not needed locally.
+
+A full workflow requires a migrated staging database and provisioned users.
+The backend `.env` needs its actual `SUPABASE_URL`, server-only Supabase key,
+`DATABASE_URL` for the restricted `inspectai_runtime` role, and `JWT_SECRET`.
+Use `NODE_ENV=development`, `PORT=4000`, and
+`FRONTEND_URL=http://localhost:3000`. The frontend needs only the project's
+`VITE_SUPABASE_URL` and public `VITE_SUPABASE_ANON_KEY`. Never copy privileged
+server/database credentials into frontend variables. Leave optional AI/import
+flags off. Example values do not create accounts or a working database.
+
+## Database updates are a separate step
+
+Identify the staging target and take a verified backup before migrating an
+existing database. With an administrative connection supplied securely:
 
 ```powershell
+cd inspectai/backend
 $env:MIGRATION_DATABASE_URL = '<administrative staging connection>'
 npm run db:migrate
 Remove-Item Env:MIGRATION_DATABASE_URL
+npm run verify:staging
 ```
 
-The app's DATABASE_URL must use its restricted runtime role. Provision that role and test accounts as described in RELEASE.md before login. Check http://localhost:4000/api/health and http://localhost:4000/api/ready; readiness should be successful only after migration.
+Do not change the web app's runtime `DATABASE_URL` to administrator credentials.
+See `FOCUSED_APP.md`, `NEW_SETUP.md` and `RELEASE.md` for provisioning and migration
+details, and `RAIL_DEMO.md` for the opt-in fictional demo tenant. No new schema
+migration is required by the November follow-up patch itself; all existing
+focused-workflow migrations are still required.
 
-For local password recovery, allow http://localhost:3000/reset-password in Supabase redirect URLs. Default email restrictions still apply; do not assume ordinary user email delivery is configured.
+`/api/health` confirms the process runs. `/api/ready` must return 200 only with
+the restricted runtime role, enabled inspection guards, department RLS and
+restrictive access policies. A 503 is a setup failure to investigate, not a
+reason to weaken the controls.
 
-## Development status
+For recovery links, allow `http://localhost:3000/reset-password` in Supabase.
+Configure and test recovery email delivery separately.
 
-The online inspection flow has automated regression coverage. Offline replay/AI assistance are disabled; SSO and enterprise integrations are not supplied. A local run is a test, not production acceptance. Browser/device and live database/email/backup checks remain separate release gates.
+## Verify before sharing changes
+
+```powershell
+cd inspectai/backend
+npm test
+cd ../frontend
+npm test
+npm run lint
+npm run build
+npx playwright install chromium
+npx playwright test --reporter=line
+```
+
+The build needs real public Supabase configuration. CI uses inert values only
+for mocked browser tests. Live acceptance, email, backup restore, load and
+physical-device checks remain separate release gates.

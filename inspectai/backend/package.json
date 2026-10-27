@@ -9,7 +9,7 @@
     "seed:rail-demo": "npm run build && node scripts/seed-rail-demo.mjs",
     "load-test": "node scripts/load-test.mjs",
     "benchmark:api": "node scripts/benchmark-api.mjs",
-    "verify:staging": "node scripts/verify-staging.mjs",
+    "verify:staging": "npm run build && node scripts/verify-staging.mjs",
     "worker": "npm run build && node dist/worker.js",
     "start": "node dist/index.js",
     "db:migrate": "node scripts/migrate.mjs"

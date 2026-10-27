@@ -480,6 +480,34 @@ const express = require('express'),
     checks++
     await request('RS-inspector', 'GET', '/users/assignable', undefined, 403)
     await request('admin', 'GET', '/moms', undefined, 404)
+    // All report pages must match the full scoped report, including tied rows.
+    for (const endpoint of ['wi-compliance', 'inspection-summary', 'defect-analysis']) {
+      const complete = await call('admin', 'GET', '/reports/' + endpoint)
+      assert(complete.data.length > 1, endpoint + ' requires multiple fixture rows')
+      const collected = []
+      for (let n = 1; n <= complete.data.length + 1; n++) {
+        const part = await call('admin', 'GET', '/reports/' + endpoint + '?pageSize=1&page=' + n)
+        assert.equal(part.meta.pageSize, 1)
+        collected.push(...part.data)
+        if (!part.meta.hasMore) break
+      }
+      assert.deepEqual(collected, complete.data, endpoint + ' pages must equal full report')
+      checks += 2
+    }
+    const { READINESS_SQL, databaseReady } = require('../dist/lib/readiness')
+    assert(databaseReady((await db.query(READINESS_SQL)).rows[0]))
+    await db.exec('RESET ROLE')
+    assert.equal(databaseReady((await db.query(READINESS_SQL)).rows[0]), false, 'privileged connections cannot be ready')
+    for (const damage of [
+      'ALTER TABLE public.inspection_findings DISABLE TRIGGER guard_finding',
+      'ALTER TABLE public.departments DISABLE ROW LEVEL SECURITY',
+      'DROP POLICY asset_scope ON public.assets',
+    ]) {
+      await db.exec('BEGIN; ' + damage + '; SET LOCAL ROLE inspectai_runtime;')
+      assert.equal(databaseReady((await db.query(READINESS_SQL)).rows[0]), false, damage)
+      await db.exec('ROLLBACK')
+    }
+    checks += 5
     console.log(
       `PASS ${checks} department, lifecycle, audit, seed and permission assertions against PostgreSQL (PGlite); seed repeated without creating extra assets/forms/orders/signatures`,
     )
