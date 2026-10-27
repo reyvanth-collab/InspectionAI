@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { listOrder } from '../lib/listOrder'
 import { randomUUID } from 'node:crypto'
 import { requireAuth, requireCapability, type AuthRequest } from '../middleware/auth'
 import { pool, query, beginActorTransaction } from '../lib/db'
@@ -30,6 +31,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
                WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
              )::int AS checkable_item_count
       FROM   public.work_instructions wi
+      LEFT JOIN public.departments d ON d.id=wi.department_id
       LEFT JOIN public.users u ON u.id = wi.owner_id
       LEFT JOIN public.wi_checklist_items ci
         ON ci.work_instruction_id = wi.id
@@ -63,14 +65,37 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
       params.push(`%${search}%`)
       sql += ` AND (wi.title ILIKE $${params.length} OR wi.wi_number ILIKE $${params.length})`
     }
+    const totalSql = `SELECT count(*)::int total FROM (${sql} GROUP BY wi.id,u.name,d.name) matching`
+    const total = (await query(totalSql, params)).rows[0].total
+    const pageSize = Math.max(
+      1,
+      Math.min(200, Number.parseInt(String(req.query.pageSize || 50)) || 50),
+    )
+    const order = listOrder(
+      req.query,
+      {
+        reference: 'wi.wi_number',
+        title: 'wi.title',
+        department: 'd.name',
+        revision: 'wi.revision',
+        questions: 'checkable_item_count',
+        status: 'wi.status',
+        author: 'u.name',
+      },
+      'reference',
+      'wi.id',
+    )
     sql += `
       GROUP BY wi.id, wi.wi_number, wi.title, wi.category, wi.revision,
-               wi.status, wi.effective_date, wi.expiry_date, u.name
-      ORDER BY wi.expiry_date ASC NULLS LAST
-      LIMIT 200 OFFSET $${params.length + 1}`
+               wi.status, wi.effective_date, wi.expiry_date, u.name,d.name
+      ORDER BY ${order}
+      LIMIT ${pageSize} OFFSET $${params.length + 1}`
 
-    const result = await query(sql, [...params, (page - 1) * 200])
-    res.json({ data: result.rows, meta: { page, hasMore: result.rows.length === 200 } })
+    const result = await query(sql, [...params, (page - 1) * pageSize])
+    res.json({
+      data: result.rows,
+      meta: { page, pageSize, total, hasMore: page * pageSize < total },
+    })
   } catch (err) {
     next(err)
   }

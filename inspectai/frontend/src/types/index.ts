@@ -59,6 +59,7 @@ export type WOPriority = 'high' | 'medium' | 'low' | 'critical'
 export interface WorkOrder {
   id: string // wo_number e.g. "WO-2401"
   dbId: string // uuid from DB — used for mutations
+  assetNumber?: string
   asset: string
   location: string
   type: string

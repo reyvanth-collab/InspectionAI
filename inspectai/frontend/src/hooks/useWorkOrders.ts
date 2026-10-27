@@ -6,6 +6,7 @@ import type { WorkOrder } from '@/types'
 interface DBWorkOrderRow {
   id: string
   wo_number: string
+  asset_number_snapshot?: string
   asset_name: string
   location: string | null
   type: string | null
@@ -22,6 +23,7 @@ function toWorkOrder(row: DBWorkOrderRow): WorkOrder {
   return {
     id: row.wo_number,
     asset: row.asset_name,
+    assetNumber: row.asset_number_snapshot,
     location: row.location ?? '',
     type: row.type ?? '',
     priority: row.priority as WorkOrder['priority'],
@@ -44,6 +46,8 @@ export interface WorkOrderPage {
 }
 
 export interface WorkOrderFilters {
+  sort?: string
+  direction?: string
   woNumber?: string
   asset?: string
   location?: string
@@ -74,6 +78,8 @@ export function useWorkOrders(
       if (filters.wi?.trim()) params.set('wi', filters.wi.trim())
       if (filters.inspector?.trim()) params.set('inspector', filters.inspector.trim())
       if (filters.dueDate?.trim()) params.set('dueDate', filters.dueDate.trim())
+      params.set('sort', filters.sort || 'due')
+      params.set('direction', filters.direction || 'asc')
       params.set('page', String(page))
       params.set('pageSize', '50')
       const res = await api.get<{

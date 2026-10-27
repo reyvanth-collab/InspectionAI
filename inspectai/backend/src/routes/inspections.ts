@@ -1,6 +1,9 @@
 import { workOrderFilters } from '../lib/workOrderFilters'
+import { listOrder } from '../lib/listOrder'
 import { Router } from 'express'
 import crypto from 'crypto'
+import { normalizeAnswers } from '../lib/inspectionDraft'
+import { renderInspectionPdf } from '../lib/inspectionReport'
 import { validSignature, canonicalJson } from '../lib/signature'
 import { requireAuth, requireCapability, type AuthRequest } from '../middleware/auth'
 import { pool, query, beginActorTransaction } from '../lib/db'
@@ -37,6 +40,18 @@ router.use(async (req: AuthRequest, res, next) => {
     return
   }
   const id = req.path.split('/')[1]
+  if (req.path.endsWith('/findings') || req.path.endsWith('/findings/photo')) {
+    const draft = await query(
+      'SELECT d.record_id FROM public.inspection_drafts d JOIN public.inspection_records r ON r.id=d.record_id WHERE r.work_order_id=$1 AND r.tenant_id=$2',
+      [id, req.user!.tenantId],
+    )
+    if (draft.rows.length) {
+      res
+        .status(409)
+        .json({ error: 'This inspection uses versioned drafts. Reload before editing.' })
+      return
+    }
+  }
   const result = await query(
     'SELECT assigned_to FROM public.work_orders WHERE id = $1 AND tenant_id = $2',
     [id, req.user!.tenantId],
@@ -72,9 +87,23 @@ router.get('/', async (req: AuthRequest, res) => {
   const { where, params } = workOrderFilters(req),
     page = Math.max(1, parseInt(String(req.query.page || 1)) || 1),
     pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize || 50)) || 50))
+  const order = listOrder(
+    req.query,
+    {
+      number: 'wo.wo_number',
+      asset: 'wo.asset_name',
+      location: 'wo.location',
+      form: 'wi.wi_number',
+      inspector: 'u.name',
+      due: 'wo.due_date',
+      status: 'wo.status',
+    },
+    'due',
+    'wo.id',
+  )
   const [result, summary] = await Promise.all([
     query(
-      `SELECT wo.*,u.name assigned_to_name,wi.wi_number,wi.title wi_title,(SELECT count(*)::int FROM public.wi_checklist_items ci WHERE ci.work_instruction_id=wo.work_instruction_id AND ci.field_type<>'heading') checklist_item_count ${orderJoins} WHERE ${where} ORDER BY wo.due_date ASC NULLS LAST,wo.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      `SELECT wo.*,u.name assigned_to_name,wi.wi_number,wi.title wi_title,(SELECT count(*)::int FROM public.wi_checklist_items ci WHERE ci.work_instruction_id=wo.work_instruction_id AND COALESCE(ci.field_type,'pass_fail')<>'heading') checklist_item_count ${orderJoins} WHERE ${where} ORDER BY ${order} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, (page - 1) * pageSize],
     ),
     orderCounts(req),
@@ -141,9 +170,109 @@ router.get('/:id/record', requireAuth, async (req: AuthRequest, res, next) => {
       [record.id, req.user!.tenantId],
     )
 
-    res.json({ data: { ...record, inspection_findings: findingsRes.rows } })
+    const draft = await query(
+      'SELECT version,answers FROM public.inspection_drafts WHERE record_id=$1 AND tenant_id=$2',
+      [record.id, req.user!.tenantId],
+    )
+    res.json({
+      data: { ...record, inspection_findings: findingsRes.rows, draft: draft.rows[0] || null },
+    })
   } catch (err) {
     next(err)
+  }
+})
+
+router.put('/:id/draft', async (req: AuthRequest, res, next) => {
+  const client = await pool.connect()
+  try {
+    await beginActorTransaction(client)
+    const r = await client.query(
+      'SELECT id,completed_at FROM public.inspection_records WHERE work_order_id=$1 AND tenant_id=$2 ORDER BY created_at DESC LIMIT 1 FOR UPDATE',
+      [req.params.id, req.user!.tenantId],
+    )
+    if (!r.rows[0] || r.rows[0].completed_at) {
+      await client.query('ROLLBACK')
+      res.status(409).json({ error: 'Inspection unavailable or already signed' })
+      return
+    }
+    const recordId = r.rows[0].id
+    const old = await client.query(
+      'SELECT version,answers FROM public.inspection_drafts WHERE record_id=$1',
+      [recordId],
+    )
+    const version = old.rows[0]?.version || 0
+    const q = await client.query(
+      `SELECT ci.id FROM public.wi_checklist_items ci JOIN public.work_orders w ON w.work_instruction_id=ci.work_instruction_id WHERE w.id=$1 AND w.tenant_id=$2 AND ci.field_type<>'heading'`,
+      [req.params.id, req.user!.tenantId],
+    )
+    let answers
+    try {
+      answers = normalizeAnswers(req.body.answers, new Set(q.rows.map((v: any) => v.id)))
+    } catch (e) {
+      await client.query('ROLLBACK')
+      res.status(400).json({ error: (e as Error).message })
+      return
+    }
+    if (
+      req.body.version !== version &&
+      !(
+        req.body.version === version - 1 &&
+        old.rows[0] &&
+        canonicalJson(old.rows[0].answers) === canonicalJson(answers)
+      )
+    ) {
+      await client.query('ROLLBACK')
+      res
+        .status(409)
+        .json({
+          error:
+            'This inspection changed in another tab. Your input is retained. Reload the latest draft before editing.',
+          conflict: true,
+          version,
+        })
+      return
+    }
+    // Identical retries after a lost HTTP response are safe and do not add evidence.
+    if (old.rows[0] && canonicalJson(old.rows[0].answers) === canonicalJson(answers)) {
+      await client.query('COMMIT')
+      res.json({ data: { version, answers } })
+      return
+    }
+    const saved = await client.query(
+      'INSERT INTO public.inspection_drafts(record_id,tenant_id,answers) VALUES($1,$2,$3::jsonb) ON CONFLICT(record_id) DO UPDATE SET answers=excluded.answers,version=inspection_drafts.version+1,updated_at=now() RETURNING version',
+      [recordId, req.user!.tenantId, JSON.stringify(answers)],
+    )
+    await client.query('COMMIT')
+    res.json({ data: { version: saved.rows[0].version } })
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => undefined)
+    next(e)
+  } finally {
+    client.release()
+  }
+})
+router.get('/:id/report.pdf', async (req: AuthRequest, res, next) => {
+  try {
+    const r = await query(
+      'SELECT * FROM public.inspection_records WHERE work_order_id=$1 AND tenant_id=$2 AND completed_at IS NOT NULL ORDER BY created_at DESC LIMIT 1',
+      [req.params.id, req.user!.tenantId],
+    )
+    if (!r.rows[0]) {
+      res.status(404).json({ error: 'A completed, accessible inspection is required' })
+      return
+    }
+    const pdf = await renderInspectionPdf(r.rows[0])
+    res
+      .set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'inline; filename="inspection-report.pdf"',
+        'Cache-Control': 'private, no-store',
+        'Content-Security-Policy': "default-src 'none'; frame-ancestors 'self'",
+        'X-Content-Type-Options': 'nosniff',
+      })
+      .send(pdf)
+  } catch (e) {
+    next(e)
   }
 })
 
@@ -679,14 +808,15 @@ router.post('/:id/findings/photo', requireAuth, async (req: AuthRequest, res, ne
 })
 
 // POST /api/inspections/:id/complete
-router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) => {
+router.post(['/:id/complete', '/:id/review'], requireAuth, async (req: AuthRequest, res, next) => {
   const client = await pool.connect()
   try {
     const { inspectionRecordId, signatureDataUrl } = req.body as {
       inspectionRecordId: string
       signatureDataUrl?: string
     }
-    if (!validSignature(signatureDataUrl)) {
+    const reviewing = req.path.endsWith('/review')
+    if (!reviewing && !validSignature(signatureDataUrl)) {
       res.status(400).json({ error: 'Signature is required to complete an inspection' })
       return
     }
@@ -695,7 +825,7 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
 
     const recordRes = await client.query(
       `SELECT ir.*, wo.wo_number, wo.asset_name, wo.location, wo.assigned_to, wo.work_instruction_id, wo.asset_number_snapshot, wo.department_id, wo.department_name_snapshot,
-              (SELECT revision FROM public.work_instructions WHERE id=wo.work_instruction_id) AS form_revision
+              (SELECT revision FROM public.work_instructions WHERE id=wo.work_instruction_id) AS form_revision, (SELECT wi_number FROM public.work_instructions WHERE id=wo.work_instruction_id) AS form_reference, (SELECT title FROM public.work_instructions WHERE id=wo.work_instruction_id) AS form_title
        FROM public.inspection_records ir
        JOIN public.work_orders wo ON wo.id = ir.work_order_id
        WHERE ir.id = $1
@@ -717,6 +847,41 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
       return
     }
 
+    const draftRes = await client.query(
+      'SELECT version,answers FROM public.inspection_drafts WHERE record_id=$1',
+      [inspectionRecordId],
+    )
+    const draft = draftRes.rows[0]
+    if (draft) {
+      if (req.body.draftVersion !== draft.version) {
+        await client.query('ROLLBACK')
+        res
+          .status(409)
+          .json({ error: 'Draft changed. Save and review the latest responses before signing.' })
+        return
+      }
+      for (const [qid, value] of Object.entries(draft.answers)) {
+        const a = value as {
+          result: string | null
+          value: string
+          notes: string
+          naReason?: string
+          photos: string[]
+        }
+        await client.query(
+          `INSERT INTO public.inspection_findings(inspection_record_id,checklist_item_id,tenant_id,result,captured_value,notes,photo_urls) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(inspection_record_id,checklist_item_id) DO UPDATE SET result=excluded.result,captured_value=excluded.captured_value,notes=excluded.notes,photo_urls=excluded.photo_urls WHERE (inspection_findings.result,inspection_findings.captured_value,inspection_findings.notes,inspection_findings.photo_urls) IS DISTINCT FROM (excluded.result,excluded.captured_value,excluded.notes,excluded.photo_urls)`,
+          [
+            inspectionRecordId,
+            qid,
+            req.user!.tenantId,
+            a.result,
+            a.value,
+            a.result === 'na' ? a.naReason || '' : a.notes,
+            a.photos,
+          ],
+        )
+      }
+    }
     const countRes = await client.query(
       `SELECT
          COUNT(ci.id) FILTER (
@@ -760,7 +925,7 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
     const overallResult = counts.failed > 0 ? 'fail' : counts.passed > 0 ? 'pass' : 'na'
     const snapshotRes = await client.query(
       `SELECT ci.id, ci.item_no, ci.description, ci.acceptance_criteria, ci.field_type,
-              ci.min_value, ci.max_value, ci.required, ci.options_json, ci.conditional_json, f.result, f.notes, f.captured_value, f.photo_urls
+              ci.min_value, ci.max_value, ci.unit, ci.category, ci.layout_json, ci.sort_order, ci.required, ci.options_json, ci.conditional_json, f.result, f.notes, f.captured_value, f.photo_urls
        FROM public.work_orders wo
        JOIN public.wi_checklist_items ci ON ci.work_instruction_id = wo.work_instruction_id AND ci.tenant_id = wo.tenant_id
        LEFT JOIN public.inspection_findings f ON f.checklist_item_id = ci.id AND f.inspection_record_id = $1
@@ -862,8 +1027,40 @@ router.post('/:id/complete', requireAuth, async (req: AuthRequest, res, next) =>
         return
       }
     }
+    if (draft)
+      for (const item of snapshotRes.rows) {
+        const a = draft.answers[item.id]
+        if (a) {
+          item.notes = a.notes
+          item.na_reason = a.naReason || null
+        }
+      }
+    const reviewToken = crypto
+      .createHmac('sha256', process.env.JWT_SECRET!)
+      .update(
+        canonicalJson({ actor:req.user!.id,record: record.id, version: draft?.version || 0, items: snapshotRes.rows }),
+      )
+      .digest('hex')
+    if (reviewing) {
+      await client.query('COMMIT')
+      res.json({
+        data: { reviewToken, draftVersion: draft?.version || 0, items: snapshotRes.rows },
+      })
+      return
+    }
+    if (draft && req.body.reviewToken !== reviewToken) {
+      await client.query('ROLLBACK')
+      res
+        .status(409)
+        .json({ error: 'The reviewed state has changed. Return to review before signing.' })
+      return
+    }
     const signedPayload = {
-      version: 2,
+      version: 3,
+      workspaceName: req.user!.tenantName || 'Workspace not recorded',
+      signerName: req.user!.name || 'Signer name not recorded',
+      formReference: record.form_reference,
+      formTitle: record.form_title,
       inspectionRecordId,
       signerId: req.user!.id,
       workInstructionId: record.work_instruction_id,

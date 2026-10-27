@@ -1,10 +1,10 @@
-﻿import { useState } from 'react'
+import { RecordTable } from '@/components/ui/RecordTable'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { Badge } from '@/components/ui/Badge'
 import { useAuth } from '@/context/AuthContext'
 import { can } from '@/lib/permissions'
 import { useWorkOrders, useCreateWorkOrder } from '@/hooks/useWorkOrders'
@@ -14,6 +14,8 @@ import { useAssignableUsers } from '@/hooks/useUsers'
 import { useDepartments } from '@/hooks/useDepartments'
 export default function Inspections() {
   const { user } = useAuth(),
+    [sort, setSort] = useState('due'),
+    [direction, setDirection] = useState('asc'),
     [search, setSearch] = useState(''),
     [status, setStatus] = useState('all'),
     [page, setPage] = useState(1),
@@ -28,7 +30,12 @@ export default function Inspections() {
     dueDate: '',
     notes: '',
   })
-  const { data, isLoading, error: loadError } = useWorkOrders(status, page, search),
+  const {
+      data,
+      isLoading,
+      error: loadError,
+      refetch,
+    } = useWorkOrders(status, page, search, { sort, direction }),
     { data: assetPage } = useAssets({ search: assetSearch, page: 1 }),
     { data: forms = [] } = useWorkInstructions(),
     { data: departments = [] } = useDepartments(),
@@ -136,7 +143,7 @@ export default function Inspections() {
       {isLoading && <p>Loading inspections…</p>}
       {loadError && (
         <p role="alert" className="text-danger">
-          Inspections could not be loaded. Please try again.
+          Inspections could not be loaded. <button onClick={() => void refetch()}>Retry</button>
         </p>
       )}
       {data?.items.length === 0 && (
@@ -144,38 +151,54 @@ export default function Inspections() {
           No inspections match these filters.
         </div>
       )}
-      <div className="grid md:grid-cols-2 gap-3">
-        {data?.items.map((wo) => (
-          <Link
-            key={wo.dbId}
-            to={`/inspections/${wo.dbId}`}
-            className="execution-card hover:border-accent transition-colors"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-mono text-sm text-accent">{wo.id}</span>
-              <Badge
-                variant={
-                  wo.status === 'complete'
-                    ? 'complete'
-                    : wo.status === 'in-progress'
-                      ? 'expiring'
-                      : 'open'
-                }
-              >
-                {wo.status.replace('-', ' ')}
-              </Badge>
-            </div>
-            <h2 className="font-semibold mt-3">{wo.asset}</h2>
-            <p className="text-sm text-text-2 mt-2">{wo.location || 'Location not recorded'}</p>
-            <p className="text-xs text-text-2 mt-3">
-              Form {wo.wiRef} · {wo.assignedTo === '-' ? 'Unassigned' : wo.assignedTo}
-            </p>
-            <p className="text-xs text-text-2 mt-2">
-              {wo.priority} priority{wo.dueDate && ` · Due ${wo.dueDate.slice(0, 10)}`}
-            </p>
-          </Link>
-        ))}
-      </div>
+      <RecordTable
+        label="Inspections"
+        rows={data?.items || []}
+        rowKey={(w) => w.id}
+        sort={sort}
+        direction={direction}
+        onSort={(key) => {
+          setDirection(sort === key && direction === 'asc' ? 'desc' : 'asc')
+          setSort(key)
+          setPage(1)
+        }}
+        columns={[
+          {
+            key: 'number',
+            label: 'Work order',
+            essential: true,
+            render: (w) => (
+              <Link to={'/inspections/' + w.dbId} className="font-mono">
+                {w.id}
+              </Link>
+            ),
+          },
+          {
+            key: 'asset',
+            label: 'Asset',
+            essential: true,
+            render: (w) => (
+              <>
+                {w.assetNumber && <span className="block text-xs font-mono">{w.assetNumber}</span>}
+                {w.asset}
+              </>
+            ),
+          },
+          { key: 'location', label: 'Location', render: (w) => w.location || 'Not recorded' },
+          { key: 'form', label: 'Form reference', render: (w) => w.wiRef },
+          { key: 'inspector', label: 'Assigned inspector', render: (w) => w.assignedTo },
+          { key: 'due', label: 'Due date', render: (w) => w.dueDate?.slice(0, 10) || 'Not set' },
+          {
+            key: 'status',
+            label: 'Status',
+            render: (w) => (
+              <span className={w.status === 'complete' ? 'text-success' : 'text-text-2'}>
+                {w.status.replace('-', ' ')}
+              </span>
+            ),
+          },
+        ]}
+      />
       <div className="flex justify-between items-center mt-5">
         <Button variant="secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
           Previous
