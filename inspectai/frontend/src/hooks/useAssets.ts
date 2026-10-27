@@ -70,6 +70,7 @@ function toAsset(row: DBAsset): Asset {
 }
 
 export interface AssetPage {
+  total: number
   items: Asset[]
   page: number
   pageSize: number
@@ -77,7 +78,14 @@ export interface AssetPage {
 }
 
 export function useAssets(
-  filters: { search?: string; status?: string; criticality?: string; page?: number } = {},
+  filters: {
+    search?: string
+    status?: string
+    criticality?: string
+    page?: number
+    sort?: string
+    direction?: string
+  } = {},
 ) {
   const { user } = useAuth()
   return useQuery({
@@ -92,12 +100,15 @@ export function useAssets(
         params.set('criticality', filters.criticality)
       if (filters.page) params.set('page', String(filters.page))
       params.set('pageSize', '50')
+      params.set('sort', filters.sort || 'number')
+      params.set('direction', filters.direction || 'asc')
       const suffix = params.toString() ? `?${params.toString()}` : ''
       const res = await api.get<{
         data: DBAsset[]
-        meta?: { page: number; pageSize: number; hasMore: boolean }
+        meta?: { page: number; pageSize: number; hasMore: boolean; total: number }
       }>(`/assets${suffix}`)
       return {
+        total: res.data.meta?.total || 0,
         items: res.data.data.map(toAsset),
         page: res.data.meta?.page ?? filters.page ?? 1,
         pageSize: res.data.meta?.pageSize ?? 50,

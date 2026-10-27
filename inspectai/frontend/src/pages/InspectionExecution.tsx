@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useParams, Link, useBlocker } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -9,8 +9,6 @@ import { useWorkOrder } from '@/hooks/useWorkOrders'
 import {
   useInspectionRecord,
   useStartInspection,
-  useRecordFinding,
-  useAttachFindingPhoto,
   useCompleteInspection,
 } from '@/hooks/useInspection'
 import { useAuth } from '@/context/AuthContext'
@@ -38,6 +36,7 @@ interface Draft {
   result?: Result
   value: string
   notes: string
+  naReason: string
   photos: string[]
   photo?: string
   dirty: boolean
@@ -45,7 +44,14 @@ interface Draft {
   error?: string
   saved?: boolean
 }
-const empty = (): Draft => ({ value: '', notes: '', photos: [], dirty: false, saving: false })
+const empty = (): Draft => ({
+  value: '',
+  notes: '',
+  naReason: '',
+  photos: [],
+  dirty: false,
+  saving: false,
+})
 const json = (text?: string) => {
   try {
     return JSON.parse(text || '{}')
@@ -58,7 +64,7 @@ function problem(item: Item, d: Draft) {
     policy = json(item.conditional_json)
   if (!d.result) return item.required !== false ? 'Choose a result' : null
   if (d.result === 'na')
-    return (item.required !== false || policy.naReasonRequired) && !d.notes.trim()
+    return (item.required !== false || policy.naReasonRequired) && !d.naReason.trim()
       ? 'Explain why this item is not applicable'
       : null
   if (
@@ -114,10 +120,13 @@ export default function InspectionExecution() {
   const { id = '' } = useParams(),
     { user } = useAuth()
   const { data: wo, isLoading, error: loadError, refetch: refreshWO } = useWorkOrder(id),
-    { data: record, refetch: refreshRecord } = useInspectionRecord(id)
+    {
+      data: record,
+      refetch: refreshRecord,
+      isLoading: recordLoading,
+      error: recordError,
+    } = useInspectionRecord(id)
   const start = useStartInspection(),
-    saveFinding = useRecordFinding(),
-    attach = useAttachFindingPhoto(),
     complete = useCompleteInspection()
   const [drafts, setDrafts] = useState<Record<string, Draft>>({}),
     [message, setMessage] = useState(''),
@@ -125,6 +134,21 @@ export default function InspectionExecution() {
     [signing, setSigning] = useState(false),
     [itemSigning, setItemSigning] = useState<string | null>(null),
     [tab, setTab] = useState('checklist')
+  const [confirmReview, setConfirmReview] = useState(false),
+    [persisting, setPersisting] = useState(false),
+    [saveError, setSaveError] = useState(''),
+    [conflict, setConflict] = useState(false),
+    [reportBusy, setReportBusy] = useState(false)
+  const version = useRef(0),
+    epoch = useRef(0),
+    savedEpoch = useRef(0),
+    initialized = useRef(''),
+    draftRef = useRef(drafts),
+    flight = useRef<Promise<boolean> | null>(null),
+    reviewed = useRef<{ version: number; token: string } | null>(null),
+    actor = useRef(user?.id)
+  draftRef.current = drafts
+  actor.current = user?.id
   const [assignment, setAssignment] = useState<string | null>(null),
     [replacement, setReplacement] = useState<string | null>(null),
     [managing, setManaging] = useState(false)
@@ -139,6 +163,7 @@ export default function InspectionExecution() {
     done = !!record?.completed_at
   const mayEdit =
     !done &&
+    !['complete', 'cancelled'].includes(String(wo?.status)) &&
     ((wo?.assigned_to === user?.id && can(user, 'inspector')) || can(user, 'administrator'))
   async function manage(action: 'assignment' | 'work-instruction') {
     setManaging(true)
@@ -158,33 +183,57 @@ export default function InspectionExecution() {
     }
   }
   useEffect(() => {
-    if (!record) return
-    setDrafts((prev) => {
-      const next = { ...prev }
-      for (const f of record.inspection_findings || []) {
-        if (!next[f.checklist_item_id] || !next[f.checklist_item_id].dirty) {
-          next[f.checklist_item_id] = {
-            ...empty(),
-            result: f.result || undefined,
-            value: f.captured_value || '',
-            notes: f.notes || '',
-            photos: f.photo_urls || [],
-            saved: true,
-          }
-        }
+    const key = (user?.id || '') + ':' + id + ':' + (record?.id || '')
+    if (!record || initialized.current === key) return
+    initialized.current = key
+    version.current = record.draft?.version || 0
+    epoch.current = 0
+    savedEpoch.current = 0
+    reviewed.current = null
+    const next: Record<string, Draft> = {}
+    for (const f of record.inspection_findings || [])
+      next[f.checklist_item_id] = {
+        ...empty(),
+        result: f.result || undefined,
+        value: f.captured_value || '',
+        notes: f.result === 'na' ? '' : f.notes || '',
+        naReason: f.result === 'na' ? f.notes || '' : '',
+        photos: f.photo_urls || [],
+        saved: true,
       }
-      return next
-    })
-  }, [record])
+    for (const [key, a] of Object.entries(record.draft?.answers || {}))
+      next[key] = {
+        ...empty(),
+        result: a.result || undefined,
+        value: a.value,
+        notes: a.notes,
+        naReason: a.naReason || (a.result === 'na' ? a.notes : ''),
+        photos: a.photos,
+        saved: true,
+      }
+    setDrafts(next)
+    setSaveError('')
+    setConflict(false)
+  }, [record, user?.id, id])
+  useEffect(
+    () => () => {
+      draftRef.current = {}
+      reviewed.current = null
+    },
+    [user?.id, id],
+  )
   const get = (key: string) => drafts[key] || empty()
-  const update = (key: string, patch: Partial<Draft>) =>
+  const update = (key: string, patch: Partial<Draft>) => {
+    epoch.current++
+    reviewed.current = null
     setDrafts((prev) => ({
       ...prev,
       [key]: { ...(prev[key] || empty()), ...patch, dirty: true, saved: false, error: undefined },
     }))
+  }
   const setState = (key: string, patch: Partial<Draft>) =>
     setDrafts((prev) => ({ ...prev, [key]: { ...(prev[key] || empty()), ...patch } }))
-  const busy = Object.values(drafts).some((d) => d.saving),
+  const busy = persisting || Object.values(drafts).some((d) => d.saving),
     unsaved = Object.values(drafts).some((d) => d.dirty || d.photo || d.error)
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
@@ -204,49 +253,158 @@ export default function InspectionExecution() {
   const sections = [...new Set(questions.map((i) => i.category || 'Checklist'))]
   const jump = (key: string) => {
     setReview(false)
-    document
-      .getElementById('question-' + key)
-      ?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'start',
-      })
+    document.getElementById('question-' + key)?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    })
     document.getElementById('question-' + key)?.focus()
   }
-  async function save(item: Item) {
-    const d = get(item.id),
-      issue = problem(item, d)
-    if (issue) {
-      setState(item.id, { error: issue })
-      return
-    }
-    if (!record || !d.result) return
-    setState(item.id, { saving: true, error: undefined })
-    try {
-      let photos = d.photos
-      if (d.photo) {
-        const f = await attach.mutateAsync({
-          workOrderDbId: id,
-          inspectionRecordId: record.id,
-          checklistItemId: item.id,
-          imageDataUrl: d.photo,
-        })
-        photos = f.photo_urls || []
-        setState(item.id, { photo: undefined, photos })
+  function flush(): Promise<boolean> {
+    if (flight.current) return flight.current
+    if (!record || conflict || done) return Promise.resolve(false)
+    const account = user?.id
+    const operation = (async () => {
+      setPersisting(true)
+      setSaveError('')
+      try {
+        while (savedEpoch.current !== epoch.current) {
+          const at = epoch.current,
+            local = draftRef.current
+          const answers = Object.fromEntries(
+            Object.entries(local).map(([key, d]) => [
+              key,
+              {
+                result: d.result || null,
+                value: d.value,
+                notes: d.notes,
+                naReason: d.naReason,
+                photos: [...new Set([...d.photos, ...(d.photo ? [d.photo] : [])])],
+              },
+            ]),
+          )
+          const response = await api.put<{ data: { version: number } }>(
+            '/inspections/' + id + '/draft',
+            { version: version.current, answers },
+          )
+          if (actor.current !== account) return false
+          version.current = response.data.data.version
+          savedEpoch.current = at
+          if (epoch.current === at)
+            setDrafts((prev) =>
+              Object.fromEntries(
+                Object.entries(prev).map(([key, d]) => [
+                  key,
+                  {
+                    ...d,
+                    photos: answers[key].photos,
+                    photo: undefined,
+                    dirty: false,
+                    saved: true,
+                  },
+                ]),
+              ),
+            )
+        }
+        return true
+      } catch (e) {
+        const error = e instanceof Error ? e.message : 'Draft save failed. Retry when connected.'
+        if (actor.current === account) {
+          setSaveError(error)
+          if (error.includes('another tab') || error.includes('Reload')) setConflict(true)
+        }
+        return false
+      } finally {
+        if (actor.current === account) setPersisting(false)
       }
-      await saveFinding.mutateAsync({
-        workOrderDbId: id,
-        inspectionRecordId: record.id,
-        checklistItemId: item.id,
-        result: d.result,
-        notes: d.notes,
-        capturedValue: d.value,
-      })
-      setState(item.id, { saving: false, dirty: false, saved: true, error: undefined, photos })
+    })()
+    flight.current = operation
+    void operation.finally(() => {
+      flight.current = null
+    })
+    return operation
+  }
+  useEffect(() => {
+    if (
+      !mayEdit ||
+      !record ||
+      !unsaved ||
+      saveError ||
+      conflict ||
+      Object.values(drafts).some((d) => d.saving)
+    )
+      return
+    const timer = setTimeout(() => void flush(), 750)
+    return () => clearTimeout(timer)
+  })
+  const blocker = useBlocker(unsaved && !!user && mayEdit)
+  useEffect(() => {
+    if (blocker.state === 'blocked') {
+      if (window.confirm('Responses are not safely saved. Leave this inspection?'))
+        blocker.proceed()
+      else blocker.reset()
+    }
+  }, [blocker])
+  async function saveAndReview() {
+    if (Object.values(draftRef.current).some((d) => d.saving) || conflict) return
+    if (!(await flush())) return
+    setPersisting(true)
+    try {
+      if (!invalid.length && answered) {
+        const r = await api.post<{ data: { reviewToken: string; draftVersion: number } }>(
+          '/inspections/' + id + '/review',
+          { inspectionRecordId: record!.id, draftVersion: version.current },
+        )
+        reviewed.current = { version: r.data.data.draftVersion, token: r.data.data.reviewToken }
+      }
+      setConfirmReview(false)
+      setReview(true)
     } catch (e) {
-      setState(item.id, {
-        saving: false,
-        error: e instanceof Error ? e.message : 'Save failed. Try again.',
-      })
+      setSaveError(e instanceof Error ? e.message : 'Review could not be saved. Retry.')
+    } finally {
+      setPersisting(false)
+    }
+  }
+  async function report(print: boolean) {
+    setReportBusy(true)
+    setMessage('')
+    try {
+      const r = await api.get('/inspections/' + id + '/report.pdf', { responseType: 'blob' })
+      const url = URL.createObjectURL(r.data)
+      if (print) {
+        const frame = document.createElement('iframe')
+        frame.style.position = 'fixed'
+        frame.style.width = '1px'
+        frame.style.height = '1px'
+        frame.style.opacity = '0'
+        frame.src = url
+        frame.title = 'Completed inspection report'
+        frame.onload = () => {
+          try {
+            frame.contentWindow?.focus()
+            frame.contentWindow?.print()
+            frame.dataset.printReady = 'true'
+          } catch {
+            setMessage('The report is ready. Download the PDF and use its viewer to print.')
+          }
+        }
+        document.body.appendChild(frame)
+        setTimeout(() => {
+          frame.remove()
+          URL.revokeObjectURL(url)
+        }, 120000)
+      } else {
+        const link = document.createElement('a')
+        link.href = url
+        link.download = String(wo?.wo_number || 'inspection') + '-report.pdf'
+        link.click()
+        setTimeout(() => URL.revokeObjectURL(url), 10000)
+      }
+    } catch {
+      setMessage(
+        'Report could not be generated. Please retry. Legacy fields without a signed snapshot cannot be reconstructed.',
+      )
+    } finally {
+      setReportBusy(false)
     }
   }
   async function selectPhoto(item: Item, file?: File) {
@@ -272,18 +430,24 @@ export default function InspectionExecution() {
     }
   }
   async function sign(signatureDataUrl: string) {
-    if (!record || busy || unsaved || invalid.length || complete.isPending) return
+    if (!record || busy || unsaved || invalid.length || complete.isPending || !reviewed.current)
+      return
     setMessage('')
     try {
       await complete.mutateAsync({
         workOrderDbId: id,
         inspectionRecordId: record.id,
         signatureDataUrl,
+        draftVersion: reviewed.current.version,
+        reviewToken: reviewed.current.token,
       })
       setSigning(false)
       setReview(false)
       await Promise.all([refreshWO(), refreshRecord()])
     } catch (e) {
+      reviewed.current = null
+      setSigning(false)
+      setReview(false)
       setMessage(
         e instanceof Error
           ? e.message
@@ -291,16 +455,19 @@ export default function InspectionExecution() {
       )
     }
   }
-  if (isLoading)
+  if (isLoading || recordLoading)
     return (
       <AppLayout>
         <p>Loading inspection…</p>
       </AppLayout>
     )
-  if (!wo || loadError)
+  if (!wo || loadError || (recordError && !record))
     return (
       <AppLayout>
         <p role="alert">This inspection is unavailable or you do not have access.</p>
+        <button onClick={() => void Promise.all([refreshWO(), refreshRecord()])}>
+          Retry loading inspection
+        </button>
         <Link to="/inspections">Back to inspections</Link>
       </AppLayout>
     )
@@ -328,7 +495,7 @@ export default function InspectionExecution() {
             </strong>
           ) : record ? (
             <span role="status">
-              {busy ? 'Saving…' : unsaved ? 'Unsaved changes' : 'All changes saved'}
+              {busy ? 'Saving' : saveError ? 'Save failed' : unsaved ? 'Unsaved changes' : 'Saved'}
             </span>
           ) : (
             <span>Not started</span>
@@ -343,6 +510,38 @@ export default function InspectionExecution() {
           History
         </Button>
       </div>
+      {saveError && (
+        <div role="alert" className="execution-card text-danger mb-4">
+          <p>{saveError}</p>
+          <p>
+            Responses retained for questions:{' '}
+            {questions
+              .filter((i) => get(i.id).dirty || get(i.id).photo)
+              .map((i) => i.item_no)
+              .join(', ') || 'see message above'}
+          </p>
+          {conflict ? (
+            <button
+              className="text-accent"
+              onClick={async () => {
+                if (window.confirm('Discard local edits and load the latest saved draft?')) {
+                  initialized.current = ''
+                  setDrafts({})
+                  setSaveError('')
+                  setConflict(false)
+                  await refreshRecord()
+                }
+              }}
+            >
+              Reload latest draft (discard local edits)
+            </button>
+          ) : (
+            <button className="text-accent" onClick={() => void flush()}>
+              Retry saving draft
+            </button>
+          )}
+        </div>
+      )}
       {message && (
         <p role="alert" className="text-danger p-3 mb-4 border border-danger-border rounded-lg">
           {message}
@@ -494,7 +693,7 @@ export default function InspectionExecution() {
                     ft = item.field_type || 'pass_fail',
                     policy = json(item.conditional_json),
                     options = json(item.options_json),
-                    readOnly = !mayEdit || d.saving
+                    readOnly = !mayEdit || signing || review || complete.isPending
                   return (
                     <section
                       key={item.id}
@@ -655,8 +854,15 @@ export default function InspectionExecution() {
                               aria-label={d.result === 'na' ? 'N/A reason' : 'Notes'}
                               className="field-input mt-2"
                               rows={3}
-                              value={d.notes}
-                              onChange={(e) => update(item.id, { notes: e.target.value })}
+                              value={d.result === 'na' ? d.naReason : d.notes}
+                              onChange={(e) =>
+                                update(
+                                  item.id,
+                                  d.result === 'na'
+                                    ? { naReason: e.target.value }
+                                    : { notes: e.target.value },
+                                )
+                              }
                             />
                           </label>
                         )}
@@ -694,7 +900,7 @@ export default function InspectionExecution() {
                                 <button
                                   className="text-sm text-accent"
                                   onClick={() =>
-                                    setState(item.id, { photo: undefined, error: undefined })
+                                    update(item.id, { photo: undefined, error: undefined })
                                   }
                                 >
                                   Discard pending photo
@@ -708,29 +914,6 @@ export default function InspectionExecution() {
                         <p role="alert" className="text-sm text-danger mt-3">
                           {d.error}
                         </p>
-                      )}
-                      {mayEdit && (
-                        <div className="flex items-center justify-between gap-3 mt-4">
-                          <span role="status" className="text-xs text-text-2">
-                            {d.saving
-                              ? 'Saving…'
-                              : d.error
-                                ? 'Save failed — your response is retained'
-                                : d.dirty
-                                  ? 'Unsaved changes'
-                                  : d.saved
-                                    ? 'Saved'
-                                    : 'Not answered'}
-                          </span>
-                          <Button
-                            variant="secondary"
-                            loading={d.saving}
-                            disabled={!d.result || (!d.dirty && !d.error)}
-                            onClick={() => void save(item)}
-                          >
-                            {d.error ? 'Retry save' : 'Save response'}
-                          </Button>
-                        </div>
                       )}
                       {!mayEdit && (
                         <p className="text-sm text-text-2 mt-3">
@@ -749,8 +932,8 @@ export default function InspectionExecution() {
                   </p>
                   <Button
                     variant="primary"
-                    disabled={busy || complete.isPending}
-                    onClick={() => setReview(true)}
+                    disabled={complete.isPending}
+                    onClick={() => setConfirmReview(true)}
                   >
                     Review & sign
                   </Button>
@@ -773,9 +956,18 @@ export default function InspectionExecution() {
                       className="h-16 mt-3"
                     />
                   )}
-                  <Button variant="secondary" className="mt-4" onClick={() => window.print()}>
-                    Print / save PDF
-                  </Button>
+                  <div className="flex gap-3 mt-4">
+                    <Button
+                      variant="primary"
+                      loading={reportBusy}
+                      onClick={() => void report(false)}
+                    >
+                      Download report PDF
+                    </Button>
+                    <Button loading={reportBusy} onClick={() => void report(true)}>
+                      Print report
+                    </Button>
+                  </div>
                 </div>
               )}
             </>
@@ -783,13 +975,43 @@ export default function InspectionExecution() {
         </>
       )}
       <Modal
+        open={confirmReview}
+        onClose={() => !busy && setConfirmReview(false)}
+        title="Save your responses and continue to review?"
+        footer={
+          <>
+            <Button disabled={busy} onClick={() => setConfirmReview(false)}>
+              Keep editing
+            </Button>
+            <Button
+              variant="primary"
+              loading={busy}
+              disabled={conflict}
+              onClick={() => void saveAndReview()}
+            >
+              Save & review
+            </Button>
+          </>
+        }
+      >
+        <p>
+          Your responses and photo evidence must be saved before review. This does not sign the
+          inspection.
+        </p>
+        {saveError && (
+          <p role="alert" className="text-danger">
+            {saveError}
+          </p>
+        )}
+      </Modal>
+      <Modal
         open={review}
         onClose={() => setReview(false)}
         title="Review inspection"
         footer={
           <Button
             variant="primary"
-            disabled={busy || unsaved || invalid.length > 0 || answered === 0}
+            disabled={busy || unsaved || invalid.length > 0 || answered === 0 || !reviewed.current}
             onClick={() => {
               setReview(false)
               setSigning(true)
@@ -803,6 +1025,24 @@ export default function InspectionExecution() {
           {answered}/{questions.length} answered · {failed.length} failed. Confirm your recorded
           evidence before signing as {user?.name}.
         </p>
+        {questions.map((i) => (
+          <div key={i.id} className="border-b border-border py-2">
+            <strong>Question {i.item_no}</strong> · {i.description}
+            <p>
+              {get(i.id).result?.toUpperCase() || 'Unanswered'} · {get(i.id).value}
+            </p>
+            {get(i.id).notes && <p>Notes: {get(i.id).notes}</p>}
+            {get(i.id).naReason && <p>N/A reason: {get(i.id).naReason}</p>}
+            {get(i.id).photos.map((src, n) => (
+              <img
+                key={n}
+                src={src}
+                alt={'Question ' + i.item_no + ' evidence ' + (n + 1)}
+                className="max-h-40"
+              />
+            ))}
+          </div>
+        ))}
         {unsaved && (
           <p role="alert" className="text-warning mb-4">
             Save all responses and photo evidence before signing.

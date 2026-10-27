@@ -229,3 +229,12 @@ button:disabled { cursor:not-allowed; opacity:.55; }
 }
 :root { --accent-foreground:#10243d; }
 .light { --accent-foreground:#ffffff; --amber:#885713; }
+/* Shared record lists keep full values available while containing long text. */
+.record-table-wrap{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg-2)}
+.record-table{width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;font-size:13px}
+.record-table th{background:var(--bg-3);text-align:left;font-size:12px;font-weight:600;color:var(--text-2)}
+.record-table th,.record-table td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:top;overflow-wrap:anywhere}
+.record-table th button{min-height:32px;text-align:left;width:100%}.record-table tbody tr:hover{background:var(--bg-3)}
+.record-cell{overflow-wrap:anywhere;min-width:0}.record-table a,.record-table td>div>button{color:var(--accent)}
+.table-expander,.table-mobile-details{display:none}
+@media(max-width:767px){.record-table .table-secondary{display:none}.record-table .table-expander{display:table-cell;width:66px}.record-table .table-mobile-details{display:table-row}.record-table th,.record-table td{padding:12px 9px}.record-table{font-size:12px}}

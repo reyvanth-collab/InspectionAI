@@ -1,4 +1,5 @@
-﻿import { useState } from 'react'
+import { RecordTable } from '@/components/ui/RecordTable'
+import { useState } from 'react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -22,6 +23,9 @@ const blank: AssetInput = {
 export default function Assets() {
   const { user } = useAuth(),
     { data: departments = [] } = useDepartments(),
+    [detail, setDetail] = useState<Asset | null>(null),
+    [sort, setSort] = useState('number'),
+    [direction, setDirection] = useState('asc'),
     [search, setSearch] = useState(''),
     [status, setStatus] = useState('all'),
     [page, setPage] = useState(1),
@@ -29,7 +33,12 @@ export default function Assets() {
     [editing, setEditing] = useState(''),
     [error, setError] = useState(''),
     [form, setForm] = useState<AssetInput>(blank)
-  const { data, isLoading, error: loadError } = useAssets({ search, status, page }),
+  const {
+      data,
+      isLoading,
+      error: loadError,
+      refetch,
+    } = useAssets({ search, status, page, sort, direction }),
     create = useCreateAsset(),
     update = useUpdateAsset(),
     manage = can(user, 'asset_manager')
@@ -106,41 +115,80 @@ export default function Assets() {
       {isLoading && <p>Loading assets…</p>}
       {loadError && (
         <p className="text-danger" role="alert">
-          Assets could not be loaded. Please try again.
+          Assets could not be loaded. <button onClick={() => void refetch()}>Retry</button>
         </p>
       )}
       {data?.items.length === 0 && (
         <div className="execution-card text-center text-text-2">No assets match these filters.</div>
       )}
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {data?.items.map((a) => (
-          <article className="execution-card" key={a.id}>
-            <div className="flex justify-between text-xs">
-              <span className="font-mono text-accent">{a.assetNumber}</span>
-              <span>{a.status}</span>
-            </div>
-            <h2 className="font-semibold mt-3">{a.name}</h2>
-            <p className="text-sm text-text-2 mt-2">{a.location || 'Location not recorded'}</p>
-            <p className="text-xs text-text-2 mt-2">
-              {departments.find((d) => d.id === a.departmentId)?.name || 'Department'} ·{' '}
-              {a.category || 'Uncategorised'} · {a.criticality} criticality
-            </p>
-            <p className="text-xs text-text-2 mt-3">
-              {a.openWorkOrders} open work orders · {a.completedInspections} completed inspections
-            </p>
-            {manage && (
-              <Button variant="secondary" className="mt-4" onClick={() => edit(a)}>
-                Edit asset
-              </Button>
-            )}
-          </article>
-        ))}
-      </div>
+      <RecordTable
+        label="Assets"
+        rows={data?.items || []}
+        rowKey={(a) => a.assetNumber}
+        sort={sort}
+        direction={direction}
+        onSort={(key) => {
+          setDirection(sort === key && direction === 'asc' ? 'desc' : 'asc')
+          setSort(key)
+          setPage(1)
+        }}
+        columns={[
+          {
+            key: 'number',
+            label: 'Asset number',
+            essential: true,
+            render: (a) => (
+              <button className="font-mono text-accent text-left" onClick={() => setDetail(a)}>
+                {a.assetNumber}
+              </button>
+            ),
+          },
+          { key: 'description', label: 'Description', essential: true, render: (a) => a.name },
+          {
+            key: 'department',
+            label: 'Department',
+            render: (a) => departments.find((d) => d.id === a.departmentId)?.name || 'Not recorded',
+          },
+          { key: 'location', label: 'Location', render: (a) => a.location || 'Not recorded' },
+          { key: 'category', label: 'Category', render: (a) => a.category || 'Not recorded' },
+          { key: 'status', label: 'Status', render: (a) => a.status },
+        ]}
+      />
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.assetNumber || 'Asset'}>
+        <dl>
+          {detail &&
+            Object.entries({
+              Description: detail.name,
+              Location: detail.location,
+              Department: departments.find((d) => d.id === detail.departmentId)?.name,
+              Category: detail.category,
+              Status: detail.status,
+              Notes: detail.notes,
+            }).map(([key, value]) => (
+              <div key={key} className="mb-3">
+                <dt className="text-xs text-text-2">{key}</dt>
+                <dd className="break-words">{value || 'Not recorded'}</dd>
+              </div>
+            ))}
+        </dl>
+        {detail && manage && (
+          <Button
+            onClick={() => {
+              edit(detail)
+              setDetail(null)
+            }}
+          >
+            Edit asset
+          </Button>
+        )}
+      </Modal>
       <div className="flex justify-between items-center mt-5">
         <Button variant="secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
           Previous
         </Button>
-        <span className="text-sm text-text-2">Page {page}</span>
+        <span className="text-sm text-text-2">
+          Page {page} ? {data?.total || 0} matching assets
+        </span>
         <Button variant="secondary" disabled={!data?.hasMore} onClick={() => setPage((p) => p + 1)}>
           Next
         </Button>

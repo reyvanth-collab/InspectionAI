@@ -5,7 +5,8 @@ const { PGlite } = require('@electric-sql/pglite'),
   { pgcrypto } = require('@electric-sql/pglite/contrib/pgcrypto'),
   { uuid_ossp } = require('@electric-sql/pglite/contrib/uuid_ossp')
 require('express-async-errors')
-process.env.JWT_SECRET = 'department-fixture-server-only-secret-long-enough'
+process.env.JWT_SECRET = crypto.randomBytes(48).toString('base64url')
+const fixturePassword = crypto.randomBytes(32).toString('base64url')
 const express = require('express'),
   dbModule = require('../dist/lib/db'),
   jwt = require('../dist/lib/jwt'),
@@ -63,7 +64,7 @@ const express = require('express'),
           'Bearer ' +
           jwt.signToken({
             ...u,
-            authVersion: crypto.createHash('sha256').update('fixture-password').digest('hex'),
+            authVersion: crypto.createHash('sha256').update(fixturePassword).digest('hex'),
           }),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -102,7 +103,7 @@ const express = require('express'),
           email: key + '@example.invalid',
           staffId: key,
         }
-        await db.query('INSERT INTO auth.users VALUES($1,$2)', [id, 'fixture-password'])
+        await db.query('INSERT INTO auth.users VALUES($1,$2)', [id, fixturePassword])
         await db.query(
           'INSERT INTO public.users(id,tenant_id,staff_id,name,email,role,primary_department_id,capabilities) VALUES($1,$2,$3,$3,$4,$5,$6,$7)',
           [id, DEMO_TENANT, key, key + '@example.invalid', role, departmentIds[dept.code], caps],
@@ -117,7 +118,7 @@ const express = require('express'),
       email: 'admin@example.invalid',
       staffId: 'ADMIN',
     }
-    await db.query('INSERT INTO auth.users VALUES($1,$2)', [adminId, 'fixture-password'])
+    await db.query('INSERT INTO auth.users VALUES($1,$2)', [adminId, fixturePassword])
     await db.query(
       "INSERT INTO public.users(id,tenant_id,staff_id,name,email,role) VALUES($1,$2,'ADMIN','Admin','admin@example.invalid','admin')",
       [adminId, DEMO_TENANT],
@@ -139,23 +140,37 @@ const express = require('express'),
     assert.deepEqual(counts, { assets: 60, distinctForms: 20, workOrders: 20 })
     checks++
     const { verifyRailDemo } = await import('../scripts/verify-rail-demo-data.mjs')
-    const visibleDemo = await verifyRailDemo(path => call('admin', 'GET', path))
+    const visibleDemo = await verifyRailDemo((path) => call('admin', 'GET', path))
     assert.equal(visibleDemo.assets, 60)
     assert.equal(visibleDemo.publishedForms, 20)
     assert.equal(visibleDemo.minimumQuestions, 10)
     assert.equal(visibleDemo.workOrders, 20)
-    await assert.rejects(verifyRailDemo(path => call('RS-inspector', 'GET', path)), /department-limited/)
-    await assert.rejects(verifyRailDemo(async () => ({ data: { tenantId: crypto.randomUUID(), capabilities: ['administrator'] } })), /different workspace/)
-    await assert.rejects(verifyRailDemo(async path => {
-      const result = await call('admin', 'GET', path)
-      if (path.startsWith('/work-instructions')) result.data[0].checkable_item_count = 1
-      return result
-    }), /10 answerable questions/)
-    await assert.rejects(verifyRailDemo(async path => {
-      const result = await call('admin', 'GET', path)
-      if (path.startsWith('/assets')) result.data.pop()
-      return result
-    }), /60 sample assets/)
+    await assert.rejects(
+      verifyRailDemo((path) => call('RS-inspector', 'GET', path)),
+      /department-limited/,
+    )
+    await assert.rejects(
+      verifyRailDemo(async () => ({
+        data: { tenantId: crypto.randomUUID(), capabilities: ['administrator'] },
+      })),
+      /different workspace/,
+    )
+    await assert.rejects(
+      verifyRailDemo(async (path) => {
+        const result = await call('admin', 'GET', path)
+        if (path.startsWith('/work-instructions')) result.data[0].checkable_item_count = 1
+        return result
+      }),
+      /10 answerable questions/,
+    )
+    await assert.rejects(
+      verifyRailDemo(async (path) => {
+        const result = await call('admin', 'GET', path)
+        if (path.startsWith('/assets')) result.data.pop()
+        return result
+      }),
+      /60 sample assets/,
+    )
     checks += 8
     const size = async () =>
       (
@@ -514,10 +529,24 @@ const express = require('express'),
       assert.deepEqual(collected, complete.data, endpoint + ' pages must equal full report')
       checks += 2
     }
+    await require('./drafts-reports.cjs')({
+      call,
+      request,
+      assetId,
+      formId: crossDraft.id,
+      personas,
+      demoSignature,
+      db,
+      fixturePassword,
+    })
     const { READINESS_SQL, databaseReady } = require('../dist/lib/readiness')
     assert(databaseReady((await db.query(READINESS_SQL)).rows[0]))
     await db.exec('RESET ROLE')
-    assert.equal(databaseReady((await db.query(READINESS_SQL)).rows[0]), false, 'privileged connections cannot be ready')
+    assert.equal(
+      databaseReady((await db.query(READINESS_SQL)).rows[0]),
+      false,
+      'privileged connections cannot be ready',
+    )
     for (const damage of [
       'ALTER TABLE public.inspection_findings DISABLE TRIGGER guard_finding',
       'ALTER TABLE public.departments DISABLE ROW LEVEL SECURITY',

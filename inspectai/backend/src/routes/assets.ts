@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { listOrder } from '../lib/listOrder'
 import { requireAuth, requireCapability, type AuthRequest } from '../middleware/auth'
 import { query } from '../lib/db'
 import { auditLog } from '../lib/events'
@@ -37,12 +38,31 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
       where += ` AND a.criticality = $${params.length}`
     }
 
+    const total = (
+      await query(
+        `SELECT count(*)::int total FROM public.assets a LEFT JOIN public.departments d ON d.id=a.department_id ${where}`,
+        params,
+      )
+    ).rows[0].total
+    const order = listOrder(
+      req.query,
+      {
+        number: 'a.asset_number',
+        description: 'a.name',
+        department: 'd.name',
+        location: 'a.location',
+        category: 'a.category',
+        status: 'a.status',
+      },
+      'number',
+      'a.id',
+    )
     const result = await query(
       `SELECT a.*,
               COUNT(DISTINCT wo.id) FILTER (WHERE wo.status IN ('open', 'in_progress'))::int AS open_work_orders,
               COUNT(DISTINCT ir.id) FILTER (WHERE ir.completed_at IS NOT NULL)::int AS completed_inspections,
               MAX(ir.completed_at) AS last_inspected_at
-       FROM public.assets a
+       FROM public.assets a LEFT JOIN public.departments d ON d.id=a.department_id
        LEFT JOIN public.work_orders wo
          ON wo.tenant_id = a.tenant_id
         AND (wo.asset_record_id = a.id
@@ -51,18 +71,15 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
          ON ir.tenant_id = a.tenant_id
         AND ir.work_order_id = wo.id
        ${where}
-       GROUP BY a.id
-       ORDER BY
-         CASE a.criticality WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
-         a.next_pm_date ASC NULLS LAST,
-         a.name ASC
+       GROUP BY a.id,d.name
+       ORDER BY ${order}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, (page - 1) * pageSize],
     )
 
     res.json({
       data: result.rows,
-      meta: { page, pageSize, hasMore: result.rows.length === pageSize },
+      meta: { page, pageSize, total, hasMore: page * pageSize < total },
     })
   } catch (err) {
     next(err)

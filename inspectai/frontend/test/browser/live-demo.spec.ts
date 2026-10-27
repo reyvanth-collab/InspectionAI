@@ -30,7 +30,11 @@ test('live staging: departmental author and independent reviewer landing pages',
   await login(page, 'RS-reviewer')
   await expect(page).toHaveURL(/\/library\?needsApproval=true/)
   await expect(page.getByRole('button', { name: 'Create form', exact: true })).toHaveCount(0)
-  await page.getByRole('link', { name: /SYNTHETIC DEMO — Saloon equipment/ }).click()
+  await page
+    .getByRole('row')
+    .filter({ hasText: /SYNTHETIC DEMO — Saloon equipment/ })
+    .getByRole('link')
+    .click()
   await page.getByRole('tab', { name: 'Approval & comments' }).click()
   await expect(page.getByRole('button', { name: 'Approve form', exact: true })).toBeVisible({
     timeout: 30000,
@@ -56,7 +60,8 @@ test('live staging: phone checklist, persisted evidence, review and authenticate
     page
       .getByRole('heading', { name: 'Signed inspection', exact: true })
       .or(page.getByRole('button', { name: 'Start inspection', exact: true }))
-      .or(page.getByRole('region', { name: 'Question 1', exact: true })),
+      .or(page.getByRole('region', { name: 'Question 1', exact: true }))
+      .first(),
   ).toBeVisible({ timeout: 30000 })
   if (await page.getByRole('heading', { name: 'Signed inspection', exact: true }).count()) {
     await expect(page.getByText('Recorded result: FAIL', { exact: false }).first()).toBeVisible()
@@ -88,26 +93,23 @@ test('live staging: phone checklist, persisted evidence, review and authenticate
       await card
         .getByLabel('Notes', { exact: true })
         .fill('Synthetic damaged cover for browser verification.')
-      await card
-        .getByLabel('Photo evidence', { exact: true })
-        .setInputFiles({
-          name: 'synthetic.png',
-          mimeType: 'image/png',
-          buffer: Buffer.from(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jYZkAAAAASUVORK5CYII=',
-            'base64',
-          ),
-        })
+      await card.getByLabel('Photo evidence', { exact: true }).setInputFiles({
+        name: 'synthetic.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jYZkAAAAASUVORK5CYII=',
+          'base64',
+        ),
+      })
       await expect(card.getByText('Photo pending save')).toBeVisible()
     }
     if (number === 5)
       await card
         .getByLabel('N/A reason', { exact: true })
         .fill('The fictional training scenario does not include this observation.')
-    await card.getByRole('button', { name: 'Save response', exact: true }).click()
-    await expect(card.getByRole('status')).toHaveText('Saved', { timeout: 30000 })
   }
   await page.getByRole('button', { name: 'Review & sign', exact: true }).click()
+  await page.getByRole('button', { name: 'Save & review', exact: true }).click()
   await expect(page.getByRole('dialog').getByText('Failed items', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Continue to signature' })).toBeEnabled()
   await page.getByRole('button', { name: 'Continue to signature' }).click()

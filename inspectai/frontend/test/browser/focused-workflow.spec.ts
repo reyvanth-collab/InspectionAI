@@ -24,6 +24,7 @@ async function fixture(page: Page, role = 'inspector') {
     payloads: Record<string, unknown>[] = []
   let failSave = true,
     signed = false
+  let draft: { version: number; answers: Record<string, any> } | null = null
   const wo = {
     id: 'wo-1',
     wo_number: 'WO-DEMO-001',
@@ -65,7 +66,7 @@ async function fixture(page: Page, role = 'inspector') {
     const url = new URL(route.request().url()),
       path = url.pathname,
       method = route.request().method(),
-      body = method === 'POST' ? route.request().postDataJSON() : {}
+      body = ['POST', 'PUT'].includes(method) ? route.request().postDataJSON() : {}
     let data: unknown = []
     if (path === '/api/auth/me') data = user
     else if (path === '/api/work-instructions') {
@@ -99,8 +100,31 @@ async function fixture(page: Page, role = 'inspector') {
         completed_at: signed ? '2026-10-25T12:00:00Z' : null,
         overall_result: signed ? 'fail' : null,
         inspection_findings: Object.values(findings),
+        draft,
       }
-    else if (path === '/api/inspections/wo-1/findings/photo') {
+    else if (path === '/api/inspections/wo-1/draft') {
+      payloads.push(body)
+      await new Promise((r) => setTimeout(r, 200))
+      if (failSave) {
+        failSave = false
+        await route.fulfill({
+          status: 500,
+          json: { error: 'Simulated draft failure. Input retained.' },
+        })
+        return
+      }
+      if (body.version !== (draft?.version || 0)) {
+        await route.fulfill({
+          status: 409,
+          json: { error: 'This inspection changed in another tab. Reload the latest draft.' },
+        })
+        return
+      }
+      draft = { version: (draft?.version || 0) + 1, answers: body.answers }
+      data = { version: draft.version }
+    } else if (path === '/api/inspections/wo-1/review') {
+      data = { reviewToken: 'reviewed-saved-state', draftVersion: draft?.version || 0 }
+    } else if (path === '/api/inspections/wo-1/findings/photo') {
       await new Promise((r) => setTimeout(r, 250))
       findings[body.checklistItemId] = {
         ...findings[body.checklistItemId],
@@ -163,56 +187,132 @@ async function fixture(page: Page, role = 'inspector') {
   })
   return { findings, payloads }
 }
-test('mocked API: failed save recovery, pending photo gate, explicit results, review and signature', async ({
+test('mocked API: incomplete autosave, failed retry, rapid edits, confirmation and exact review signing', async ({
   page,
 }) => {
   const f = await fixture(page)
   await page.goto('/inspections/wo-1')
-  await page.screenshot({ path: 'test-results/inspection-desktop.png', fullPage: true })
   const first = page.getByRole('region', { name: 'Question 1' }),
     second = page.getByRole('region', { name: 'Question 2' })
-  await expect(first.getByRole('button', { name: '✓ Pass', exact: true })).toHaveAttribute(
+  await second.getByLabel('Response', { exact: true }).fill('7')
+  await expect(page.getByRole('alert')).toContainText('Simulated draft failure', { timeout: 15000 })
+  expect(await second.getByLabel('Response', { exact: true }).inputValue()).toBe('7')
+  await page.getByRole('button', { name: 'Retry saving draft' }).click()
+  await expect(page.getByRole('status')).toHaveText('Saved')
+  await page.reload()
+  await expect(second.getByLabel('Response', { exact: true })).toHaveValue('7')
+  await expect(second.getByRole('button', { name: /Pass$/ })).toHaveAttribute(
     'aria-pressed',
     'false',
   )
-  await first.getByRole('button', { name: '× Fail', exact: true }).click()
+  await first.getByRole('button', { name: /Fail$/ }).click()
   await first.getByLabel('Notes', { exact: true }).fill('Synthetic damaged cover')
   await first
     .getByLabel('Photo evidence', { exact: true })
     .setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png })
-  await expect(first.getByText('Photo pending save')).toBeVisible()
+  await second.getByLabel('Response', { exact: true }).fill('8')
+  await second.getByLabel('Response', { exact: true }).fill('9')
+  await second.getByRole('button', { name: /Pass$/ }).click()
   await page.getByRole('button', { name: 'Review & sign', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Continue to signature' })).toBeDisabled()
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
-  await first.getByRole('button', { name: 'Save response', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Review & sign', exact: true })).toBeDisabled()
-  await expect(first.getByRole('alert')).toContainText('Simulated save failure')
-  await first.getByRole('button', { name: 'Retry save', exact: true }).click()
-  await expect(first.getByRole('status')).toHaveText('Saved')
-  await second.getByLabel('Response', { exact: true }).fill('7')
-  await expect(second.getByRole('button', { name: '✓ Pass', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'false',
+  await expect(page.getByRole('dialog')).toContainText(
+    'Save your responses and continue to review?',
   )
-  await second.getByRole('button', { name: '✓ Pass', exact: true }).click()
-  await second.getByRole('button', { name: 'Save response', exact: true }).click()
-  await expect(second.getByRole('status')).toHaveText('Saved')
+  await page.getByRole('button', { name: 'Keep editing', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(second.getByLabel('Response', { exact: true })).toHaveValue('9')
   await page.getByRole('button', { name: 'Review & sign', exact: true }).click()
+  await page.getByRole('button', { name: 'Save & review', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText('Review inspection')
   await expect(page.getByRole('dialog').getByText('Failed items', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Continue to signature' }).click()
-  await page.getByLabel('Type your signature').fill('Synthetic Inspector')
-  await page.getByRole('button', { name: 'Apply Signature' }).click()
+  await page.getByRole('button', { name: 'Continue to signature', exact: true }).click()
+  await page.getByLabel('Type your signature').fill('Synthetic inspector')
+  await page.getByRole('button', { name: 'Apply Signature', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Signed inspection', exact: true })).toBeVisible()
-  expect(f.payloads.find((p) => p.checklistItemId === 'q2')?.capturedValue).toBe('7')
-  expect(f.payloads.find((p) => p.checklistItemId === 'q2')?.notes).toBe('')
-  expect((f.findings.q1.photo_urls as string[]).length).toBe(1)
+  await expect(page.getByRole('button', { name: 'Save response', exact: true })).toHaveCount(0)
+  expect(f.payloads.at(-1)?.answers.q2.value).toBe('9')
+  expect(f.payloads.at(-1)?.answers.q1.photos.length).toBe(1)
 })
-test('mocked API: phone navigation and inspection cards remain usable', async ({ page }) => {
+
+test('mocked API: unsaved navigation warning, missing evidence and failed upload block signature', async ({
+  page,
+}) => {
+  await fixture(page)
+  await page.goto('/inspections/wo-1')
+  const first = page.getByRole('region', { name: 'Question 1' }),
+    second = page.getByRole('region', { name: 'Question 2' })
+  await first.getByRole('button', { name: /Fail$/ }).click()
+  await first.getByLabel('Notes', { exact: true }).fill('Synthetic defect without evidence yet')
+  await second.getByLabel('Response', { exact: true }).fill('7')
+  await second.getByRole('button', { name: /Pass$/ }).click()
+  await expect(page.getByRole('alert')).toContainText('Simulated draft failure', { timeout: 15000 })
+  page.once('dialog', (d) => d.dismiss())
+  await page.locator('a[href="/inspections"]').first().click()
+  await expect(page).toHaveURL(/\/inspections\/wo-1$/)
+  await page.getByRole('button', { name: 'Retry saving draft' }).click()
+  await expect(page.getByRole('status')).toHaveText('Saved')
+  await page.getByRole('button', { name: 'Review & sign', exact: true }).click()
+  await page.getByRole('button', { name: 'Save & review', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Continue to signature' })).toBeDisabled()
+  await expect(page.getByRole('dialog')).toContainText('Attach photo evidence')
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
+  await page.route('**/api/inspections/wo-1/draft', (route) =>
+    route.fulfill({ status: 500, json: { error: 'Synthetic photo persistence failure' } }),
+  )
+  await first
+    .getByLabel('Photo evidence', { exact: true })
+    .setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png })
+  await page.getByRole('button', { name: 'Review & sign', exact: true }).click()
+  await page.getByRole('button', { name: 'Save & review', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText('Synthetic photo persistence failure')
+  await expect(page.getByRole('button', { name: 'Continue to signature' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Keep editing', exact: true }).click()
+  await expect(first.getByText('Photo pending save')).toBeVisible()
+  await expect(first.getByLabel('Notes', { exact: true })).toHaveValue(
+    'Synthetic defect without evidence yet',
+  )
+})
+
+test('mocked API: completed record loading never exposes start or edit controls', async ({
+  page,
+}) => {
+  await fixture(page)
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/inspections/wo-1/record', async (route) => {
+    await gate
+    await route.fulfill({
+      json: {
+        data: {
+          id: 'record-1',
+          work_order_id: 'wo-1',
+          completed_at: '2026-10-27T00:00:00Z',
+          overall_result: 'pass',
+          inspection_findings: [],
+        },
+      },
+    })
+  })
+  await page.goto('/inspections/wo-1')
+  await expect(page.getByText('Loading inspection…', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start inspection', exact: true })).toHaveCount(0)
+  release()
+  await expect(page.getByRole('heading', { name: 'Signed inspection', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Review & sign', exact: true })).toHaveCount(0)
+})
+
+test('mocked API: phone navigation and inspection rows remain usable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await fixture(page)
   await page.goto('/inspections')
   await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible()
   await expect(page.getByRole('link', { name: /WO-DEMO-001/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Details for WO-DEMO-001', exact: true }).click()
+  await expect(page.getByText('FIC-01 · Northbank', { exact: true }).last()).toBeVisible()
+  const bounds = await page.getByRole('link', { name: 'WO-DEMO-001', exact: true }).boundingBox()
+  expect(bounds!.x).toBeGreaterThanOrEqual(0)
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390)
   await expect(page.getByRole('link', { name: 'MOMS Analytics' })).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Approvals', exact: true })).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -226,9 +326,13 @@ test('mocked API: phone navigation and inspection cards remain usable', async ({
 test('mocked API: administrative forms, mobile editor and settings', async ({ page }) => {
   await fixture(page, 'admin')
   await page.goto('/library')
-  await expect(page.getByRole('region', { name: 'Current workspace' })).toContainText('Synthetic rail demonstration — not operational')
+  await expect(page.getByRole('region', { name: 'Current workspace' })).toContainText(
+    'Synthetic rail demonstration — not operational',
+  )
   await expect(page.getByRole('heading', { name: 'Inspection Forms', exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Synthetic cabinet inspection' })).toBeVisible()
+  await expect(
+    page.getByRole('cell', { name: 'Synthetic cabinet inspection', exact: true }),
+  ).toBeVisible()
   await page.screenshot({ path: 'test-results/forms-desktop.png', fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
   await page.getByRole('button', { name: 'Create form', exact: true }).click()
@@ -244,29 +348,64 @@ test('mocked API: administrative forms, mobile editor and settings', async ({ pa
   await expect(page.getByRole('button', { name: 'Activity history', exact: true })).toBeVisible()
   await expect(page.getByText('IBM Maximo', { exact: true })).toHaveCount(0)
 })
-test('mocked API using real seed definitions: all 20 published rail forms open with 10 questions', async ({ page }) => {
+test('mocked API using real seed definitions: all 20 published rail forms open with 10 questions', async ({
+  page,
+}) => {
   await fixture(page, 'admin')
   const { departments, questionsFor } = await import('../../../backend/scripts/rail-demo-data.mjs')
-  const forms = departments.flatMap((department: any) => department.forms.map(([topic, checks]: [string, string[]], index: number) => ({
-    id: `${department.code}-${index + 1}`, wi_number: `DEMO-${department.code}-F${index + 1}`,
-    title: `SYNTHETIC DEMO — ${topic}`, status: 'active', revision: 'Demo 1', department_id: department.code,
-    checklist_item_count: 10, checkable_item_count: 10,
-    wi_checklist_items: questionsFor(topic, checks).map((question: any, n: number) => ({
-      id: `${department.code}-${index + 1}-q${n + 1}`, item_no: question.itemNo,
-      description: question.description, acceptance_criteria: question.acceptanceCriteria,
-      category: question.category, field_type: question.fieldType, sort_order: question.sortOrder,
-      required: question.required, layout_json: question.layoutJson,
+  const forms = departments.flatMap((department: any) =>
+    department.forms.map(([topic, checks]: [string, string[]], index: number) => ({
+      id: `${department.code}-${index + 1}`,
+      wi_number: `DEMO-${department.code}-F${index + 1}`,
+      title: `SYNTHETIC DEMO — ${topic}`,
+      status: 'active',
+      revision: 'Demo 1',
+      department_id: department.code,
+      checklist_item_count: 10,
+      checkable_item_count: 10,
+      wi_checklist_items: questionsFor(topic, checks).map((question: any, n: number) => ({
+        id: `${department.code}-${index + 1}-q${n + 1}`,
+        item_no: question.itemNo,
+        description: question.description,
+        acceptance_criteria: question.acceptanceCriteria,
+        category: question.category,
+        field_type: question.fieldType,
+        sort_order: question.sortOrder,
+        required: question.required,
+        layout_json: question.layoutJson,
+      })),
     })),
-  })))
-  await page.route('**/api/departments', route => route.fulfill({ json: { data: departments.map((department: any) => ({ id: department.code, name: department.name, code: department.code, active: true })) } }))
-  await page.route('**/api/work-instructions**', route => {
+  )
+  await page.route('**/api/departments', (route) =>
+    route.fulfill({
+      json: {
+        data: departments.map((department: any) => ({
+          id: department.code,
+          name: department.name,
+          code: department.code,
+          active: true,
+        })),
+      },
+    }),
+  )
+  await page.route('**/api/work-instructions**', (route) => {
     const id = new URL(route.request().url()).pathname.split('/')[3]
-    return route.fulfill({ json: { data: id ? forms.find((form: any) => form.id === id) : forms, meta: { hasMore: false } } })
+    return route.fulfill({
+      json: {
+        data: id ? forms.find((form: any) => form.id === id) : forms,
+        meta: { hasMore: false },
+      },
+    })
   })
   await page.goto('/library')
-  await expect(page.getByRole('region', { name: 'Current workspace' })).toContainText('Synthetic rail demonstration — not operational')
-  await expect(page.getByRole('heading', { level: 2 })).toHaveCount(20)
-  await expect(page.getByText(/10 items/)).toHaveCount(20)
-  await page.getByRole('link', { name: /SYNTHETIC DEMO — Passenger doors/ }).click()
-  for (const question of forms[0].wi_checklist_items) await expect(page.getByText(question.description, { exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Current workspace' })).toContainText(
+    'Synthetic rail demonstration — not operational',
+  )
+  await expect(page.getByRole('table', { name: 'Inspection Forms' }).getByRole('row')).toHaveCount(
+    21,
+  )
+  await expect(page.getByRole('cell', { name: '10', exact: true })).toHaveCount(20)
+  await page.getByRole('link', { name: 'DEMO-RS-F1', exact: true }).click()
+  for (const question of forms[0].wi_checklist_items)
+    await expect(page.getByText(question.description, { exact: true })).toBeVisible()
 })

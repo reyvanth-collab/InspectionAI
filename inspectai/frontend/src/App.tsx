@@ -1,5 +1,5 @@
 import { can } from '@/lib/permissions'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { OfflineProvider } from '@/context/OfflineContext'
@@ -164,9 +164,9 @@ function AppRoutes() {
   )
 }
 
-export default function App() {
+function AppProviders() {
   return (
-    <BrowserRouter>
+    <>
       <AuthProvider>
         <OfflineProvider>
           <ToastProvider>
@@ -174,6 +174,11 @@ export default function App() {
           </ToastProvider>
         </OfflineProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </>
   )
+}
+
+const router = createBrowserRouter([{ path: '*', element: <AppProviders /> }])
+export default function App() {
+  return <RouterProvider router={router} />
 }

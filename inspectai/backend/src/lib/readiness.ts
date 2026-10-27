@@ -9,7 +9,7 @@ WITH required_guards(table_name, trigger_name) AS (VALUES
   ('work_instructions','guard_instruction_revision'),
   ('work_orders','snapshot_order'),
   ('approval_steps','protect_approval_decision'),
-  ('audit_logs','redact_audit')
+  ('audit_logs','redact_audit'), ('inspection_drafts','guard_draft'), ('inspection_drafts','audit_draft')
 ), required_scopes(table_name, policy_name) AS (VALUES
   ('departments','department_scope'), ('department_memberships','membership_scope'),
   ('assets','asset_scope'), ('work_instructions','form_scope'),
@@ -35,9 +35,15 @@ SELECT
       AND c.relrowsecurity AND p.polname=s.policy_name AND NOT p.polpermissive
       AND (SELECT oid FROM pg_catalog.pg_roles WHERE rolname=current_user)=ANY(p.polroles)
   )) AS scopes,
+  (SELECT c.relrowsecurity AND EXISTS(SELECT 1 FROM pg_catalog.pg_policy p WHERE p.polrelid=c.oid AND p.polname='draft_scope') FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname='inspection_drafts') AS draft_scope,
   (SELECT current_user='inspectai_runtime' AND NOT rolsuper AND NOT rolbypassrls
    FROM pg_catalog.pg_roles WHERE rolname=current_user) AS restricted_role
 `
 export function databaseReady(row: Record<string, unknown> | undefined): boolean {
-  return row?.guards === 8 && row.scopes === 13 && row.restricted_role === true
+  return (
+    row?.guards === 10 &&
+    row.draft_scope === true &&
+    row.scopes === 13 &&
+    row.restricted_role === true
+  )
 }

@@ -105,7 +105,7 @@ try {
     }
   }
   const guards = await db.query(
-    "SELECT count(*)::int n FROM pg_trigger WHERE tgname LIKE 'guard_%'",
+    "SELECT count(*)::int n FROM pg_trigger WHERE tgname IN ('guard_instruction_items','guard_instruction_revision','guard_finding','guard_signed_record','guard_work_order')",
   )
   assert.equal(guards.rows[0].n, 5)
   await db.exec('SET ROLE inspectai_runtime')

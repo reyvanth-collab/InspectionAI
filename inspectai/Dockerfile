@@ -14,11 +14,18 @@ RUN npm ci --ignore-scripts
 COPY backend/ ./
 RUN npm run build && npm prune --omit=dev --ignore-scripts
 FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production PORT=4000
+ENV PDF_CHROMIUM_PATH=/usr/bin/chromium
+# Chromium runs as the existing unprivileged container user; the report template
+# disables JavaScript and blocks all remote/file requests in the renderer.
+ENV PDF_NO_SANDBOX=true
+ENV XDG_CONFIG_HOME=/tmp/chromium-config XDG_CACHE_HOME=/tmp/chromium-cache
 WORKDIR /app/backend
 COPY --from=backend --chown=node:node /build/dist ./dist
 COPY --from=backend --chown=node:node /build/node_modules ./node_modules
 COPY --from=backend --chown=node:node /build/package.json ./package.json
+COPY --from=backend --chown=node:node /build/scripts/verify-pdf-runtime.mjs ./scripts/verify-pdf-runtime.mjs
 COPY --from=frontend --chown=node:node /build/dist /app/public
 USER node
 EXPOSE 4000

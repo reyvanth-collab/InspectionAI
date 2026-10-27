@@ -1,10 +1,10 @@
-﻿import { useState } from 'react'
+import { RecordTable } from '@/components/ui/RecordTable'
+import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Search } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { useAuth } from '@/context/AuthContext'
 import { useDepartments } from '@/hooks/useDepartments'
 import { can, formStatus } from '@/lib/permissions'
@@ -17,6 +17,7 @@ interface FormRow {
   status: string
   owner_name: string
   department_id: string
+  checkable_item_count: number
   checklist_item_count: number
 }
 const tabs = [
@@ -30,7 +31,9 @@ export default function MasterLibrary() {
   const { user } = useAuth(),
     [params, setParams] = useSearchParams(),
     { data: departments = [] } = useDepartments()
-  const [search, setSearch] = useState(''),
+  const [sort, setSort] = useState('reference'),
+    [direction, setDirection] = useState('asc'),
+    [search, setSearch] = useState(''),
     [department, setDepartment] = useState(''),
     [mine, setMine] = useState(false),
     [page, setPage] = useState(1)
@@ -38,17 +41,19 @@ export default function MasterLibrary() {
     needsApproval = params.get('needsApproval') === 'true'
   const query = new URLSearchParams({
     search,
+    sort,
+    direction,
     page: String(page),
     ...(status !== 'all' && !needsApproval ? { status } : {}),
     ...(department ? { departmentId: department } : {}),
     ...(mine ? { mine: 'true' } : {}),
     ...(needsApproval ? { needsApproval: 'true' } : {}),
   })
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['work-instructions', query.toString()],
     queryFn: async () =>
       (
-        await api.get<{ data: FormRow[]; meta: { hasMore: boolean } }>(
+        await api.get<{ data: FormRow[]; meta: { hasMore: boolean; total: number } }>(
           `/work-instructions?${query}`,
         )
       ).data,
@@ -141,7 +146,7 @@ export default function MasterLibrary() {
       {isLoading && <p className="text-sm">Loading forms…</p>}
       {error && (
         <p className="text-danger" role="alert">
-          Forms could not be loaded. Please try again.
+          Forms could not be loaded. <button onClick={() => void refetch()}>Retry</button>
         </p>
       )}
       {data?.data.length === 0 && (
@@ -149,43 +154,48 @@ export default function MasterLibrary() {
           No forms match these filters.
         </div>
       )}
-      <div className="grid md:grid-cols-2 gap-3">
-        {data?.data.map((f) => (
-          <Link
-            key={f.id}
-            to={`/library/${f.id}`}
-            className="bg-bg-2 rounded-xl border border-border p-5 hover:border-accent transition-colors"
-          >
-            <div className="flex justify-between gap-3">
-              <span className="text-xs font-mono text-accent">
-                {f.wi_number} · {f.revision}
-              </span>
-              <Badge
-                variant={
-                  f.status === 'active'
-                    ? 'active'
-                    : f.status === 'pending_approval'
-                      ? 'pending_approval'
-                      : 'draft'
-                }
-              >
-                {formStatus(f.status)}
-              </Badge>
-            </div>
-            <h2 className="font-semibold mt-3">{f.title}</h2>
-            <p className="text-sm text-text-2 mt-3">
-              {departments.find((d) => d.id === f.department_id)?.name || 'Department'} ·{' '}
-              {f.checklist_item_count} items
-            </p>
-            <p className="text-xs text-text-2 mt-2">Author: {f.owner_name || 'Not recorded'}</p>
-          </Link>
-        ))}
-      </div>
+      <RecordTable
+        label="Inspection Forms"
+        rows={data?.data || []}
+        rowKey={(f) => f.wi_number + ' ' + f.revision}
+        sort={sort}
+        direction={direction}
+        onSort={(key) => {
+          setDirection(sort === key && direction === 'asc' ? 'desc' : 'asc')
+          setSort(key)
+          setPage(1)
+        }}
+        columns={[
+          {
+            key: 'reference',
+            label: 'Form reference',
+            essential: true,
+            render: (f) => (
+              <Link className="font-mono" to={'/library/' + f.id}>
+                {f.wi_number}
+              </Link>
+            ),
+          },
+          { key: 'title', label: 'Title', essential: true, render: (f) => f.title },
+          {
+            key: 'department',
+            label: 'Department',
+            render: (f) =>
+              departments.find((d) => d.id === f.department_id)?.name || 'Not recorded',
+          },
+          { key: 'revision', label: 'Revision', render: (f) => f.revision },
+          { key: 'questions', label: 'Questions', render: (f) => f.checkable_item_count },
+          { key: 'status', label: 'Lifecycle', render: (f) => formStatus(f.status) },
+          { key: 'author', label: 'Author', render: (f) => f.owner_name || 'Not recorded' },
+        ]}
+      />
       <div className="flex justify-between items-center mt-5">
         <Button variant="secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
           Previous
         </Button>
-        <span className="text-sm text-text-2">Page {page}</span>
+        <span className="text-sm text-text-2">
+          Page {page} ? {data?.meta.total || 0} matching forms
+        </span>
         <Button
           variant="secondary"
           disabled={!data?.meta.hasMore}

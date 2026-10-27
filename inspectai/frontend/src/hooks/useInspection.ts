@@ -27,6 +27,19 @@ export interface InspectionFinding {
 }
 
 export interface InspectionRecord {
+  draft?: {
+    version: number
+    answers: Record<
+      string,
+      {
+        result: 'pass' | 'fail' | 'na' | null
+        value: string
+        notes: string
+        naReason?: string
+        photos: string[]
+      }
+    >
+  }
   id: string
   work_order_id: string
   inspector_id: string
@@ -49,9 +62,11 @@ export function useInspectionRecord(workOrderDbId: string) {
 
   return useQuery({
     queryKey: ['inspection-record', workOrderDbId],
-    enabled:  !!user && !!workOrderDbId,
-    queryFn:  async () => {
-      const res = await api.get<{ data: InspectionRecord | null }>(`/inspections/${workOrderDbId}/record`)
+    enabled: !!user && !!workOrderDbId,
+    queryFn: async () => {
+      const res = await api.get<{ data: InspectionRecord | null }>(
+        `/inspections/${workOrderDbId}/record`,
+      )
       return res.data.data
     },
   })
@@ -62,9 +77,16 @@ export function useStartInspection() {
 
   return useMutation({
     mutationFn: async ({
-      workOrderDbId, totalItems,
-    }: { workOrderDbId: string; totalItems: number }) => {
-      const res = await api.post<{ data: InspectionRecord }>(`/inspections/${workOrderDbId}/start`, { totalItems })
+      workOrderDbId,
+      totalItems,
+    }: {
+      workOrderDbId: string
+      totalItems: number
+    }) => {
+      const res = await api.post<{ data: InspectionRecord }>(
+        `/inspections/${workOrderDbId}/start`,
+        { totalItems },
+      )
       return res.data.data
     },
     onSuccess: (_data, { workOrderDbId }) => {
@@ -83,21 +105,26 @@ export function useRecordFinding() {
       inspectionRecordId,
       checklistItemId,
       result,
-      notes, capturedValue,
+      notes,
+      capturedValue,
     }: {
       workOrderDbId: string
       inspectionRecordId: string
-      checklistItemId:    string
-      result:             'pass' | 'fail' | 'na'
-      capturedValue?:     string
-      notes?:             string
+      checklistItemId: string
+      result: 'pass' | 'fail' | 'na'
+      capturedValue?: string
+      notes?: string
     }) => {
-      const res = await api.post<{ data: InspectionFinding }>(`/inspections/${workOrderDbId}/findings`, {
-        inspectionRecordId,
-        checklistItemId,
-        result,
-        notes, capturedValue,
-      })
+      const res = await api.post<{ data: InspectionFinding }>(
+        `/inspections/${workOrderDbId}/findings`,
+        {
+          inspectionRecordId,
+          checklistItemId,
+          result,
+          notes,
+          capturedValue,
+        },
+      )
       return res.data.data
     },
     onSuccess: (_data, vars) => {
@@ -121,11 +148,14 @@ export function useAttachFindingPhoto() {
       checklistItemId: string
       imageDataUrl: string
     }) => {
-      const res = await api.post<{ data: InspectionFinding }>(`/inspections/${workOrderDbId}/findings/photo`, {
-        inspectionRecordId,
-        checklistItemId,
-        imageDataUrl,
-      })
+      const res = await api.post<{ data: InspectionFinding }>(
+        `/inspections/${workOrderDbId}/findings/photo`,
+        {
+          inspectionRecordId,
+          checklistItemId,
+          imageDataUrl,
+        },
+      )
       return res.data.data
     },
     onSuccess: (_data, vars) => {
@@ -139,12 +169,19 @@ export function useCompleteInspection() {
 
   return useMutation({
     mutationFn: async ({
-      inspectionRecordId, workOrderDbId, signatureDataUrl, signedBy,
+      inspectionRecordId,
+      workOrderDbId,
+      signatureDataUrl,
+      signedBy,
+      draftVersion,
+      reviewToken,
     }: {
       inspectionRecordId: string
-      workOrderDbId:      string
-      signatureDataUrl:   string
-      signedBy?:          string
+      workOrderDbId: string
+      signatureDataUrl: string
+      draftVersion?: number
+      reviewToken?: string
+      signedBy?: string
     }) => {
       const res = await api.post<{
         data: {
@@ -155,7 +192,13 @@ export function useCompleteInspection() {
           na: number
           signatureHash: string
         }
-      }>(`/inspections/${workOrderDbId}/complete`, { inspectionRecordId, signatureDataUrl, signedBy })
+      }>(`/inspections/${workOrderDbId}/complete`, {
+        inspectionRecordId,
+        signatureDataUrl,
+        signedBy,
+        draftVersion,
+        reviewToken,
+      })
       return res.data.data
     },
     onSuccess: (_data, { workOrderDbId }) => {
