@@ -11,8 +11,9 @@ In a PowerShell terminal at the root of your existing InspectionAI clone:
 
 ```powershell
 git fetch origin release/november-product-completion
+if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the release branch' }
 $helper = Join-Path $env:TEMP 'inspectai-prepare-local.mjs'
-git show origin/release/november-product-completion:inspectai/scripts/prepare-local.mjs | Set-Content -Encoding utf8 $helper
+git show FETCH_HEAD:inspectai/scripts/prepare-local.mjs | Set-Content -Encoding utf8 $helper
 if ($LASTEXITCODE -ne 0) { throw 'Could not load the update helper' }
 node $helper --repo .
 ```

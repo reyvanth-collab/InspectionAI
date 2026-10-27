@@ -60,6 +60,23 @@ Fictional rail forms are demonstration content, not engineering procedures.
 Use the new branch's GitHub checks and PR for the final patch results. Do not
 reuse old screenshots or counts as proof of a different commit's correctness.
 
+## Follow-up verification results — 27 October
+
+| Check | Result |
+|---|---|
+| Backend build and workflow suites | 56 release + 448 departmental/lifecycle/report assertions passed |
+| Frontend session regressions, lint and production build | Passed; inert public config used for the test build |
+| Production dependency audits | Backend 0, frontend 0 known advisories |
+| Safe local-update fixture | Passed: dirty original and configuration preserved; dirty/divergent target refused |
+| Real Chromium browser tests | 9 passed; 3 opt-in hosted tests skipped |
+| Hosted database checks | Read-only counts, migration registry and role checks passed; no records changed |
+
+The local browser run used Chromium 153 after the locked browser's CDN download
+was truncated. GitHub CI uses the repository's standard Playwright browser and
+container checks; consult the PR for those results. Browser tests use emulated
+phone viewports and mocked API/Auth where named. They do not establish email
+delivery, real hosted workflows for this patch, or physical-device acceptance.
+
 ## Finish by 30 November
 
 | Window | Work | Acceptance evidence |
