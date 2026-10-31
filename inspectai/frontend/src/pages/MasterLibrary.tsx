@@ -1,4 +1,5 @@
 import { RecordTable } from '@/components/ui/RecordTable'
+import { RecordPageSummary } from '@/components/ui/RecordPageSummary'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -44,6 +45,7 @@ export default function MasterLibrary() {
     sort,
     direction,
     page: String(page),
+    pageSize: '50',
     ...(status !== 'all' && !needsApproval ? { status } : {}),
     ...(department ? { departmentId: department } : {}),
     ...(mine ? { mine: 'true' } : {}),
@@ -53,9 +55,10 @@ export default function MasterLibrary() {
     queryKey: ['work-instructions', query.toString()],
     queryFn: async () =>
       (
-        await api.get<{ data: FormRow[]; meta: { hasMore: boolean; total: number } }>(
-          `/work-instructions?${query}`,
-        )
+        await api.get<{
+          data: FormRow[]
+          meta: { hasMore: boolean; total: number; page: number; pageSize: number }
+        }>(`/work-instructions?${query}`)
       ).data,
   })
   return (
@@ -193,9 +196,13 @@ export default function MasterLibrary() {
         <Button variant="secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
           Previous
         </Button>
-        <span className="text-sm text-text-2">
-          Page {page} ? {data?.meta.total || 0} matching forms
-        </span>
+        <RecordPageSummary
+          page={data?.meta.page ?? page}
+          pageSize={data?.meta.pageSize ?? 50}
+          count={data?.data.length ?? 0}
+          total={data?.meta.total ?? 0}
+          label="forms"
+        />
         <Button
           variant="secondary"
           disabled={!data?.meta.hasMore}

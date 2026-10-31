@@ -31,11 +31,12 @@ forms. Customer/legacy workspaces also do not share the rail-demo records.
    original checkout. The update helper now copies it when present and never
    overwrites a destination file. If it is missing, use the guarded provisioning
    instructions below; do not invent a password or place credentials in Git.
-3. In the backend terminal run **`npm run check:rail-demo`**. This uses the
+3. In the backend terminal run **`npm run check`** (or **`npm run check:rail-demo`**). This uses the
    fixture's administrator through the normal login API and verifies the data
    through the same permission-enforced APIs as the UI. It prints counts and
    workspace name, never passwords or tokens. It checks 60 sample assets, 20
-   published sample forms, at least 10 answerable questions on each form, and
+   published sample forms, at least 10 answerable questions on each form, reports
+   the total form versions (23 in the original fixture), and checks
    20 work orders. It does not reseed or change inspection content; normal login
    creates an authentication audit event.
 4. Sign out of the app. Open the ignored JSON file **locally** and use
@@ -55,6 +56,14 @@ reload and is visible on every working page and in the account menu. It is
 informational; authorisation still uses the authenticated tenant, department,
 capability and assignment checks. There is no cross-tenant switch or shared
 demo password.
+
+The tables show at most 50 records per page. With the complete fixture, Assets
+shows 1–50 of 60 on page one and 51–60 on page two. Published contains 20 forms;
+All forms contains 23 versions, including the three workflow demonstration
+revisions. The demo administrator did not author the departmental sample forms,
+so enabling Created by me can show zero forms. Clear that checkbox, searches
+and department filters before comparing totals. Verification work orders can
+increase the original 20 seeded orders; they do not replace the sample records.
 
 ## Credentials and personas
 

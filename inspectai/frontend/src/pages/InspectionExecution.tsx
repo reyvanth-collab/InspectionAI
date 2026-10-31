@@ -1,3 +1,11 @@
+import {
+  answerProblem,
+  derivedResult,
+  hasAnswer,
+  questionAnswered,
+  policy as questionPolicy,
+} from '@/lib/questionPolicy'
+import { ValidationSummary } from '@/components/ui/ValidationSummary'
 import { useEffect, useRef, useState } from 'react'
 import { useParams, Link, useBlocker } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -15,7 +23,7 @@ import { useAuth } from '@/context/AuthContext'
 import { can } from '@/lib/permissions'
 import { useAssignableUsers } from '@/hooks/useUsers'
 import { useWorkInstructions } from '@/hooks/useWorkInstructions'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 type Result = 'pass' | 'fail' | 'na'
 interface Item {
   id: string
@@ -60,61 +68,7 @@ const json = (text?: string) => {
   }
 }
 function problem(item: Item, d: Draft) {
-  const type = item.field_type || 'pass_fail',
-    policy = json(item.conditional_json)
-  if (!d.result) return item.required !== false ? 'Choose a result' : null
-  if (d.result === 'na')
-    return (item.required !== false || policy.naReasonRequired) && !d.naReason.trim()
-      ? 'Explain why this item is not applicable'
-      : null
-  if (
-    [
-      'text',
-      'textarea',
-      'date',
-      'dropdown',
-      'select',
-      'multiselect',
-      'table',
-      'signature',
-      'checkbox',
-      'yes_no',
-    ].includes(type) &&
-    item.required !== false &&
-    !d.value.trim()
-  )
-    return 'A response is required'
-  if (
-    type === 'multiselect' &&
-    item.required !== false &&
-    (!Array.isArray(json(d.value)) || !json(d.value).length)
-  )
-    return 'Choose at least one response'
-  if (
-    type === 'table' &&
-    item.required !== false &&
-    !Object.values(json(d.value)).some((v) => String(v).trim())
-  )
-    return 'Complete the response table'
-  if (['number', 'measurement'].includes(type)) {
-    if (!d.value.trim() || !Number.isFinite(Number(d.value))) return 'Enter a numeric reading'
-    if (
-      d.result === 'pass' &&
-      ((item.min_value != null && Number(d.value) < item.min_value) ||
-        (item.max_value != null && Number(d.value) > item.max_value))
-    )
-      return 'The reading is outside the stated limits; review the result'
-  }
-  if (d.result === 'fail' && policy.notesOnFail && !d.notes.trim())
-    return 'Describe the failed condition'
-  if (
-    ((d.result === 'fail' && policy.photoOnFail) ||
-      (type === 'photo' && item.required !== false)) &&
-    !d.photos.length &&
-    !d.photo
-  )
-    return 'Attach photo evidence'
-  return null
+  return answerProblem(item, { ...d, photos: [...d.photos, ...(d.photo ? [d.photo] : [])] })
 }
 export default function InspectionExecution() {
   const { id = '' } = useParams(),
@@ -139,6 +93,7 @@ export default function InspectionExecution() {
     [saveError, setSaveError] = useState(''),
     [conflict, setConflict] = useState(false),
     [reportBusy, setReportBusy] = useState(false)
+  const [validationAttempt, setValidationAttempt] = useState(0)
   const version = useRef(0),
     epoch = useRef(0),
     savedEpoch = useRef(0),
@@ -226,10 +181,18 @@ export default function InspectionExecution() {
   const update = (key: string, patch: Partial<Draft>) => {
     epoch.current++
     reviewed.current = null
-    setDrafts((prev) => ({
-      ...prev,
-      [key]: { ...(prev[key] || empty()), ...patch, dirty: true, saved: false, error: undefined },
-    }))
+    setDrafts((prev) => {
+      const next = {
+        ...(prev[key] || empty()),
+        ...patch,
+        dirty: true,
+        saved: false,
+        error: undefined,
+      }
+      const item = items.find((i) => i.id === key)
+      if (item) next.result = derivedResult(item, next) || undefined
+      return { ...prev, [key]: next }
+    })
   }
   const setState = (key: string, patch: Partial<Draft>) =>
     setDrafts((prev) => ({ ...prev, [key]: { ...(prev[key] || empty()), ...patch } }))
@@ -246,13 +209,18 @@ export default function InspectionExecution() {
     return () => window.removeEventListener('beforeunload', warn)
   }, [unsaved])
   const invalid = questions
-    .map((item) => ({ item, issue: problem(item, get(item.id)) }))
+    .map((item) => ({ item, issue: problem(item, get(item.id)) || get(item.id).error }))
     .filter((x) => x.issue)
-  const answered = questions.filter((i) => get(i.id).result).length,
-    failed = questions.filter((i) => get(i.id).result === 'fail')
+  const answered = questions.filter(
+      (i) => questionAnswered(i, get(i.id)),
+    ).length,
+    failed = questions.filter(
+      (i) => questionPolicy(i).assessment.required && derivedResult(i, get(i.id)) === 'fail',
+    )
   const sections = [...new Set(questions.map((i) => i.category || 'Checklist'))]
   const jump = (key: string) => {
     setReview(false)
+    setTab('checklist')
     document.getElementById('question-' + key)?.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
       block: 'start',
@@ -347,6 +315,12 @@ export default function InspectionExecution() {
   async function saveAndReview() {
     if (Object.values(draftRef.current).some((d) => d.saving) || conflict) return
     if (!(await flush())) return
+    setValidationAttempt((x) => x + 1)
+    if (invalid.length) {
+      setConfirmReview(false)
+      setTab('checklist')
+      return
+    }
     setPersisting(true)
     try {
       if (!invalid.length && answered) {
@@ -359,6 +333,11 @@ export default function InspectionExecution() {
       setConfirmReview(false)
       setReview(true)
     } catch (e) {
+      if (e instanceof ApiError && Object.keys(e.fieldErrors).length) {
+        for (const [qid, error] of Object.entries(e.fieldErrors)) setState(qid, { error })
+        setValidationAttempt((x) => x + 1)
+        setTab('checklist')
+      }
       setSaveError(e instanceof Error ? e.message : 'Review could not be saved. Retry.')
     } finally {
       setPersisting(false)
@@ -491,7 +470,9 @@ export default function InspectionExecution() {
         <div className="text-sm text-text-2">
           {done ? (
             <strong className="text-success">
-              Signed · {record?.overall_result?.toUpperCase()}
+              Signed ·{' '}
+              {record?.signed_payload?.assessmentSummary?.completionLabel ||
+                record?.overall_result?.toUpperCase()}
             </strong>
           ) : record ? (
             <span role="status">
@@ -547,6 +528,21 @@ export default function InspectionExecution() {
           {message}
         </p>
       )}
+      <ValidationSummary
+        attempt={validationAttempt}
+        issues={
+          validationAttempt
+            ? invalid.map(({ item, issue }) => ({
+                id: 'question-' + item.id,
+                message: 'Question ' + item.item_no + ': ' + issue,
+                reveal: () => {
+                  setTab('checklist')
+                  setReview(false)
+                },
+              }))
+            : []
+        }
+      />
       {manager && !record && wo.status === 'open' && (
         <section className="execution-card mb-5">
           <h2 className="font-semibold mb-4">Assignment</h2>
@@ -654,7 +650,10 @@ export default function InspectionExecution() {
                   {!done && (
                     <button
                       className="text-accent font-medium"
-                      onClick={() => invalid[0] && jump(invalid[0].item.id)}
+                      onClick={() => {
+                        setValidationAttempt((x) => x + 1)
+                        if (invalid[0]) jump(invalid[0].item.id)
+                      }}
                     >
                       Next required item
                     </button>
@@ -675,7 +674,12 @@ export default function InspectionExecution() {
                         className="border border-border rounded-lg px-2 py-2 text-xs text-text-2"
                         onClick={() => jump(group[0].id)}
                       >
-                        {section} · {group.filter((i) => get(i.id).result).length}/{group.length}
+                        {section} ·{' '}
+                        {
+                          group.filter((i) => questionAnswered(i, get(i.id)))
+                            .length
+                        }
+                        /{group.length}
                       </button>
                     )
                   })}
@@ -692,6 +696,7 @@ export default function InspectionExecution() {
                   const d = get(item.id),
                     ft = item.field_type || 'pass_fail',
                     policy = json(item.conditional_json),
+                    assessment = questionPolicy(item).assessment,
                     options = json(item.options_json),
                     readOnly = !mayEdit || signing || review || complete.isPending
                   return (
@@ -830,19 +835,41 @@ export default function InspectionExecution() {
                             </Button>
                           </div>
                         )}
-                        <div className="flex gap-2" aria-label="Result">
-                          {(['pass', 'fail', 'na'] as Result[]).map((r) => (
-                            <button
-                              type="button"
-                              key={r}
-                              aria-pressed={d.result === r}
-                              className="result-option"
-                              onClick={() => update(item.id, { result: r })}
-                            >
-                              {r === 'pass' ? '✓ Pass' : r === 'fail' ? '× Fail' : 'N/A'}
-                            </button>
-                          ))}
-                        </div>
+                        {assessment.required && assessment.mode !== 'manual' && (
+                          <p className="text-sm" aria-live="polite">
+                            Derived assessment:{' '}
+                            {derivedResult(item, d)?.toUpperCase() || 'Enter a response'} (
+                            {assessment.mode === 'limits'
+                              ? 'configured numeric limits'
+                              : 'configured answer rule'}
+                            )
+                          </p>
+                        )}
+                        {assessment.required && (
+                          <div className="flex gap-2" aria-label="Result">
+                            {(['pass', 'fail', 'na'] as Result[])
+                              .filter(
+                                (r) =>
+                                  (r !== 'na' || questionPolicy(item).allowNA) &&
+                                  (assessment.mode === 'manual' || r === 'na'),
+                              )
+                              .map((r) => (
+                                <button
+                                  type="button"
+                                  key={r}
+                                  aria-pressed={d.result === r}
+                                  className="result-option"
+                                  onClick={() =>
+                                    update(item.id, {
+                                      result: r === 'na' && d.result === 'na' ? undefined : r,
+                                    })
+                                  }
+                                >
+                                  {r === 'pass' ? '✓ Pass' : r === 'fail' ? '× Fail' : 'N/A'}
+                                </button>
+                              ))}
+                          </div>
+                        )}
                         {(d.result === 'fail' || d.result === 'na' || d.notes) && (
                           <label className="field-label">
                             {d.result === 'na'
@@ -917,7 +944,12 @@ export default function InspectionExecution() {
                       )}
                       {!mayEdit && (
                         <p className="text-sm text-text-2 mt-3">
-                          Recorded result: {d.result?.toUpperCase() || 'Unanswered'}
+                          Recorded result:{' '}
+                          {assessment.required
+                            ? d.result?.toUpperCase() || 'Unanswered'
+                            : hasAnswer(item, d)
+                              ? 'Information only'
+                              : 'Unanswered'}
                           {d.value && ft !== 'signature' && ` · ${d.value}`}
                         </p>
                       )}

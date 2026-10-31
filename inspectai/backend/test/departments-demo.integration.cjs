@@ -55,6 +55,7 @@ const express = require('express'),
     departmentIds = {}
   let checks = 0
   async function request(persona, method, path, body, expected = 200) {
+    if(expected===200 && method==='POST' && path.endsWith('/submit-approval') && !body?.confirmationToken){const preview=await request(persona,'POST',path.replace('/submit-approval','/approval-preview'),body);body={...body,confirmationToken:preview.data.confirmationToken}}
     const u = personas[persona]
     const r = await fetch(base + path, {
       method,
@@ -143,6 +144,7 @@ const express = require('express'),
     const visibleDemo = await verifyRailDemo((path) => call('admin', 'GET', path))
     assert.equal(visibleDemo.assets, 60)
     assert.equal(visibleDemo.publishedForms, 20)
+    assert.equal(visibleDemo.formVersions, 23)
     assert.equal(visibleDemo.minimumQuestions, 10)
     assert.equal(visibleDemo.workOrders, 20)
     await assert.rejects(
@@ -171,7 +173,7 @@ const express = require('express'),
       }),
       /60 sample assets/,
     )
-    checks += 8
+    checks += 9
     const size = async () =>
       (
         await db.query(
@@ -539,6 +541,7 @@ const express = require('express'),
       db,
       fixturePassword,
     })
+    await require('./question-policy-reports.cjs')({call,request,assetId,personas,demoSignature,db,base,jwt,fixturePassword,departmentIds})
     const { READINESS_SQL, databaseReady } = require('../dist/lib/readiness')
     assert(databaseReady((await db.query(READINESS_SQL)).rows[0]))
     await db.exec('RESET ROLE')

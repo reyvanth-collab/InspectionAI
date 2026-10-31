@@ -5,7 +5,7 @@ const { PGlite } = require('@electric-sql/pglite')
 const { pgcrypto } = require('@electric-sql/pglite/contrib/pgcrypto')
 const { uuid_ossp } = require('@electric-sql/pglite/contrib/uuid_ossp')
 require('express-async-errors')
-process.env.JWT_SECRET = 'regression-test-only-secret-long-enough'
+process.env.JWT_SECRET = crypto.randomBytes(48).toString('base64url')
 const express = require('express'),
   dbModule = require('../dist/lib/db'),
   jwt = require('../dist/lib/jwt')
@@ -23,6 +23,7 @@ const users = Object.fromEntries(
 )
 const foreign = { ...users.inspector, id: id(), tenantId: otherTenant, email: 'other@test.invalid' }
 async function expect(status, path, body, role = 'admin', method = 'POST') {
+  if(status===200 && method==='POST' && path.endsWith('/submit-approval') && !body?.confirmationToken){const preview=await expect(200,path.replace('/submit-approval','/approval-preview'),body,role);body={...body,confirmationToken:preview.confirmationToken}}
   const user = role === 'foreign' ? foreign : users[role]
   const response = await fetch(base + path, {
     method,

@@ -21,6 +21,7 @@ const tokens = {}
 let checks = 0
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL })
 async function request(expected, method, path, body, role = 'admin') {
+  if(expected===200 && method==='POST' && path.endsWith('/submit-approval') && !body?.confirmationToken){const preview=await request(200,'POST',path.replace('/submit-approval','/approval-preview'),body,role);body={...body,confirmationToken:preview.data.confirmationToken}}
   const response = await fetch(base + path, {
     method,
     headers: {

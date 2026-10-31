@@ -20,24 +20,24 @@ router.get('/summary', requireAuth, async (req: AuthRequest, res, next) => {
       query(
         `SELECT COUNT(*) FROM public.inspection_findings f
          JOIN   public.inspection_records r ON r.id = f.inspection_record_id
-         WHERE  r.tenant_id = $1 AND r.started_at >= $2`,
+         WHERE  r.tenant_id = $1 AND r.completed_at >= $2 AND r.signed_at IS NOT NULL AND r.signature_hash IS NOT NULL AND f.result IN ('pass','fail')`,
         [req.user!.tenantId, since],
       ),
       query(
         `SELECT COUNT(*) FROM public.inspection_findings f
          JOIN   public.inspection_records r ON r.id = f.inspection_record_id
-         WHERE  r.tenant_id = $1 AND r.started_at >= $2 AND f.result = 'pass'`,
+         WHERE  r.tenant_id = $1 AND r.completed_at >= $2 AND r.signed_at IS NOT NULL AND r.signature_hash IS NOT NULL AND f.result = 'pass'`,
         [req.user!.tenantId, since],
       ),
       query(
         `SELECT COUNT(*) FROM public.inspection_findings f
          JOIN   public.inspection_records r ON r.id = f.inspection_record_id
-         WHERE  r.tenant_id = $1 AND r.started_at >= $2 AND f.result = 'fail'`,
+         WHERE  r.tenant_id = $1 AND r.completed_at >= $2 AND r.signed_at IS NOT NULL AND r.signature_hash IS NOT NULL AND f.result = 'fail'`,
         [req.user!.tenantId, since],
       ),
       query(
         `SELECT COUNT(*) FROM public.inspection_records
-         WHERE  tenant_id = $1 AND started_at >= $2`,
+         WHERE  tenant_id = $1 AND completed_at >= $2 AND signed_at IS NOT NULL AND signature_hash IS NOT NULL`,
         [req.user!.tenantId, since],
       ),
     ])
@@ -61,16 +61,16 @@ router.get('/by-category', requireAuth, async (req: AuthRequest, res, next) => {
     const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
     const result = await query(
-      `SELECT   COALESCE(ci.category, 'General') AS category,
+      `SELECT   COALESCE(NULLIF(ci.category,''), 'Unclassified') AS category,
                 SUM(CASE WHEN f.result = 'pass' THEN 1 ELSE 0 END) AS pass,
                 SUM(CASE WHEN f.result = 'fail' THEN 1 ELSE 0 END) AS fail
        FROM     public.inspection_findings f
        JOIN     public.inspection_records r  ON r.id = f.inspection_record_id
        LEFT JOIN public.wi_checklist_items ci ON ci.id = f.checklist_item_id
        WHERE    r.tenant_id = $1
-         AND    r.started_at >= $2
+         AND    r.completed_at >= $2 AND r.signed_at IS NOT NULL AND r.signature_hash IS NOT NULL
          AND    f.result IN ('pass','fail')
-       GROUP BY COALESCE(ci.category, 'General')
+       GROUP BY COALESCE(NULLIF(ci.category,''), 'Unclassified')
        ORDER BY (pass + fail) DESC`,
       [req.user!.tenantId, since],
     )

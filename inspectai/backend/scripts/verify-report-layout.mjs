@@ -6,12 +6,24 @@ const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
 for (const name of [
   'completed',
   'long-multipage',
-  ...((await fs.access('.env.pdf-checks/live-acceptance.pdf').then(
-    () => true,
-    () => false,
-  ))
-    ? ['live-acceptance']
-    : []),
+  ...(
+    await Promise.all(
+      [
+        'live-acceptance',
+        'policy-mixed',
+        'policy-information',
+        'live-policy-mixed',
+        'live-policy-information',
+      ].map(async (name) =>
+        (await fs.access('.env.pdf-checks/' + name + '.pdf').then(
+          () => true,
+          () => false,
+        ))
+          ? name
+          : null,
+      ),
+    )
+  ).filter(Boolean),
 ]) {
   const bytes = new Uint8Array(await fs.readFile(`.env.pdf-checks/${name}.pdf`))
   const document = await getDocument({ data: bytes, useSystemFonts: true, isEvalSupported: false })
@@ -38,6 +50,8 @@ for (const name of [
     assert(allText.includes('30'))
     assert(allText.includes('do not execute'))
   }
+  if (name?.endsWith('policy-information'))
+    assert(compactText.includes('Completed—noassessedchecks'))
   console.log(
     `PASS ${name}: ${document.numPages} A4 pages; text parsed and representative pages rendered`,
   )

@@ -17,6 +17,7 @@ export async function verifyRailDemo(get) {
   }
   const assets = await all('/assets?pageSize=100')
   const forms = await all('/work-instructions?status=active')
+  const versions = await all('/work-instructions')
   const workOrders = await all('/inspections')
   const expected = departments.flatMap(department => department.forms.map((_, index) => `DEMO-${department.code}-F${index + 1}`))
   const fullForms = forms.filter(form => expected.includes(form.wi_number))
@@ -26,5 +27,5 @@ export async function verifyRailDemo(get) {
   }
   const seededAssets = assets.filter(asset => String(asset.asset_number).startsWith('DEMO-'))
   if (seededAssets.length < 60 || workOrders.length < 20) throw new Error('Rail demo is incomplete: expected at least 60 sample assets and 20 work orders. Run the guarded demo seed in the verified staging project.')
-  return { workspace: user.tenantName || DEMO_NAME, assets: seededAssets.length, publishedForms: new Set(fullForms.map(form => form.wi_number)).size, minimumQuestions: Math.min(...fullForms.map(form => Number(form.checkable_item_count))), workOrders: workOrders.length }
+  return { workspace: user.tenantName || DEMO_NAME, assets: seededAssets.length, publishedForms: new Set(fullForms.map(form => form.wi_number)).size, formVersions: versions.length, minimumQuestions: Math.min(...fullForms.map(form => Number(form.checkable_item_count))), workOrders: workOrders.length }
 }

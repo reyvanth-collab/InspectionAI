@@ -5,11 +5,7 @@ import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import {
-  useWorkInstruction,
-  useSubmitForApproval,
-  useCreateWIRevision,
-} from '@/hooks/useWorkInstructions'
+import { useWorkInstruction, useCreateWIRevision } from '@/hooks/useWorkInstructions'
 import { useApprovers } from '@/hooks/useUsers'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/context/AuthContext'
@@ -54,7 +50,6 @@ export default function WIDetail() {
   const { data: approvers = [] } = useApprovers(
     typeof wi?.department_id === 'string' ? wi.department_id : undefined,
   )
-  const submitForApproval = useSubmitForApproval()
   const createRevision = useCreateWIRevision()
 
   const [showApprovalModal, setShowApprovalModal] = useState(false)
@@ -67,20 +62,8 @@ export default function WIDetail() {
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id],
     )
 
-  const handleSubmitApproval = async () => {
-    if (selectedApprovers.length === 0) {
-      toast('Select at least one approver', 'error')
-      return
-    }
-    try {
-      await submitForApproval.mutateAsync({ wiDbId: dbId, approverIds: selectedApprovers })
-      toast('Submitted for approval', 'success')
-      setShowApprovalModal(false)
-      setSelectedApprovers([])
-      await refetchWI()
-    } catch (e) {
-      toast(e instanceof Error ? e.message : 'Failed to submit', 'error')
-    }
+  const handleSubmitApproval = () => {
+    navigate('/library/' + dbId + '/edit', { state: { approvalApprovers: selectedApprovers } })
   }
 
   const handleCreateRevision = async () => {
@@ -402,12 +385,8 @@ export default function WIDetail() {
             >
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              loading={submitForApproval.isPending}
-              onClick={handleSubmitApproval}
-            >
-              Submit
+            <Button variant="primary" onClick={handleSubmitApproval}>
+              Preview and confirm in editor
             </Button>
           </>
         }

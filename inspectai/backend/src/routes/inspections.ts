@@ -1,3 +1,4 @@
+import { answerProblem, derivedResult, questionAnswered, policy } from '../lib/questionPolicy'
 import { workOrderFilters } from '../lib/workOrderFilters'
 import { listOrder } from '../lib/listOrder'
 import { Router } from 'express'
@@ -222,14 +223,12 @@ router.put('/:id/draft', async (req: AuthRequest, res, next) => {
       )
     ) {
       await client.query('ROLLBACK')
-      res
-        .status(409)
-        .json({
-          error:
-            'This inspection changed in another tab. Your input is retained. Reload the latest draft before editing.',
-          conflict: true,
-          version,
-        })
+      res.status(409).json({
+        error:
+          'This inspection changed in another tab. Your input is retained. Reload the latest draft before editing.',
+        conflict: true,
+        version,
+      })
       return
     }
     // Identical retries after a lost HTTP response are safe and do not add evidence.
@@ -680,12 +679,12 @@ router.post('/:id/findings', requireAuth, async (req: AuthRequest, res, next) =>
       notes,
       capturedValue,
     } = req.body
-    if (!['pass', 'fail', 'na'].includes(findingResult)) {
+    if (![null, 'pass', 'fail', 'na'].includes(findingResult ?? null)) {
       res.status(400).json({ error: 'Invalid finding result' })
       return
     }
     const belongsRes = await query(
-      `SELECT ir.id, ir.completed_at
+      `SELECT ir.id, ir.completed_at,ci.field_type,ci.conditional_json,ci.min_value,ci.max_value
        FROM public.inspection_records ir
        JOIN public.work_orders wo ON wo.id = ir.work_order_id
        JOIN public.wi_checklist_items ci
@@ -706,6 +705,32 @@ router.post('/:id/findings', requireAuth, async (req: AuthRequest, res, next) =>
       res.status(409).json({ error: 'Completed inspections cannot be changed' })
       return
     }
+    const definition = belongsRes.rows[0]
+    if (
+      policy(definition).assessment.required &&
+      policy(definition).assessment.mode === 'manual' &&
+      !findingResult
+    ) {
+      res.status(400).json({ error: 'Choose a Pass/Fail assessment' })
+      return
+    }
+    if (findingResult === 'na' && !policy(definition).allowNA) {
+      res.status(400).json({ error: 'N/A is not configured for this question' })
+      return
+    }
+    if (!policy(definition).assessment.required && findingResult != null) {
+      res
+        .status(400)
+        .json({
+          error: 'This informational question does not accept a Pass/Fail result',
+          fieldErrors: { [checklistItemId]: 'Save the response without an assessment result' },
+        })
+      return
+    }
+    const normalizedResult = derivedResult(definition, {
+      result: findingResult,
+      value: capturedValue,
+    })
 
     const result = await query(
       `INSERT INTO public.inspection_findings
@@ -717,7 +742,7 @@ router.post('/:id/findings', requireAuth, async (req: AuthRequest, res, next) =>
       [
         inspectionRecordId,
         checklistItemId,
-        findingResult,
+        normalizedResult,
         notes || null,
         req.user!.tenantId,
         capturedValue ?? null,
@@ -860,6 +885,10 @@ router.post(['/:id/complete', '/:id/review'], requireAuth, async (req: AuthReque
           .json({ error: 'Draft changed. Save and review the latest responses before signing.' })
         return
       }
+      const definitions = await client.query(
+        'SELECT * FROM public.wi_checklist_items WHERE work_instruction_id=$1 AND tenant_id=$2',
+        [record.work_instruction_id, req.user!.tenantId],
+      )
       for (const [qid, value] of Object.entries(draft.answers)) {
         const a = value as {
           result: string | null
@@ -868,6 +897,18 @@ router.post(['/:id/complete', '/:id/review'], requireAuth, async (req: AuthReque
           naReason?: string
           photos: string[]
         }
+        const definition = definitions.rows.find((q) => q.id === qid)
+        if (!definition) throw new Error('Question is unavailable')
+        const issue = answerProblem(definition, a)
+        if (issue) {
+          await client.query('ROLLBACK')
+          res.status(409).json({
+            error: 'Question ' + definition.item_no + ': ' + issue,
+            fieldErrors: { [qid]: issue },
+          })
+          return
+        }
+        a.result = derivedResult(definition, a)
         await client.query(
           `INSERT INTO public.inspection_findings(inspection_record_id,checklist_item_id,tenant_id,result,captured_value,notes,photo_urls) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(inspection_record_id,checklist_item_id) DO UPDATE SET result=excluded.result,captured_value=excluded.captured_value,notes=excluded.notes,photo_urls=excluded.photo_urls WHERE (inspection_findings.result,inspection_findings.captured_value,inspection_findings.notes,inspection_findings.photo_urls) IS DISTINCT FROM (excluded.result,excluded.captured_value,excluded.notes,excluded.photo_urls)`,
           [
@@ -882,151 +923,51 @@ router.post(['/:id/complete', '/:id/review'], requireAuth, async (req: AuthReque
         )
       }
     }
-    const countRes = await client.query(
-      `SELECT
-         COUNT(ci.id) FILTER (
-           WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
-         )::int AS total_items,
-         COUNT(ci.id) FILTER (
-           WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
-             AND ci.required IS DISTINCT FROM false
-         )::int AS required_total,
-         COUNT(ci.id) FILTER (
-           WHERE COALESCE(ci.field_type, 'pass_fail') <> 'heading'
-             AND ci.required IS DISTINCT FROM false
-             AND f.result IN ('pass', 'fail', 'na')
-         )::int AS required_answered,
-         COUNT(ci.id) FILTER (WHERE f.result = 'pass')::int AS passed,
-         COUNT(ci.id) FILTER (WHERE f.result = 'fail')::int AS failed,
-         COUNT(ci.id) FILTER (WHERE f.result = 'na')::int   AS na
-       FROM public.work_orders wo
-       JOIN public.wi_checklist_items ci
-         ON ci.work_instruction_id = wo.work_instruction_id
-        AND ci.tenant_id = wo.tenant_id
-       LEFT JOIN public.inspection_findings f
-         ON f.inspection_record_id = $1
-        AND f.checklist_item_id = ci.id
-        AND f.tenant_id = wo.tenant_id
-       WHERE wo.id = $2
-         AND wo.tenant_id = $3`,
-      [inspectionRecordId, req.params.id, req.user!.tenantId],
-    )
-    const counts = countRes.rows[0]
-    if (
-      counts.required_answered < counts.required_total ||
-      counts.passed + counts.failed + counts.na < 1
-    ) {
-      await client.query('ROLLBACK')
-      res.status(409).json({
-        error: `Complete all required checklist items before signing (${counts.required_answered}/${counts.required_total} complete)`,
-      })
-      return
-    }
-    const overallResult = counts.failed > 0 ? 'fail' : counts.passed > 0 ? 'pass' : 'na'
     const snapshotRes = await client.query(
       `SELECT ci.id, ci.item_no, ci.description, ci.acceptance_criteria, ci.field_type,
-              ci.min_value, ci.max_value, ci.unit, ci.category, ci.layout_json, ci.sort_order, ci.required, ci.options_json, ci.conditional_json, f.result, f.notes, f.captured_value, f.photo_urls
+              ci.min_value, ci.max_value, ci.unit, ci.category, ci.lineage_id, ci.layout_json, ci.sort_order, ci.required, ci.options_json, ci.conditional_json, f.result, f.notes, f.captured_value, f.photo_urls
        FROM public.work_orders wo
        JOIN public.wi_checklist_items ci ON ci.work_instruction_id = wo.work_instruction_id AND ci.tenant_id = wo.tenant_id
        LEFT JOIN public.inspection_findings f ON f.checklist_item_id = ci.id AND f.inspection_record_id = $1
        WHERE wo.id = $2 AND wo.tenant_id = $3 ORDER BY ci.sort_order, ci.id`,
       [inspectionRecordId, req.params.id, req.user!.tenantId],
     )
+    const fieldErrors: Record<string, string> = {}
     for (const item of snapshotRes.rows) {
-      if (item.field_type === 'heading' || !item.result) continue
-      const policy = item.conditional_json ? JSON.parse(item.conditional_json) : {}
-      let issue = ''
+      if (item.field_type === 'heading') continue
+      const issue = answerProblem(item, item)
+      if (issue) fieldErrors[item.id] = issue
       if (
-        item.result === 'na' &&
-        (item.required !== false || policy.naReasonRequired) &&
-        !item.notes?.trim()
+        item.field_type === 'signature' &&
+        item.captured_value &&
+        !validSignature(item.captured_value)
       )
-        issue = 'N/A needs a reason'
-      if (item.result !== 'na') {
-        if (
-          item.required !== false &&
-          [
-            'text',
-            'textarea',
-            'dropdown',
-            'select',
-            'yes_no',
-            'date',
-            'signature',
-            'table',
-            'multiselect',
-            'checkbox',
-          ].includes(item.field_type) &&
-          !item.captured_value?.trim()
-        )
-          issue = 'A response is required'
-        if (
-          ['number', 'measurement'].includes(item.field_type) &&
-          (!item.captured_value?.trim() || !Number.isFinite(Number(item.captured_value)))
-        )
-          issue = 'A numeric reading is required'
-        if (item.result === 'fail' && policy.notesOnFail && !item.notes?.trim())
-          issue = 'Failure notes are required'
-        if (
-          ((item.result === 'fail' && policy.photoOnFail) ||
-            (item.field_type === 'photo' && item.required !== false)) &&
-          !item.photo_urls?.length
-        )
-          issue = 'Photo evidence is required'
-        if (
-          item.field_type === 'signature' &&
-          item.required !== false &&
-          !validSignature(item.captured_value)
-        )
-          issue = 'A valid question signature is required'
-        if (
-          ['dropdown', 'select'].includes(item.field_type) &&
-          item.captured_value &&
-          !JSON.parse(item.options_json || '[]').includes(item.captured_value)
-        )
-          issue = 'Choose a listed response option'
-        if (
-          item.field_type === 'yes_no' &&
-          item.required !== false &&
-          !['Yes', 'No', 'yes', 'no'].includes(item.captured_value)
-        )
-          issue = 'Choose Yes or No'
-        if (
-          item.field_type === 'date' &&
-          item.captured_value &&
-          (!/^\d{4}-\d{2}-\d{2}$/.test(item.captured_value) ||
-            Number.isNaN(Date.parse(item.captured_value)) ||
-            new Date(item.captured_value).toISOString().slice(0, 10) !== item.captured_value)
-        )
-          issue = 'A valid date is required'
-        if (['multiselect', 'table'].includes(item.field_type) && item.required !== false) {
-          try {
-            const value = JSON.parse(item.captured_value || 'null')
-            if (
-              item.field_type === 'multiselect' &&
-              (!Array.isArray(value) ||
-                !value.length ||
-                value.some((v) => !JSON.parse(item.options_json || '[]').includes(v)))
-            )
-              issue = 'Choose at least one listed response'
-            if (
-              item.field_type === 'table' &&
-              (!value ||
-                typeof value !== 'object' ||
-                !Object.values(value).some((v) => String(v).trim()))
-            )
-              issue = 'Complete the response table'
-          } catch {
-            issue = 'A valid structured response is required'
-          }
-        }
-      }
-      if (issue) {
-        await client.query('ROLLBACK')
-        res.status(409).json({ error: 'Question ' + item.item_no + ': ' + issue })
-        return
-      }
+        fieldErrors[item.id] = 'Capture a valid question signature'
+      item.assessment_required = policy(item).assessment.required
+      item.assessment_mode = policy(item).assessment.mode
+      item.answered = questionAnswered(item, item)
     }
+    if (Object.keys(fieldErrors).length) {
+      await client.query('ROLLBACK')
+      res
+        .status(409)
+        .json({ error: 'Complete the highlighted questions before signing', fieldErrors })
+      return
+    }
+    const answerable = snapshotRes.rows.filter((i) => i.field_type !== 'heading')
+    if (!answerable.length) {
+      await client.query('ROLLBACK')
+      res.status(409).json({ error: 'An inspection needs at least one question' })
+      return
+    }
+    const counts = {
+      total_items: answerable.length,
+      passed: answerable.filter((i) => i.assessment_required && i.result === 'pass').length,
+      failed: answerable.filter((i) => i.assessment_required && i.result === 'fail').length,
+      na: answerable.filter((i) => i.result === 'na').length,
+    }
+    const assessed = counts.passed + counts.failed
+    const overallResult = counts.failed ? 'fail' : counts.passed ? 'pass' : counts.na ? 'na' : null
     if (draft)
       for (const item of snapshotRes.rows) {
         const a = draft.answers[item.id]
@@ -1038,7 +979,12 @@ router.post(['/:id/complete', '/:id/review'], requireAuth, async (req: AuthReque
     const reviewToken = crypto
       .createHmac('sha256', process.env.JWT_SECRET!)
       .update(
-        canonicalJson({ actor:req.user!.id,record: record.id, version: draft?.version || 0, items: snapshotRes.rows }),
+        canonicalJson({
+          actor: req.user!.id,
+          record: record.id,
+          version: draft?.version || 0,
+          items: snapshotRes.rows,
+        }),
       )
       .digest('hex')
     if (reviewing) {
@@ -1056,7 +1002,13 @@ router.post(['/:id/complete', '/:id/review'], requireAuth, async (req: AuthReque
       return
     }
     const signedPayload = {
-      version: 3,
+      version: 4,
+      assessmentSummary: {
+        assessed,
+        informational: answerable.filter((i) => !i.assessment_required && i.answered).length,
+        unanswered: answerable.filter((i) => !i.answered).length,
+        completionLabel: assessed ? overallResult : 'Completed — no assessed checks',
+      },
       workspaceName: req.user!.tenantName || 'Workspace not recorded',
       signerName: req.user!.name || 'Signer name not recorded',
       formReference: record.form_reference,

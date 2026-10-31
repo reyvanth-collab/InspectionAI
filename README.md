@@ -4,6 +4,8 @@ Online inspection workflow release candidate. See [release scope, checks and dep
 
 Latest table, draft and completed-PDF workflow: [implementation, safe local update and verification](inspectai/docs/TABLES_DRAFTS_REPORTS.md).
 
+Question assessment, user access tables, report catalogue and approval preview: [behaviour, safe update and verification](inspectai/docs/QUESTION_POLICIES_REPORTS.md).
+
 Current focused workflow: [start, permissions, migration strategy and verification](inspectai/docs/FOCUSED_APP.md). Optional fictional rail data: [safe seed and cleanup](inspectai/docs/RAIL_DEMO.md).
 
 ```sh

@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { listOrder } from '../lib/listOrder'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHmac } from 'node:crypto'
+import { canonicalJson } from '../lib/signature'
+import { configurationProblem } from '../lib/questionPolicy'
 import { requireAuth, requireCapability, type AuthRequest } from '../middleware/auth'
 import { pool, query, beginActorTransaction } from '../lib/db'
 import { auditLog, notifyUsers } from '../lib/events'
@@ -280,7 +282,7 @@ router.put(
         String(req.body.changeSummary || 'Draft edited'),
       ])
       const locked = await client.query(
-        'SELECT status FROM public.work_instructions WHERE id=$1 AND tenant_id=$2 FOR UPDATE',
+        'SELECT status,updated_at FROM public.work_instructions WHERE id=$1 AND tenant_id=$2 FOR UPDATE',
         [req.params.id, req.user!.tenantId],
       )
       if (!locked.rows.length) {
@@ -292,6 +294,18 @@ router.put(
         await client.query('ROLLBACK')
         res.status(409).json({
           error: 'Approved or submitted instructions are immutable. Create a new draft revision.',
+        })
+        return
+      }
+      if (
+        req.body.expectedUpdatedAt &&
+        new Date(locked.rows[0].updated_at).toISOString() !==
+          new Date(req.body.expectedUpdatedAt).toISOString()
+      ) {
+        await client.query('ROLLBACK')
+        res.status(409).json({
+          error:
+            'This draft was edited elsewhere. Your input is retained; open the latest revision in another tab before reconciling.',
         })
         return
       }
@@ -427,6 +441,64 @@ router.patch('/:id/status', requireAuth, (_req, res) => {
   res.status(405).json({ error: 'Use the approval workflow' })
 })
 
+async function approvalContent(
+  run: typeof query,
+  id: string,
+  tenant: string,
+  actor: string,
+  approvers: string[],
+) {
+  const form = (
+    await run('SELECT * FROM public.work_instructions WHERE id=$1 AND tenant_id=$2', [id, tenant])
+  ).rows[0]
+  const items = (
+    await run(
+      'SELECT * FROM public.wi_checklist_items WHERE work_instruction_id=$1 AND tenant_id=$2 ORDER BY sort_order,id',
+      [id, tenant],
+    )
+  ).rows
+  return {
+    form,
+    items,
+    confirmationToken: createHmac('sha256', process.env.JWT_SECRET!)
+      .update(canonicalJson(JSON.parse(JSON.stringify({ form, items, actor, approvers }))))
+      .digest('hex'),
+  }
+}
+router.post(
+  '/:id/approval-preview',
+  requireAuth,
+  requireCapability('form_author'),
+  async (req: AuthRequest, res) => {
+    const content = await approvalContent(
+      query,
+      req.params.id,
+      req.user!.tenantId,
+      req.user!.id,
+      req.body.approverIds || [],
+    )
+    if (!content.form) {
+      res.status(404).json({ error: 'Form is unavailable' })
+      return
+    }
+    if (content.form.status !== 'draft') {
+      res.status(409).json({ error: 'Only editable drafts can be confirmed' })
+      return
+    }
+    const fieldErrors: Record<string, string> = {}
+    if (!content.items.some((i) => i.field_type !== 'heading'))
+      fieldErrors.questions = 'Add at least one answerable question'
+    for (const q of content.items) {
+      const issue = configurationProblem(q)
+      if (issue) fieldErrors[q.id] = issue
+    }
+    if (Object.keys(fieldErrors).length) {
+      res.status(400).json({ error: 'Correct the form before confirming', fieldErrors })
+      return
+    }
+    res.json({ data: { confirmationToken: content.confirmationToken } })
+  },
+)
 // ── POST /api/work-instructions/:id/submit-approval ─────────────
 router.post(
   '/:id/submit-approval',
@@ -538,6 +610,30 @@ router.post(
         await client.query('ROLLBACK')
         res.status(409).json({ error: 'This work instruction is already awaiting approval' })
         return
+      }
+
+      const content = await approvalContent(
+        client.query.bind(client),
+        wiId,
+        req.user!.tenantId,
+        req.user!.id,
+        uniqueApproverIds,
+      )
+      if (req.body.confirmationToken !== content.confirmationToken) {
+        await client.query('ROLLBACK')
+        res.status(409).json({
+          error:
+            'The saved form or approval sequence changed. Preview and confirm the latest content before submitting.',
+        })
+        return
+      }
+      for (const question of content.items) {
+        const issue = configurationProblem(question)
+        if (issue) {
+          await client.query('ROLLBACK')
+          res.status(400).json({ error: issue, fieldErrors: { [question.id]: issue } })
+          return
+        }
       }
 
       const approvalRes = await client.query(
@@ -755,6 +851,22 @@ async function insertItems(
 export default router
 
 function validateItems(body: any): string | null {
+  if (
+    body.expectedUpdatedAt !== undefined &&
+    (typeof body.expectedUpdatedAt !== 'string' ||
+      !Number.isFinite(Date.parse(body.expectedUpdatedAt)))
+  )
+    return 'Supply a valid saved-draft version'
+  for (const key of ['effectiveDate', 'expiryDate'])
+    if (
+      body[key] &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(body[key]) ||
+        !Number.isFinite(Date.parse(body[key])) ||
+        new Date(body[key]).toISOString().slice(0, 10) !== body[key])
+    )
+      return 'Enter a valid ' + key
+  if (body.effectiveDate && body.expiryDate && body.expiryDate < body.effectiveDate)
+    return 'Expiry must be on or after the effective date'
   for (const key of ['wiNumber', 'title', 'revision'])
     if (typeof body[key] !== 'string' || !body[key].trim())
       return 'Form reference, title and revision are required'
@@ -805,6 +917,14 @@ function validateItems(body: any): string | null {
           return `Invalid question ${key}`
         }
       }
+    const configuration = configurationProblem({
+      field_type: item.fieldType || 'pass_fail',
+      conditional_json: item.conditionalJson,
+      options_json: item.optionsJson,
+      min_value: item.minValue,
+      max_value: item.maxValue,
+    })
+    if (configuration) return 'Question ' + item.itemNo + ': ' + configuration
     if (
       item.minValue != null &&
       item.maxValue != null &&

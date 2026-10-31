@@ -1,15 +1,23 @@
 import { Router } from 'express'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { query } from '../lib/db'
+import catalogueRouter from './reportCatalogue'
 
 const router = Router()
+router.use(catalogueRouter)
 
 // GET /api/reports/inspection-summary?days=30
 router.get('/inspection-summary', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const page = Math.max(1, Math.min(10000, Number.parseInt(String(req.query.page ?? 1), 10) || 1))
-    const pageSize = Math.max(1, Math.min(200, Number.parseInt(String(req.query.pageSize ?? 200), 10) || 200))
-    const days = Math.max(1, Math.min(Number.parseInt(String(req.query.days ?? '30'), 10) || 30, 365))
+    const pageSize = Math.max(
+      1,
+      Math.min(200, Number.parseInt(String(req.query.pageSize ?? 200), 10) || 200),
+    )
+    const days = Math.max(
+      1,
+      Math.min(Number.parseInt(String(req.query.days ?? '30'), 10) || 30, 365),
+    )
     const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
     const result = await query(
@@ -32,23 +40,31 @@ router.get('/inspection-summary', requireAuth, async (req: AuthRequest, res, nex
        LEFT JOIN public.work_instructions wi ON wi.id = wo.work_instruction_id
        LEFT JOIN public.inspection_findings f ON f.inspection_record_id = ir.id
        WHERE  wo.tenant_id = $1
-         AND  wo.status = 'complete'
+         AND  wo.status = 'complete' AND ir.completed_at IS NOT NULL AND ir.signed_at IS NOT NULL AND ir.signature_hash IS NOT NULL
          AND  wo.completed_at >= $2
        GROUP BY wo.id, wo.wo_number, wo.asset_name, wo.location, wo.completed_at,
                 u.name, wi.wi_number, wi.title, ir.overall_result
        ORDER BY wo.completed_at DESC NULLS LAST, wo.id
        LIMIT $3 OFFSET $4`,
-      [req.user!.tenantId, since, pageSize, (page - 1) * pageSize]
+      [req.user!.tenantId, since, pageSize, (page - 1) * pageSize],
     )
-    res.json({ data: result.rows, meta: { page, pageSize, hasMore: result.rows.length === pageSize } })
-  } catch (err) { next(err) }
+    res.json({
+      data: result.rows,
+      meta: { page, pageSize, hasMore: result.rows.length === pageSize },
+    })
+  } catch (err) {
+    next(err)
+  }
 })
 
 // GET /api/reports/wi-compliance
 router.get('/wi-compliance', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const page = Math.max(1, Math.min(10000, Number.parseInt(String(req.query.page ?? 1), 10) || 1))
-    const pageSize = Math.max(1, Math.min(200, Number.parseInt(String(req.query.pageSize ?? 200), 10) || 200))
+    const pageSize = Math.max(
+      1,
+      Math.min(200, Number.parseInt(String(req.query.pageSize ?? 200), 10) || 200),
+    )
     const result = await query(
       `SELECT
          wi.id,
@@ -68,39 +84,56 @@ router.get('/wi-compliance', requireAuth, async (req: AuthRequest, res, next) =>
        WHERE  wi.tenant_id = $1
        ORDER BY wi.expiry_date ASC NULLS LAST, wi.id
        LIMIT $2 OFFSET $3`,
-      [req.user!.tenantId, pageSize, (page - 1) * pageSize]
+      [req.user!.tenantId, pageSize, (page - 1) * pageSize],
     )
-    res.json({ data: result.rows, meta: { page, pageSize, hasMore: result.rows.length === pageSize } })
-  } catch (err) { next(err) }
+    res.json({
+      data: result.rows,
+      meta: { page, pageSize, hasMore: result.rows.length === pageSize },
+    })
+  } catch (err) {
+    next(err)
+  }
 })
 
 // GET /api/reports/defect-analysis?days=30
 router.get('/defect-analysis', requireAuth, async (req: AuthRequest, res, next) => {
   try {
     const page = Math.max(1, Math.min(10000, Number.parseInt(String(req.query.page ?? 1), 10) || 1))
-    const pageSize = Math.max(1, Math.min(200, Number.parseInt(String(req.query.pageSize ?? 200), 10) || 200))
-    const days = Math.max(1, Math.min(Number.parseInt(String(req.query.days ?? '30'), 10) || 30, 365))
+    const pageSize = Math.max(
+      1,
+      Math.min(200, Number.parseInt(String(req.query.pageSize ?? 200), 10) || 200),
+    )
+    const days = Math.max(
+      1,
+      Math.min(Number.parseInt(String(req.query.days ?? '30'), 10) || 30, 365),
+    )
     const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
     const result = await query(
       `SELECT
+         COALESCE(ci.lineage_id,f.checklist_item_id)::text AS question_identity,
          COALESCE(ci.description, 'Unknown item') AS item_description,
-         COALESCE(ci.category, 'General')         AS category,
+         COALESCE(NULLIF(ci.category,''), 'Unclassified')         AS category,
          COUNT(*) AS fail_count,
          string_agg(DISTINCT f.notes, ' | ' ORDER BY f.notes) FILTER (WHERE f.notes IS NOT NULL AND f.notes != '') AS sample_notes
        FROM   public.inspection_findings f
        JOIN   public.inspection_records ir   ON ir.id = f.inspection_record_id
        LEFT JOIN public.wi_checklist_items ci ON ci.id = f.checklist_item_id
        WHERE  ir.tenant_id = $1
-         AND  ir.started_at >= $2
+         AND  ir.completed_at >= $2 AND ir.signed_at IS NOT NULL AND ir.signature_hash IS NOT NULL
          AND  f.result = 'fail'
-       GROUP BY COALESCE(ci.description, 'Unknown item'), COALESCE(ci.category, 'General')
+       GROUP BY COALESCE(ci.lineage_id,f.checklist_item_id),ci.field_type,ci.unit,ci.min_value,ci.max_value,ci.acceptance_criteria,ci.conditional_json,COALESCE(ci.description, 'Unknown item'), COALESCE(NULLIF(ci.category,''), 'Unclassified')
        ORDER BY fail_count DESC, item_description, category
        LIMIT $3 OFFSET $4`,
-      [req.user!.tenantId, since, pageSize, (page - 1) * pageSize]
+      [req.user!.tenantId, since, pageSize, (page - 1) * pageSize],
     )
-    res.json({ data: result.rows, meta: { page, pageSize, hasMore: result.rows.length === pageSize } })
-  } catch (err) { next(err) }
+    res.json({
+      data: result.rows,
+      meta: { page, pageSize, hasMore: result.rows.length === pageSize },
+    })
+  } catch (err) {
+    next(err)
+  }
 })
 
 export default router
