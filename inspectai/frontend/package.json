@@ -40,6 +40,7 @@
     "vite": "^8.3.5"
   },
   "overrides": {
+    "follow-redirects": "1.16.2",
     "postcss-selector-parser": "^7.1.6"
   }
 }

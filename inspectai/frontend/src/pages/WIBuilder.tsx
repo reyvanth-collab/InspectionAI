@@ -1,8 +1,11 @@
+import { Assessment, defaultAssessment, configurationProblem } from '@/lib/questionPolicy'
+import { ValidationSummary, type ValidationIssue } from '@/components/ui/ValidationSummary'
+import { api } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { can } from '@/lib/permissions'
 import { useDepartments } from '@/hooks/useDepartments'
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import {
   type LucideIcon,
   GripVertical,
@@ -10,7 +13,6 @@ import {
   Copy,
   Eye,
   ArrowLeft,
-  X,
   CheckSquare,
   Type,
   Hash,
@@ -70,7 +72,13 @@ interface WIFieldLayout {
 }
 
 export interface WIField {
-  responsePolicy?: { notesOnFail?: boolean; photoOnFail?: boolean; naReasonRequired?: boolean }
+  responsePolicy?: {
+    assessment?: Assessment
+    allowNA?: boolean
+    notesOnFail?: boolean
+    photoOnFail?: boolean
+    naReasonRequired?: boolean
+  }
   id: string
   type: FieldType
   label: string
@@ -195,6 +203,7 @@ function makeField(type: FieldType, sortOrder: number): WIField {
     id: crypto.randomUUID(),
     type,
     label: defaultLabel[type],
+    responsePolicy: { assessment: defaultAssessment(type), allowNA: false },
     acceptanceCriteria: '',
     required: type !== 'heading',
     placeholder: '',
@@ -508,8 +517,27 @@ export default function WIBuilder() {
   const [showPreview, setShowPreview] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [showApprovalModal, setShowApprovalModal] = useState(false)
-  const [selectedApprovers, setSelectedApprovers] = useState<string[]>([])
+  const location = useLocation()
+  const [selectedApprovers, setSelectedApprovers] = useState<string[]>(
+    (location.state as { approvalApprovers?: string[] })?.approvalApprovers || [],
+  )
+  const hydrated = useRef('')
+  const [savedVersion, setSavedVersion] = useState<string | undefined>()
   const [savedDraftId, setSavedDraftId] = useState('')
+  const [validationAttempt, setValidationAttempt] = useState(0)
+  const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([])
+  const [confirmation, setConfirmation] = useState<{
+    id: string
+    token: string
+    fingerprint: string
+  } | null>(null)
+  const submitting = useRef(false)
+  const validationScope = useRef(false)
+  const [preparing, setPreparing] = useState(false)
+  const fingerprint = JSON.stringify({ meta, fields, departmentId, selectedApprovers })
+  useEffect(() => {
+    if (confirmation && confirmation.fingerprint !== fingerprint) setConfirmation(null)
+  }, [fingerprint, confirmation])
 
   // Drag state
   const dragTypeRef = useRef<FieldType | null>(null) // dragging from palette
@@ -525,7 +553,8 @@ export default function WIBuilder() {
   const { data: approvers = [] } = useApprovers(departmentId || user?.primaryDepartmentId)
 
   useEffect(() => {
-    if (!existingData) return
+    if (!existingData || hydrated.current === String(existingData.id)) return
+    hydrated.current = String(existingData.id)
     setMeta({
       wiNumber: String(existingData.wi_number ?? ''),
       title: String(existingData.title ?? ''),
@@ -555,6 +584,8 @@ export default function WIBuilder() {
             maxValue: item.max_value != null ? String(item.max_value) : '',
             conditional: policy.fieldId ? (policy as WIField['conditional']) : null,
             responsePolicy: {
+              assessment: policy.assessment || { required: type !== 'heading', mode: 'manual' },
+              allowNA: policy.allowNA !== false,
               notesOnFail: policy.notesOnFail,
               photoOnFail: policy.photoOnFail,
               naReasonRequired: policy.naReasonRequired,
@@ -686,25 +717,99 @@ export default function WIBuilder() {
   }
 
   const handleSave = async (submit: boolean) => {
-    if (!meta.wiNumber.trim()) {
-      toast('Form reference is required', 'error')
+    if (submitting.current) return
+    validationScope.current = submit
+    const issues: ValidationIssue[] = []
+    if (!meta.wiNumber.trim())
+      issues.push({ id: 'form-reference', message: 'Enter a form reference' })
+    if (!meta.revision.trim())
+      issues.push({ id: 'form-meta-revision', message: 'Enter a form revision' })
+    if (meta.effectiveDate && meta.expiryDate && meta.expiryDate < meta.effectiveDate)
+      issues.push({
+        id: 'form-meta-expiryDate',
+        message: 'Expiry must be on or after the effective date',
+      })
+    if (!meta.title.trim())
+      issues.push({
+        id: 'form-title',
+        message: 'Enter a form title',
+        reveal: () => setEditingTitle(true),
+      })
+    for (const field of fields) {
+      const issue = configurationProblem({
+        field_type: field.type,
+        conditional_json: JSON.stringify(field.responsePolicy),
+        options_json: JSON.stringify(
+          field.optionsText
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        ),
+        min_value: field.minValue === '' ? null : Number(field.minValue),
+        max_value: field.maxValue === '' ? null : Number(field.maxValue),
+      })
+      const submissionIssue =
+        submit &&
+        ['dropdown', 'multiselect'].includes(field.type) &&
+        field.optionsText.split('\n').filter((s) => s.trim()).length < 2
+          ? 'Add at least two selectable options'
+          : submit &&
+              field.type === 'table' &&
+              field.layout.tableColumns.filter((s) => s.trim()).length < 2
+            ? 'Add at least two table columns'
+            : null
+      if (!field.label.trim() || issue || submissionIssue)
+        issues.push({
+          id: (field.label.trim() ? 'field-editor-' : 'field-label-') + field.id,
+          message: field.label + ': ' + (issue || submissionIssue || 'Enter a question label'),
+          reveal: () => setSelectedId(field.id),
+        })
+    }
+    if (submit && !fields.some((f) => f.type !== 'heading'))
+      issues.push({ id: 'builder-questions', message: 'Add at least one answerable question' })
+    if (submit && !selectedApprovers.length)
+      issues.push({
+        id: 'approval-selection',
+        message: 'Select at least one independent approver',
+        reveal: () => setShowApprovalModal(true),
+      })
+    setValidationIssues(issues)
+    setValidationAttempt((x) => x + 1)
+    if (issues.length) {
+      if (issues.some((i) => i.id !== 'approval-selection')) setShowApprovalModal(false)
       return
     }
-    if (!meta.title.trim()) {
-      toast('Title is required', 'error')
+    if (submit && confirmation) {
+      if (confirmation.fingerprint !== fingerprint) {
+        setConfirmation(null)
+        return
+      }
+      submitting.current = true
+      try {
+        await submitForApproval.mutateAsync({
+          wiDbId: confirmation.id,
+          approverIds: selectedApprovers,
+          confirmationToken: confirmation.token,
+        })
+        toast('Submitted for independent approval', 'success')
+        navigate('/library/' + confirmation.id)
+      } catch (e) {
+        setConfirmation(null)
+        setValidationIssues([
+          {
+            id: 'approval-selection',
+            server: true,
+            message:
+              e instanceof Error ? e.message : 'Submission failed; keep editing and confirm again',
+          },
+        ])
+      } finally {
+        submitting.current = false
+      }
       return
     }
-    const qualityIssues = getChecklistQuality(fields)
-    const blockingIssue = qualityIssues.find((issue) => issue.level === 'error')
-    if (submit && blockingIssue) {
-      toast(blockingIssue.message, 'error')
-      return
-    }
-    if (submit && selectedApprovers.length === 0) {
-      toast('Select at least one approver', 'error')
-      return
-    }
-
+    submitting.current = true
+    setPreparing(true)
     const checklistItems = fields.map((f, i) => ({
       id: f.id,
       itemNo: String(i + 1),
@@ -736,6 +841,7 @@ export default function WIBuilder() {
     try {
       const saved = await saveWI.mutateAsync({
         dbId: editId || savedDraftId || undefined,
+        expectedUpdatedAt: savedVersion || (existingData?.updated_at as string | undefined),
         wiNumber: meta.wiNumber,
         title: meta.title,
         category: meta.category,
@@ -746,25 +852,74 @@ export default function WIBuilder() {
         departmentId: departmentId || user?.primaryDepartmentId,
         checklistItems,
       })
+      setSavedVersion(saved.updated_at ? String(saved.updated_at) : undefined)
       const wiDbId = editId || savedDraftId || String((saved as { id?: string }).id ?? '')
       if (!editId && wiDbId) setSavedDraftId(wiDbId)
       if (submit) {
         if (!wiDbId)
           throw new Error('Saved form, but could not identify it for approval submission')
-        await submitForApproval.mutateAsync({ wiDbId, approverIds: selectedApprovers })
-        toast('Saved and submitted for approval', 'success')
-        setShowApprovalModal(false)
-        setSelectedApprovers([])
-        navigate(`/library/${wiDbId}`)
+        const preview = await api.post<{ data: { confirmationToken: string } }>(
+          '/work-instructions/' + wiDbId + '/approval-preview',
+          { approverIds: selectedApprovers },
+        )
+        setConfirmation({ id: wiDbId, token: preview.data.data.confirmationToken, fingerprint })
         return
       }
       toast('Saved as draft', 'success')
       navigate(wiDbId ? `/library/${wiDbId}` : '/library')
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Save failed', 'error')
+      setValidationIssues([
+        {
+          id: 'form-reference',
+          server: true,
+          message: e instanceof Error ? e.message : 'Save failed; your draft is retained',
+        },
+      ])
+      setShowApprovalModal(false)
+    } finally {
+      submitting.current = false
+      setPreparing(false)
     }
   }
 
+  useEffect(() => {
+    if (!validationIssues.length) return
+    const remaining = validationIssues.filter((issue) => {
+      if (issue.server) return true
+      if (issue.id === 'form-reference') return !meta.wiNumber.trim()
+      if (issue.id === 'form-title') return !meta.title.trim()
+      if (issue.id === 'form-meta-revision') return !meta.revision.trim()
+      if (issue.id === 'form-meta-expiryDate')
+        return !!meta.effectiveDate && !!meta.expiryDate && meta.expiryDate < meta.effectiveDate
+      if (issue.id === 'approval-selection') return !selectedApprovers.length
+      if (issue.id === 'builder-questions') return !fields.some((f) => f.type !== 'heading')
+      const f = fields.find(
+        (f) => 'field-editor-' + f.id === issue.id || 'field-label-' + f.id === issue.id,
+      )
+      return f
+        ? !f.label.trim() ||
+            (validationScope.current &&
+              ['dropdown', 'multiselect'].includes(f.type) &&
+              f.optionsText.split('\n').filter((s) => s.trim()).length < 2) ||
+            (validationScope.current &&
+              f.type === 'table' &&
+              f.layout.tableColumns.filter((s) => s.trim()).length < 2) ||
+            !!configurationProblem({
+              field_type: f.type,
+              conditional_json: JSON.stringify(f.responsePolicy),
+              options_json: JSON.stringify(
+                f.optionsText
+                  .split('\n')
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              ),
+              min_value: f.minValue === '' ? null : Number(f.minValue),
+              max_value: f.maxValue === '' ? null : Number(f.maxValue),
+            })
+        : true
+    })
+    if (remaining.length !== validationIssues.length) setValidationIssues(remaining)
+  }, [fields, meta, selectedApprovers, validationIssues])
   const selectedField = fields.find((f) => f.id === selectedId) ?? null
   const requiredCount = fields.filter((f) => f.required && f.type !== 'heading').length
   const qualityIssues = getChecklistQuality(fields)
@@ -814,6 +969,7 @@ export default function WIBuilder() {
           {editingTitle ? (
             <input
               autoFocus
+              id="form-title"
               value={meta.title}
               onChange={(e) => setMeta((p) => ({ ...p, title: e.target.value }))}
               onBlur={() => setEditingTitle(false)}
@@ -847,6 +1003,7 @@ export default function WIBuilder() {
           </label>
           {/* Form reference */}
           <input
+            id="form-reference"
             value={meta.wiNumber}
             onChange={(e) => setMeta((p) => ({ ...p, wiNumber: e.target.value }))}
             aria-label="Form reference"
@@ -862,7 +1019,7 @@ export default function WIBuilder() {
             <Button
               variant="secondary"
               size="sm"
-              loading={saveWI.isPending}
+              loading={saveWI.isPending || preparing}
               onClick={() => handleSave(false)}
             >
               Save draft
@@ -870,7 +1027,7 @@ export default function WIBuilder() {
             <Button
               variant="primary"
               size="sm"
-              loading={saveWI.isPending || submitForApproval.isPending}
+              loading={saveWI.isPending || submitForApproval.isPending || preparing}
               onClick={() => setShowApprovalModal(true)}
             >
               Submit for Approval
@@ -879,6 +1036,10 @@ export default function WIBuilder() {
         </div>
 
         {/* ── 3-panel layout ────────────────────────────────────── */}
+        <ValidationSummary
+          issues={validationIssues.filter((i) => i.id !== 'approval-selection')}
+          attempt={validationAttempt}
+        />
         <div className="builder-workspace flex flex-1 overflow-hidden">
           {/* LEFT — Palette */}
           <div className="builder-palette w-[220px] flex-shrink-0 border-r border-border bg-bg-2 overflow-y-auto">
@@ -981,6 +1142,8 @@ export default function WIBuilder() {
                     </label>
                     <input
                       type={(f as { type?: string }).type ?? 'text'}
+                      id={'form-meta-' + f.key}
+                      aria-label={f.label}
                       value={meta[f.key as keyof WIMeta]}
                       onChange={(e) => setMeta((p) => ({ ...p, [f.key]: e.target.value }))}
                       placeholder={f.placeholder}
@@ -992,6 +1155,8 @@ export default function WIBuilder() {
 
               {/* Drop zone + field list */}
               <div
+                id="builder-questions"
+                tabIndex={-1}
                 className="min-h-[200px] p-4"
                 onDragOver={(e) => {
                   e.preventDefault()
@@ -1134,6 +1299,7 @@ export default function WIBuilder() {
                 allFields={fields}
                 onChange={updateField}
                 onDelete={deleteField}
+                onDuplicate={duplicateField}
               />
             ) : (
               <ChecklistQualityPanel
@@ -1147,34 +1313,57 @@ export default function WIBuilder() {
       </div>
 
       <Modal
-        open={showApprovalModal}
+        open={showApprovalModal && !showPreview}
         onClose={() => {
           setShowApprovalModal(false)
-          setSelectedApprovers([])
+          setConfirmation(null)
         }}
-        title="Submit Inspection Form for Approval"
+        title={
+          confirmation ? 'Confirm submission for approval' : 'Submit Inspection Form for Approval'
+        }
         footer={
           <>
             <Button
               variant="secondary"
               onClick={() => {
                 setShowApprovalModal(false)
-                setSelectedApprovers([])
+                setConfirmation(null)
               }}
             >
-              Cancel
+              Keep editing
+            </Button>
+            <Button variant="secondary" onClick={() => setShowPreview(true)}>
+              Preview form
             </Button>
             <Button
               variant="primary"
-              loading={saveWI.isPending || submitForApproval.isPending}
-              disabled={selectedApprovers.length === 0}
+              loading={saveWI.isPending || submitForApproval.isPending || preparing}
               onClick={() => handleSave(true)}
             >
-              Save and Submit
+              {confirmation ? 'Submit for approval' : 'Continue to confirmation'}
             </Button>
           </>
         }
       >
+        <ValidationSummary
+          issues={validationIssues.filter((i) => i.id === 'approval-selection')}
+          attempt={validationAttempt}
+        />
+        <div id="approval-selection" tabIndex={-1} className="mb-4">
+          <strong>
+            {meta.wiNumber} · {meta.revision}
+          </strong>
+          <p>
+            Department:{' '}
+            {departments.find((d) => d.id === (departmentId || user?.primaryDepartmentId))?.name}
+          </p>
+          <p>
+            Approval sequence:{' '}
+            {selectedApprovers
+              .map((id) => approvers.find((a) => a.id === id)?.name || 'Unavailable reviewer')
+              .join(' → ') || 'None selected'}
+          </p>
+        </div>
         <p className="text-[13px] text-text-2 mb-4">
           This form will be saved as a draft first, then routed to the selected approvers. It
           becomes active only after the final approval step is completed.
@@ -1570,11 +1759,13 @@ function PropertiesPanel({
   allFields,
   onChange,
   onDelete,
+  onDuplicate,
 }: {
   field: WIField
   allFields: WIField[]
   onChange: (id: string, updates: Partial<WIField>) => void
   onDelete: (id: string) => void
+  onDuplicate: (id: string) => void
 }) {
   const upd = (updates: Partial<WIField>) => onChange(field.id, updates)
   const otherFields = allFields.filter((f) => f.id !== field.id && f.type !== 'heading')
@@ -1592,6 +1783,28 @@ function PropertiesPanel({
           {PALETTE.find((p) => p.type === field.type)?.label ?? field.type}
         </p>
         <p className="text-[10px] text-text-3 mt-0.5">Field configuration</p>
+        <label className="field-label mt-3">
+          Response type
+          <select
+            aria-label="Response type"
+            className={INPUT}
+            value={field.type}
+            onChange={(e) => upd({ type: e.target.value as FieldType })}
+          >
+            {PALETTE.map((p) => (
+              <option key={p.type} value={p.type}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="text-xs text-accent underline mt-3"
+          onClick={() => onDuplicate(field.id)}
+        >
+          Duplicate question
+        </button>
       </div>
 
       {(field.sourcePage ||
@@ -1641,6 +1854,7 @@ function PropertiesPanel({
         <label className={LABEL}>Inspection question</label>
         <input
           autoFocus
+          id={'field-label-' + field.id}
           value={field.label}
           onChange={(e) => upd({ label: e.target.value })}
           className={INPUT}
@@ -1665,6 +1879,119 @@ function PropertiesPanel({
         </div>
       )}
 
+      {field.type !== 'heading' && (
+        <fieldset className={SECTION} id={'field-editor-' + field.id} tabIndex={-1}>
+          <legend className="text-xs font-semibold mb-3">Assessment</legend>
+          <label className="flex gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={field.responsePolicy?.assessment?.required !== false}
+              onChange={(e) =>
+                upd({
+                  responsePolicy: {
+                    ...field.responsePolicy,
+                    assessment: {
+                      ...(field.responsePolicy?.assessment || { mode: 'manual' }),
+                      required: e.target.checked,
+                    },
+                  },
+                })
+              }
+            />
+            Require Pass/Fail assessment
+          </label>
+          <label className="flex gap-2 text-sm mt-3">
+            <input
+              type="checkbox"
+              checked={!!field.responsePolicy?.allowNA}
+              onChange={(e) =>
+                upd({ responsePolicy: { ...field.responsePolicy, allowNA: e.target.checked } })
+              }
+            />
+            Permit N/A
+          </label>
+          {field.responsePolicy?.assessment?.required !== false && (
+            <>
+              <label className="field-label mt-3">
+                Assessment mode
+                <select
+                  aria-label="Assessment mode"
+                  className={INPUT}
+                  value={field.responsePolicy?.assessment?.mode || 'manual'}
+                  onChange={(e) =>
+                    upd({
+                      responsePolicy: {
+                        ...field.responsePolicy,
+                        assessment: {
+                          ...field.responsePolicy?.assessment,
+                          required: true,
+                          mode: e.target.value as Assessment['mode'],
+                        },
+                      },
+                    })
+                  }
+                >
+                  <option value="manual">Manual judgement</option>
+                  <option value="expected">Expected answer / option mapping</option>
+                  <option value="limits">Configured numeric limits</option>
+                </select>
+              </label>
+              {field.responsePolicy?.assessment?.mode === 'expected' && (
+                <>
+                  <label className="field-label mt-3">
+                    Expected acceptable answer
+                    <input
+                      aria-label="Expected acceptable answer"
+                      className={INPUT}
+                      value={field.responsePolicy.assessment.expectedAnswer || ''}
+                      onChange={(e) =>
+                        upd({
+                          responsePolicy: {
+                            ...field.responsePolicy,
+                            assessment: {
+                              ...field.responsePolicy!.assessment!,
+                              expectedAnswer: e.target.value,
+                              optionMap: undefined,
+                            },
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                  <p className="text-xs mt-2">
+                    Exact trimmed match passes; other valid answers fail. Yes and No have no implied
+                    outcome.
+                  </p>
+                </>
+              )}
+            </>
+          )}
+          <div className="flex flex-wrap gap-2 mt-3">
+            {[
+              ['Condition check', 'pass_fail', true],
+              ['Observation with assessment', 'textarea', true],
+              ['Information only', 'text', false],
+            ].map(([label, type, required]) => (
+              <button
+                key={String(label)}
+                type="button"
+                className="text-xs underline"
+                onClick={() =>
+                  upd({
+                    type: type as FieldType,
+                    responsePolicy: {
+                      ...field.responsePolicy,
+                      assessment: { required: !!required, mode: 'manual' },
+                    },
+                  })
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
       {/* Required toggle */}
       {field.type !== 'heading' && (
         <fieldset className={SECTION}>
@@ -1784,6 +2111,17 @@ function PropertiesPanel({
         </label>
       </div>
 
+      {field.responsePolicy?.assessment?.required !== false &&
+        field.responsePolicy?.assessment?.mode !== 'manual' &&
+        field.responsePolicy?.assessment?.mode && (
+          <p className="text-sm mb-3">
+            Assessment derived from{' '}
+            {field.responsePolicy.assessment.mode === 'limits'
+              ? 'configured numeric limits'
+              : 'the configured expected answer'}
+            . No additional judgement is required.
+          </p>
+        )}
       {field.type === 'table' && (
         <div className={SECTION}>
           <label className={LABEL}>Table structure</label>
@@ -2019,45 +2357,19 @@ function PreviewModal({
   onClose: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="bg-bg border border-border rounded-[16px] w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
-        {/* Modal header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <div>
-            <p className="text-[14px] font-semibold text-text">Inspector preview</p>
-            <p className="text-[11px] text-text-3 mt-0.5">Exactly what the inspector sees</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-[6px] text-text-3 hover:text-text hover:bg-bg-2 bg-transparent border-none cursor-pointer transition-all"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* WO info mock */}
-        <div className="px-6 pt-4 pb-3 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-[11px] text-accent bg-accent/10 px-2 py-0.5 rounded">
-              {meta.wiNumber || 'WI-XXX'}
-            </span>
-            <span className="text-[13px] font-semibold text-text">{meta.title}</span>
-            <span className="text-[11px] text-text-3">{meta.revision}</span>
-          </div>
-        </div>
-
-        {/* Fields preview */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4">
-          {fields.length === 0 && (
-            <p className="text-[13px] text-text-3 text-center py-8">No fields added yet</p>
-          )}
-
-          {fields.map((field, idx) => (
-            <PreviewField key={field.id} field={field} index={idx} />
-          ))}
-        </div>
+    <Modal open onClose={onClose} title="Inspector preview — Preview mode" maxWidth="max-w-2xl">
+      <p className="text-sm text-text-2 mb-4">Preview mode. Responses here are not saved.</p>
+      <p className="font-semibold mb-4">
+        {meta.wiNumber} ? {meta.title} ? {meta.revision}
+      </p>
+      <div className="space-y-4">
+        {fields.length ? (
+          fields.map((field, index) => <PreviewField key={field.id} field={field} index={index} />)
+        ) : (
+          <p>No questions added yet.</p>
+        )}
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -2120,22 +2432,25 @@ function PreviewField({ field, index }: { field: WIField; index: number }) {
         {field.required && <AlertCircle size={12} className="text-danger flex-shrink-0 mt-0.5" />}
       </div>
 
-      {field.type === 'pass_fail' && (
-        <div className="flex gap-2">
-          {[
-            { label: 'PASS', cls: 'border-success/40 text-success hover:bg-success/10' },
-            { label: 'FAIL', cls: 'border-danger/40 text-danger hover:bg-danger/10' },
-            { label: 'N/A', cls: 'border-border-2 text-text-3 hover:bg-bg-3' },
-          ].map((b) => (
-            <button
-              key={b.label}
-              className={`flex-1 h-11 rounded-[8px] border text-[12px] font-semibold bg-transparent cursor-pointer transition-colors ${b.cls}`}
-            >
-              {b.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {field.responsePolicy?.assessment?.required !== false &&
+        (field.responsePolicy?.assessment?.mode || 'manual') === 'manual' && (
+          <div className="flex gap-2">
+            {[
+              { label: 'PASS', cls: 'border-success/40 text-success hover:bg-success/10' },
+              { label: 'FAIL', cls: 'border-danger/40 text-danger hover:bg-danger/10' },
+              { label: 'N/A', cls: 'border-border-2 text-text-3 hover:bg-bg-3' },
+            ]
+              .filter((b) => b.label !== 'N/A' || field.responsePolicy?.allowNA)
+              .map((b) => (
+                <button
+                  key={b.label}
+                  className={`flex-1 h-11 rounded-[8px] border text-[12px] font-semibold bg-transparent cursor-pointer transition-colors ${b.cls}`}
+                >
+                  {b.label}
+                </button>
+              ))}
+          </div>
+        )}
 
       {field.type === 'table' && (
         <div className="overflow-auto rounded-[8px] border border-border">

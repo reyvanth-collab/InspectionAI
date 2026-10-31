@@ -27,6 +27,7 @@ export interface InspectionFinding {
 }
 
 export interface InspectionRecord {
+  signed_payload?: { assessmentSummary?: { completionLabel?: string; assessed?: number; informational?: number } }
   draft?: {
     version: number
     answers: Record<

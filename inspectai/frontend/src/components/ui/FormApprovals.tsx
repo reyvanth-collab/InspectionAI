@@ -1,3 +1,4 @@
+import { ValidationSummary } from './ValidationSummary'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useApprovals, useApproveStep, useRejectStep } from '@/hooks/useApprovals'
@@ -20,7 +21,14 @@ export function FormApprovals({
     qc = useQueryClient()
   const [comments, setComments] = useState<Record<string, string>>({}),
     [message, setMessage] = useState('')
+  const [invalidComment, setInvalidComment] = useState('')
   async function decide(stepId: string, isApproved: boolean) {
+    const step = data.flatMap((r) => r.approval_steps).find((s) => s.id === stepId)
+    if ((!isApproved || step?.approver_id !== user?.id) && !comments[stepId]?.trim()) {
+      setInvalidComment(stepId)
+      return
+    }
+    setInvalidComment('')
     try {
       setMessage('')
       await (isApproved
@@ -36,6 +44,18 @@ export function FormApprovals({
   const records = data.filter((r) => r.wi_id === formId)
   return (
     <section aria-label="Approval progress" className="space-y-4">
+      <ValidationSummary
+        issues={
+          invalidComment && !comments[invalidComment]?.trim()
+            ? [
+                {
+                  id: 'review-comment-' + invalidComment,
+                  message: 'Enter a review comment for rejection or an administrator override',
+                },
+              ]
+            : []
+        }
+      />
       {error && <p role="alert">Approvals could not be loaded.</p>}
       {message && (
         <p role="alert" className="text-danger">
@@ -85,6 +105,7 @@ export function FormApprovals({
                     <label className="field-label">
                       Review comment
                       <textarea
+                        id={'review-comment-' + s.id}
                         aria-label="Review comment"
                         value={comments[s.id] || ''}
                         onChange={(e) => setComments((p) => ({ ...p, [s.id]: e.target.value }))}
@@ -94,18 +115,14 @@ export function FormApprovals({
                     <div className="flex gap-2">
                       <Button
                         variant="primary"
-                        disabled={
-                          approve.isPending ||
-                          reject.isPending ||
-                          (s.approver_id !== user?.id && !comments[s.id]?.trim())
-                        }
+                        disabled={approve.isPending || reject.isPending}
                         onClick={() => decide(s.id, true)}
                       >
                         Approve form
                       </Button>
                       <Button
                         variant="secondary"
-                        disabled={!comments[s.id]?.trim() || approve.isPending || reject.isPending}
+                        disabled={approve.isPending || reject.isPending}
                         onClick={() => decide(s.id, false)}
                       >
                         Reject with comment

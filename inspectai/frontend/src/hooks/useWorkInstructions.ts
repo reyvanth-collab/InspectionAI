@@ -114,10 +114,18 @@ export function useCreateWorkInstruction() {
 export function useSubmitForApproval() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ wiDbId, approverIds }: { wiDbId: string; approverIds: string[] }) => {
+    mutationFn: async ({
+      wiDbId,
+      approverIds,
+      confirmationToken,
+    }: {
+      wiDbId: string
+      approverIds: string[]
+      confirmationToken?: string
+    }) => {
       const res = await api.post<{ data: Record<string, unknown> }>(
         `/work-instructions/${wiDbId}/submit-approval`,
-        { approverIds },
+        { approverIds, confirmationToken },
       )
       return res.data.data
     },
@@ -186,6 +194,7 @@ export interface ChecklistItemInput {
 }
 
 export interface SaveWIInput {
+  expectedUpdatedAt?: string
   departmentId?: string
   dbId?: string
   wiNumber: string
@@ -204,6 +213,7 @@ export function useSaveWIWithItems() {
   return useMutation({
     mutationFn: async (input: SaveWIInput) => {
       const body = {
+        expectedUpdatedAt: input.expectedUpdatedAt,
         wiNumber: input.wiNumber,
         title: input.title,
         description: input.description,

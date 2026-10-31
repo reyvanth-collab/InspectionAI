@@ -1,4 +1,6 @@
+import { ValidationSummary } from '@/components/ui/ValidationSummary'
 import { RecordTable } from '@/components/ui/RecordTable'
+import { RecordPageSummary } from '@/components/ui/RecordPageSummary'
 import { useState } from 'react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Button } from '@/components/ui/Button'
@@ -48,7 +50,18 @@ export default function Assets() {
     setError('')
     setShow(true)
   }
+  const [validationAttempt, setValidationAttempt] = useState(0)
+  const issues = validationAttempt
+    ? [
+        ...(!form.assetNumber.trim()
+          ? [{ id: 'asset-assetNumber', message: 'Enter an asset number' }]
+          : []),
+        ...(!form.name.trim() ? [{ id: 'asset-name', message: 'Enter an asset name' }] : []),
+      ]
+    : []
   async function save() {
+    setValidationAttempt((x) => x + 1)
+    if (!form.assetNumber.trim() || !form.name.trim()) return
     setError('')
     try {
       if (editing) await update.mutateAsync({ id: editing, ...form })
@@ -78,6 +91,7 @@ export default function Assets() {
               setForm(blank)
               setEditing('')
               setError('')
+              setValidationAttempt(0)
               setShow(true)
             }}
           >
@@ -186,9 +200,13 @@ export default function Assets() {
         <Button variant="secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
           Previous
         </Button>
-        <span className="text-sm text-text-2">
-          Page {page} ? {data?.total || 0} matching assets
-        </span>
+        <RecordPageSummary
+          page={data?.page ?? page}
+          pageSize={data?.pageSize ?? 50}
+          count={data?.items.length ?? 0}
+          total={data?.total ?? 0}
+          label="assets"
+        />
         <Button variant="secondary" disabled={!data?.hasMore} onClick={() => setPage((p) => p + 1)}>
           Next
         </Button>
@@ -201,13 +219,13 @@ export default function Assets() {
           <Button
             variant="primary"
             loading={create.isPending || update.isPending}
-            disabled={!form.name || !form.assetNumber}
             onClick={() => void save()}
           >
             Save asset
           </Button>
         }
       >
+        <ValidationSummary issues={issues} attempt={validationAttempt} />
         <div className="grid sm:grid-cols-2 gap-4">
           {(
             [
@@ -223,6 +241,7 @@ export default function Assets() {
             <label key={key} className="field-label">
               {label}
               <input
+                id={'asset-' + key}
                 aria-label={label}
                 className="field-input mt-2"
                 readOnly={editing !== '' && key === 'assetNumber'}

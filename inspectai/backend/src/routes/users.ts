@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireAuth, requireCapability, type AuthRequest } from '../middleware/auth'
 import { query } from '../lib/db'
 import { auditLog } from '../lib/events'
+import { listOrder } from '../lib/listOrder'
 
 const router = Router()
 
@@ -12,15 +13,57 @@ router.get(
   requireCapability('administrator'),
   async (req: AuthRequest, res, next) => {
     try {
-      const result = await query(
-        `SELECT id, name, email, staff_id, role, capabilities, primary_department_id,
-              ARRAY(SELECT m.department_id FROM public.department_memberships m WHERE m.user_id=users.id AND m.tenant_id=users.tenant_id) AS department_ids
-       FROM   public.users
-       WHERE  tenant_id = $1
-       ORDER  BY name`,
-        [req.user!.tenantId],
+      const params: unknown[] = [req.user!.tenantId]
+      let where = 'users.tenant_id=$1'
+      const add = (value: unknown) => {
+        params.push(value)
+        return '$' + params.length
+      }
+      if (req.query.search) {
+        const p = add('%' + String(req.query.search).trim() + '%')
+        where += ` AND (users.name ILIKE ${p} OR users.email ILIKE ${p} OR users.staff_id ILIKE ${p})`
+      }
+      if (req.query.departmentId) {
+        const id = String(req.query.departmentId)
+        if (!/^[a-f0-9-]{36}$/i.test(id)) {
+          res.status(400).json({ error: 'Choose a valid department' })
+          return
+        }
+        const p = add(id)
+        where += ` AND (users.primary_department_id=${p}::uuid OR EXISTS(SELECT 1 FROM public.department_memberships m WHERE m.tenant_id=users.tenant_id AND m.user_id=users.id AND m.department_id=${p}::uuid))`
+      }
+      if (req.query.capability)
+        where += ` AND ${add(String(req.query.capability))}=ANY(users.capabilities)`
+      if (['active', 'inactive'].includes(String(req.query.status)))
+        where += ` AND users.active=${add(req.query.status === 'active')}`
+      const page = Math.max(1, parseInt(String(req.query.page)) || 1),
+        pageSize = Math.max(1, Math.min(100, parseInt(String(req.query.pageSize)) || 50))
+      const total = (
+        await query('SELECT count(*)::int total FROM public.users WHERE ' + where, params)
+      ).rows[0].total
+      const order = listOrder(
+        req.query,
+        {
+          name: 'users.name',
+          email: 'users.email',
+          staff: 'users.staff_id',
+          department: 'd.name',
+          status: 'users.active',
+        },
+        'name',
+        'users.id',
       )
-      res.json({ data: result.rows })
+      const result = await query(
+        `SELECT users.id, users.name, users.email, users.staff_id, users.role, users.active, users.capabilities, users.primary_department_id,
+              ARRAY(SELECT m.department_id FROM public.department_memberships m WHERE m.user_id=users.id AND m.tenant_id=users.tenant_id) AS department_ids
+       FROM public.users LEFT JOIN public.departments d ON d.id=users.primary_department_id AND d.tenant_id=users.tenant_id
+       WHERE ${where} ORDER BY ${order} LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
+        params,
+      )
+      res.json({
+        data: result.rows,
+        meta: { page, pageSize, total, hasMore: page * pageSize < total },
+      })
     } catch (err) {
       next(err)
     }

@@ -55,6 +55,15 @@ router.put('/users/:id', requireCapability('administrator'), async (req: AuthReq
       .json({ error: 'Choose a primary department, memberships and supported capabilities' })
     return
   }
+  if (!String(req.body.reason || '').trim()) {
+    res
+      .status(400)
+      .json({
+        error: 'Explain the access change',
+        fieldErrors: { reason: 'Enter a reason for this access change' },
+      })
+    return
+  }
   const client = await pool.connect()
   try {
     await beginActorTransaction(client)

@@ -27,3 +27,24 @@ test('login fits a small viewport without horizontal document overflow', async (
     true,
   )
 })
+test('login distinguishes throttling and unavailable service while preserving input', async ({
+  page,
+}) => {
+  let unavailable = false
+  await page.route('**/api/auth/login', (route) =>
+    route.fulfill({
+      status: unavailable ? 503 : 429,
+      headers: { 'Retry-After': '125' },
+      json: { error: unavailable ? 'Authentication service unavailable' : 'Too many requests' },
+    }),
+  )
+  await page.goto('/login')
+  await page.getByPlaceholder('you@company.com').fill('synthetic@example.invalid')
+  await page.locator('input[type=password]').fill(crypto.randomUUID())
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Try again in 3 minutes')
+  unavailable = true
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('sign-in service is unavailable')
+  await expect(page.getByPlaceholder('you@company.com')).toHaveValue('synthetic@example.invalid')
+})

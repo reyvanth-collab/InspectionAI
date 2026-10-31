@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/Button'
 import { supabase } from '@/lib/supabase'
+import { ApiError } from '@/lib/api'
 
 type Mode = 'login' | 'forgot'
 
@@ -26,9 +27,13 @@ export default function Login() {
       navigate('/dashboard')
     } catch (err) {
       setError(
-        err instanceof Error && /invalid|email|password/i.test(err.message)
-          ? 'Check your email and password and try again.'
-          : 'We could not sign you in. Check your connection and try again.',
+        err instanceof ApiError && err.status === 429
+          ? `Too many sign-in attempts. Try again in ${Math.max(1, Math.ceil((err.retryAfter || 900) / 60))} minutes.`
+          : err instanceof ApiError && (err.status == null || err.status >= 500)
+            ? 'The sign-in service is unavailable. Please retry shortly.'
+            : err instanceof Error && /invalid|email|password/i.test(err.message)
+              ? 'Check your email and password and try again.'
+              : 'We could not sign you in. Check your connection and try again.',
       )
     } finally {
       setLoading(false)
@@ -48,7 +53,9 @@ export default function Login() {
         redirectTo: `${window.location.origin}/reset-password`,
       })
       if (error) throw new Error(error.message)
-      setSuccess('If an account exists for this email, a reset link will be sent. Check your inbox and spam folder.')
+      setSuccess(
+        'If an account exists for this email, a reset link will be sent. Check your inbox and spam folder.',
+      )
     } catch {
       setError('We could not send the reset link. Check your connection and try again.')
     } finally {
@@ -158,7 +165,10 @@ export default function Login() {
                 </div>
 
                 {error && (
-                  <div role="alert" className="text-[13px] text-danger bg-danger-bg border border-danger-border rounded-[6px] px-3 py-2">
+                  <div
+                    role="alert"
+                    className="text-[13px] text-danger bg-danger-bg border border-danger-border rounded-[6px] px-3 py-2"
+                  >
                     {error}
                   </div>
                 )}
@@ -182,7 +192,10 @@ export default function Login() {
               </p>
 
               {success ? (
-                <div role="status" className="text-[13px] text-success bg-success-bg border border-success-border rounded-[8px] px-4 py-3 mb-4">
+                <div
+                  role="status"
+                  className="text-[13px] text-success bg-success-bg border border-success-border rounded-[8px] px-4 py-3 mb-4"
+                >
                   {success}
                 </div>
               ) : (
@@ -205,7 +218,10 @@ export default function Login() {
                   </div>
 
                   {error && (
-                    <div role="alert" className="text-[13px] text-danger bg-danger-bg border border-danger-border rounded-[6px] px-3 py-2">
+                    <div
+                      role="alert"
+                      className="text-[13px] text-danger bg-danger-bg border border-danger-border rounded-[6px] px-3 py-2"
+                    >
                       {error}
                     </div>
                   )}

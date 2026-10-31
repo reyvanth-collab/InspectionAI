@@ -250,6 +250,7 @@ export function questionsFor(topic, checks) {
 // request(persona,method,path,body) must use the real backend routes. This module
 // never writes form, approval, work-order or signed inspection tables directly.
 export async function seedWorkflow({ request, departmentIds, personas, tenantId = DEMO_TENANT }) {
+  const rawRequest=request;request=async(persona,method,path,body)=>{if(method==='POST' && path.endsWith('/submit-approval') && !body?.confirmationToken){const preview=await rawRequest(persona,'POST',path.replace('/submit-approval','/approval-preview'),body);body={...body,confirmationToken:preview.data.confirmationToken}}return rawRequest(persona,method,path,body)}
   if (tenantId !== DEMO_TENANT) throw new Error('Refusing a non-demo tenant')
   const assets = (await request('admin', 'GET', '/assets?pageSize=100')).data
   const forms = (await request('admin', 'GET', '/work-instructions')).data

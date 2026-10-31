@@ -252,9 +252,9 @@ test('mocked API: unsaved navigation warning, missing evidence and failed upload
   await expect(page.getByRole('status')).toHaveText('Saved')
   await page.getByRole('button', { name: 'Review & sign', exact: true }).click()
   await page.getByRole('button', { name: 'Save & review', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Continue to signature' })).toBeDisabled()
-  await expect(page.getByRole('dialog')).toContainText('Attach photo evidence')
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Continue to signature' })).toHaveCount(0)
+  await expect(page.getByRole('alert')).toContainText('Attach failure photo evidence')
+  await expect(first.getByLabel('Notes', { exact: true })).toHaveValue('Synthetic defect without evidence yet')
   await page.route('**/api/inspections/wo-1/draft', (route) =>
     route.fulfill({ status: 500, json: { error: 'Synthetic photo persistence failure' } }),
   )

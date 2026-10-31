@@ -61,6 +61,13 @@ Stop only an older InspectionAI process on the requested port. Open `http://127.
 
 The backend suite replays all migrations in PostgreSQL/PGlite and tests real Express handlers/RLS with stubbed Auth. Added coverage includes pages beyond the first, sort injection fallback, incomplete reload, idempotent retry, stale drafts, department/capability denial, evidence requirements, stale review rejection, post-sign rejection, distinct N/A notes, report access and snapshot content. It creates representative PDF fixtures in ignored `backend/.env.pdf-checks`.
 
+For a read-only check of the running local demo, run `npm run check` from the
+backend. It is an alias for `check:rail-demo` and reports all form versions as
+well as published forms. Table footers show the current range and complete
+matching count, for example `Showing 1–50 of 60 matching assets`; Next exposes
+the remaining ten assets. See `RAIL_DEMO.md` before treating a filtered,
+department-limited or different-workspace view as missing data.
+
 ```powershell
 cd inspectai/backend
 node scripts/verify-report-layout.mjs

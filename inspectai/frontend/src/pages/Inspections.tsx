@@ -1,4 +1,6 @@
+import { ValidationSummary } from '@/components/ui/ValidationSummary'
 import { RecordTable } from '@/components/ui/RecordTable'
+import { RecordPageSummary } from '@/components/ui/RecordPageSummary'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
@@ -50,7 +52,18 @@ export default function Inspections() {
       (!f.effectiveDate || f.effectiveDate.slice(0, 10) <= new Date().toISOString().slice(0, 10)) &&
       f.departmentId === asset?.departmentId,
   )
+  const [validationAttempt, setValidationAttempt] = useState(0)
+  const issues = validationAttempt
+    ? [
+        ...(!form.assetId ? [{ id: 'order-asset', message: 'Choose a registered asset' }] : []),
+        ...(!form.workInstructionId
+          ? [{ id: 'order-form', message: 'Choose a published form from the asset department' }]
+          : []),
+      ]
+    : []
   async function createOrder() {
+    setValidationAttempt((x) => x + 1)
+    if (!form.assetId || !form.workInstructionId) return
     setError('')
     try {
       await create.mutateAsync(form)
@@ -203,9 +216,13 @@ export default function Inspections() {
         <Button variant="secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
           Previous
         </Button>
-        <span className="text-sm text-text-2">
-          Page {page} · {data?.total || 0} matching inspections
-        </span>
+        <RecordPageSummary
+          page={data?.page ?? page}
+          pageSize={data?.pageSize ?? 50}
+          count={data?.items.length ?? 0}
+          total={data?.total ?? 0}
+          label="inspections"
+        />
         <Button variant="secondary" disabled={!data?.hasMore} onClick={() => setPage((p) => p + 1)}>
           Next
         </Button>
@@ -215,16 +232,12 @@ export default function Inspections() {
         onClose={() => setShow(false)}
         title="Create work order"
         footer={
-          <Button
-            variant="primary"
-            loading={create.isPending}
-            disabled={!form.assetId || !form.workInstructionId}
-            onClick={() => void createOrder()}
-          >
+          <Button variant="primary" loading={create.isPending} onClick={() => void createOrder()}>
             Create work order
           </Button>
         }
       >
+        <ValidationSummary issues={issues} attempt={validationAttempt} />
         <div className="space-y-4">
           <p className="text-sm text-text-2">
             One asset and one published form. A unique work-order number is assigned when saved.
@@ -245,6 +258,7 @@ export default function Inspections() {
           <label className="field-label">
             Asset
             <select
+              id="order-asset"
               aria-label="Asset"
               className="field-input mt-2"
               value={form.assetId}
@@ -282,6 +296,7 @@ export default function Inspections() {
           <label className="field-label">
             Inspection form
             <select
+              id="order-form"
               aria-label="Inspection form"
               className="field-input mt-2"
               disabled={!asset}
