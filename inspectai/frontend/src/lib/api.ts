@@ -7,6 +7,7 @@ export class ApiError extends Error {
     public fieldErrors: Record<string, string> = {},
     public status?: number,
     public retryAfter?: number,
+    public issues: Array<{nodeId?:string;edgeId?:string;message:string}> = [],
   ) {
     super(message)
     this.name = 'ApiError'
@@ -49,6 +50,7 @@ api.interceptors.response.use(
         err.response?.data?.fieldErrors || {},
         err.response?.status,
         Number(err.response?.headers?.['retry-after']) || undefined,
+        err.response?.data?.issues || [],
       ),
     )
   },

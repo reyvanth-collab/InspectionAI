@@ -1,5 +1,5 @@
 ﻿import { NavLink } from 'react-router-dom'
-import { ClipboardCheck, BookOpen, Boxes, BarChart3, Settings, LogOut } from 'lucide-react'
+import { ClipboardCheck, BookOpen, Boxes, BarChart3, Settings, LogOut, Workflow } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { can } from '@/lib/permissions'
 import { cn } from '@/lib/cn'
@@ -15,7 +15,10 @@ export function Sidebar() {
     { path: '/assets', label: 'Assets', Icon: Boxes },
     { path: '/reports', label: 'Reports', Icon: BarChart3 },
     ...(can(user, 'administrator')
-      ? [{ path: '/settings', label: 'Settings', Icon: Settings }]
+      ? [
+          { path: '/approval-workflows', label: 'Approval Workflows', Icon: Workflow },
+          { path: '/settings', label: 'Settings', Icon: Settings },
+        ]
       : []),
   ]
   return (

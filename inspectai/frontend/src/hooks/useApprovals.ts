@@ -9,6 +9,11 @@ export interface ApprovalStep {
   step_number: number
   label: string | null
   status: string
+  skipped: boolean
+  group_rule: 'any' | 'all'
+  stage_size: number
+  eligible: boolean
+  reassignments: Array<{ from: string; to: string; reason: string; at: string; by: string }>
   comment: string | null
   completed_at: string | null
   approver_id: string
@@ -21,6 +26,11 @@ export interface Approval {
   submitted_by: string
   submitted_at: string
   final_status: string
+  current_step: number
+  stage_blocked: boolean
+  submitted_snapshot?: { form: { title: string; revision: string } } | null
+  workflow_version_id: string | null
+  route_snapshot: { name?: string; workflowCode?: string; versionNumber?: number; route?: Array<{ type: string; stageName?: string; label?: string; reviewerName?: string; groupRule?: string; members?: Array<{ id: string; name: string }> }> } | null
   wi_number: string
   wi_title: string
   revision: string

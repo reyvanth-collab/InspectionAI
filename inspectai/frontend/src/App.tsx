@@ -15,6 +15,7 @@ const MasterLibrary = lazy(() => import('@/pages/MasterLibrary'))
 const Reports = lazy(() => import('@/pages/Reports'))
 const Notifications = lazy(() => import('@/pages/Notifications'))
 const Settings = lazy(() => import('@/pages/Settings'))
+const ApprovalWorkflows = lazy(() => import('@/pages/ApprovalWorkflows'))
 const InspectionExecution = lazy(() => import('@/pages/InspectionExecution'))
 const WIDetail = lazy(() => import('@/pages/WIDetail'))
 const WIBuilder = lazy(() => import('@/pages/WIBuilder'))
@@ -154,6 +155,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <Settings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/approval-workflows"
+          element={
+            <ProtectedRoute>
+              <ApprovalWorkflows />
             </ProtectedRoute>
           }
         />

@@ -95,6 +95,7 @@ export async function policyFixture(page: Page, questions: Record<string, unknow
     const send = (data: unknown, meta?: unknown) =>
       route.fulfill({ json: { data, ...(meta ? { meta } : {}) } })
     if (p === '/auth/me') return send(user)
+    if (p === '/approval-workflows/default') return send(null)
     if (p === '/departments')
       return send([{ id: 'dept-fixture', code: 'SYN', name: 'Synthetic department', active: true }])
     if (p === '/users/approvers')

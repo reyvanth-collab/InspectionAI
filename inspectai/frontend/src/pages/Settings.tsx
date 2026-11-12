@@ -1,4 +1,5 @@
 import { UsersAccess } from '@/components/UsersAccess'
+import { PersonGroups } from '@/components/PersonGroups'
 import { ValidationSummary } from '@/components/ui/ValidationSummary'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -68,7 +69,7 @@ export default function Settings() {
             }}
           >
             {t === 'users'
-              ? 'People & access'
+              ? 'Users & Access'
               : t === 'history'
                 ? 'Activity history'
                 : t[0].toUpperCase() + t.slice(1)}
@@ -132,7 +133,7 @@ export default function Settings() {
           </div>
         </div>
       )}
-      {admin && tab === 'users' && <UsersAccess />}
+      {admin && tab === 'users' && <div className="space-y-5"><nav aria-label="Users & Access" className="flex gap-3"><button className="wf-button" aria-pressed={params.get('section') !== 'groups'} onClick={() => setParams({tab:'users'})}>People</button><button className="wf-button" aria-pressed={params.get('section') === 'groups'} onClick={() => setParams({tab:'users',section:'groups'})}>Person Groups</button></nav>{params.get('section') === 'groups' ? <PersonGroups/> : <UsersAccess/>}</div>}
       {tab === 'profile' && (
         <div className="execution-card">
           <h2 className="font-semibold">{user?.name}</h2>

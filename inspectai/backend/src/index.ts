@@ -9,6 +9,7 @@ import authRouter from './routes/auth'
 import inspectionsRouter from './routes/inspections'
 import wiRouter from './routes/workInstructions'
 import approvalsRouter from './routes/approvals'
+import approvalWorkflowsRouter from './routes/approvalWorkflows'
 import notificationsRouter from './routes/notifications'
 import analyticsRouter from './routes/analytics'
 import aiRouter from './routes/ai'
@@ -57,6 +58,7 @@ app.use('/api/auth', authRouter)
 app.use('/api/inspections', inspectionsRouter)
 app.use('/api/work-instructions', wiRouter)
 app.use('/api/approvals', approvalsRouter)
+app.use('/api/approval-workflows', approvalWorkflowsRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/analytics', analyticsRouter)
 app.use('/api/ai', aiRouter)
