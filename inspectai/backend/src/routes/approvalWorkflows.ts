@@ -67,11 +67,12 @@ router.post('/person-groups', async (req: AuthRequest, res, next) => {
     const memberIds = Array.isArray(req.body.memberIds) ? [...new Set(req.body.memberIds)] : []
     if (req.body.active !== undefined && typeof req.body.active !== 'boolean') { res.status(400).json({error:'Choose a valid group status.'}); return }
     const departmentId = req.body.departmentId || null
-    if (departmentId && (!UUID_RE.test(departmentId) || !await ensureDepartment(departmentId, req.user!.tenantId,client.query.bind(client)))) { res.status(400).json({ error: 'Choose an active department in this workspace.' }); return }
+    if (departmentId && !UUID_RE.test(departmentId)) { res.status(400).json({ error: 'Choose a valid department.' }); return }
     if (!name || name.length > 120 || description.length > 2000 || memberIds.length > 100 || memberIds.some((id: unknown) => typeof id !== 'string' || !UUID_RE.test(id))) {
       res.status(400).json({ error: 'Enter a group name, a description up to 2,000 characters, and up to 100 valid members.' }); return
     }
     await beginActorTransaction(client)
+    if (departmentId && !await ensureDepartment(departmentId, req.user!.tenantId,client.query.bind(client))) { await client.query('ROLLBACK'); res.status(400).json({ error: 'Choose an active department in this workspace.' }); return }
     const group = await client.query(
       'INSERT INTO public.person_groups(tenant_id,name,description,created_by,department_id,active) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,name,description,active,department_id,created_at',
       [req.user!.tenantId, name, description, req.user!.id, departmentId, req.body.active ?? true],
@@ -97,12 +98,13 @@ router.put('/person-groups/:groupId', async (req: AuthRequest, res, next) => {
     const description = typeof req.body.description === 'string' ? req.body.description.trim() : ''
     const memberIds = Array.isArray(req.body.memberIds) ? [...new Set(req.body.memberIds)] : null
     const departmentId = req.body.departmentId === undefined ? undefined : req.body.departmentId || null
-    if (departmentId && (!UUID_RE.test(departmentId) || !await ensureDepartment(departmentId, req.user!.tenantId,client.query.bind(client)))) { res.status(400).json({ error: 'Choose an active department in this workspace.' }); return }
+    if (departmentId && !UUID_RE.test(departmentId)) { res.status(400).json({ error: 'Choose a valid department.' }); return }
     if (req.body.active !== undefined && typeof req.body.active !== 'boolean') { res.status(400).json({ error: 'Choose a valid group status.' }); return }
     if (!UUID_RE.test(req.params.groupId) || !name || name.length > 120 || description.length > 2000 || !memberIds || memberIds.length > 100 || memberIds.some((id: unknown) => typeof id !== 'string' || !UUID_RE.test(id))) {
       res.status(400).json({ error: 'Enter a group name, a description up to 2,000 characters, and up to 100 valid members.' }); return
     }
     await beginActorTransaction(client)
+    if (departmentId && !await ensureDepartment(departmentId, req.user!.tenantId,client.query.bind(client))) { await client.query('ROLLBACK'); res.status(400).json({ error: 'Choose an active department in this workspace.' }); return }
     const updated = await client.query('UPDATE public.person_groups SET name=$1,description=$2,active=COALESCE($5,active),department_id=CASE WHEN $6 THEN $7::uuid ELSE department_id END,updated_at=now() WHERE id=$3 AND tenant_id=$4 RETURNING id,department_id', [name, description, req.params.groupId, req.user!.tenantId, req.body.active ?? null, departmentId !== undefined, departmentId ?? null])
     if (!updated.rowCount) { await client.query('ROLLBACK'); res.status(404).json({ error: 'Person Group not found.' }); return }
     const eligible = await client.query(`SELECT u.id FROM public.users u WHERE u.tenant_id=$1 AND u.id=ANY($2::uuid[]) AND ($3::uuid IS NULL OR u.primary_department_id=$3 OR EXISTS(SELECT 1 FROM public.department_memberships dm WHERE dm.tenant_id=$1 AND dm.user_id=u.id AND dm.department_id=$3))`,[req.user!.tenantId,memberIds,updated.rows[0].department_id])
