@@ -43,7 +43,7 @@ const express=require('express'),dbModule=require('../dist/lib/db'),jwt=require(
       const response=await fetch(base+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},...(body===undefined?{}:{body:JSON.stringify(body)})})
       const result=await response.json();assert.equal(response.status,status,`${method} ${path}: ${JSON.stringify(result)}`);return result.data
     }
-    const personGroup=await call(201,'/approval-workflows/person-groups',{name:'Signalling Reviewer Group',memberIds:[users.approver.id,users.replacement.id]})
+    const personGroup=await call(201,'/approval-workflows/person-groups',{name:'Signalling Reviewer Group',memberIds:[users.approver.id,users.manager.id]})
     const workflowGraph={nodes:[{id:'start',type:'start',label:'Start',x:10,y:100},{id:'signalling',type:'group',label:'Signalling Reviewer Group',personGroupId:personGroup.id,groupRule:'any',x:280,y:100},{id:'engineering',type:'individual',label:'Engineering Manager',reviewerId:users.manager.id,x:550,y:100},{id:'publish',type:'publish',label:'Publish',x:820,y:100}],edges:[{id:'a',source:'start',target:'signalling'},{id:'b',source:'signalling',target:'engineering'},{id:'c',source:'engineering',target:'publish'}]}
     const workflow=await call(201,'/approval-workflows',{workflowCode:'SIGNALLING-REVIEW',name:'Signalling review',description:'',departmentId:generalDepartment,isDefault:true,graph:workflowGraph})
     await call(200,`/approval-workflows/${workflow.workflowId}/versions/${workflow.id}/activate`,{})
