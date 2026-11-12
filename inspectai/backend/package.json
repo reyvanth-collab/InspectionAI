@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
-    "test": "npm run build && node test/assetValidation.test.mjs && node test/aiProvider.test.mjs && node test/release.integration.cjs && node test/departments-demo.integration.cjs",
+    "test:workflow:browser": "node test/workflow-runner.cjs",
+    "demo:workflows": "node test/workflow-runner.cjs --preview",
+    "test": "npm run build && node test/assetValidation.test.mjs && node test/aiProvider.test.mjs && node --test test/approvalWorkflow.test.mjs && node test/workflow-migration.cjs && node test/release.integration.cjs && node test/departments-demo.integration.cjs",
     "check": "npm run check:rail-demo",
     "check:rail-demo": "node scripts/check-rail-demo.mjs",
     "seed:rail-demo": "npm run build && node scripts/seed-rail-demo.mjs",

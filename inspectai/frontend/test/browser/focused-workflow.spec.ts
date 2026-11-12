@@ -69,6 +69,7 @@ async function fixture(page: Page, role = 'inspector') {
       body = ['POST', 'PUT'].includes(method) ? route.request().postDataJSON() : {}
     let data: unknown = []
     if (path === '/api/auth/me') data = user
+    else if (path === '/api/approval-workflows/default') data = null
     else if (path === '/api/work-instructions') {
       await route.fulfill({
         status: 200,

@@ -21,6 +21,10 @@ const users = Object.fromEntries(
     { id: id(), role, tenantId: tenant, email: role + '@test.invalid', name: role, staffId: role },
   ]),
 )
+users.manager = { ...users.approver, id: id(), email: 'manager@test.invalid', name: 'Engineering Manager', staffId: 'manager' }
+users.replacement = { ...users.approver, id: id(), email: 'replacement@test.invalid', name: 'Replacement Reviewer', staffId: 'replacement' }
+users.author = { ...users.approver, id: id(), email: 'author@test.invalid', name: 'Synthetic Author', staffId: 'author' }
+users.otherAdmin = { ...users.admin, id: id(), tenantId: otherTenant, email: 'other-admin@test.invalid', staffId: 'other-admin' }
 const foreign = { ...users.inspector, id: id(), tenantId: otherTenant, email: 'other@test.invalid' }
 async function expect(status, path, body, role = 'admin', method = 'POST') {
   if(status===200 && method==='POST' && path.endsWith('/submit-approval') && !body?.confirmationToken){const preview=await expect(200,path.replace('/submit-approval','/approval-preview'),body,role);body={...body,confirmationToken:preview.confirmationToken}}
@@ -58,13 +62,19 @@ let base
   for (const name of migrationPlan(fs.readdirSync('../supabase/migrations')))
     await db.exec(fs.readFileSync('../supabase/migrations/' + name, 'utf8'))
   const query = (sql, params) => db.query(sql, params)
-  dbModule.query = async (sql, params) => {
-    await db.query("SELECT set_config('app.actor_id',$1,false)", [
-      require('../dist/lib/actor').actorContext.getStore() || '',
-    ])
-    return query(sql, params)
+  // PGlite has one connection. Lease it for a whole transaction, including concurrent HTTP requests.
+  let lease = Promise.resolve()
+  dbModule.pool.connect = async () => {
+    const previous = lease
+    let release
+    lease = new Promise((resolve) => { release = resolve })
+    await previous
+    await db.query("SELECT set_config('app.actor_id',$1,false)", [require('../dist/lib/actor').actorContext.getStore() || ''])
+    let released = false
+    const unlock = () => { if (!released) { released=true; release() } }
+    return { query: async (sql,params) => { const result=await query(sql,params); if (/^(COMMIT|ROLLBACK)\s*;?$/i.test(sql.trim())) unlock(); return result }, release: unlock }
   }
-  dbModule.pool.connect = async () => ({ query, release() {} })
+  dbModule.query = async (sql, params) => { const client = await dbModule.pool.connect(); try { return await client.query(sql, params) } finally { client.release() } }
   const app = express()
   app.use(express.json())
   const passwordAuth = require('../dist/lib/passwordAuth')
@@ -76,6 +86,9 @@ let base
     ['inspections', 'inspections'],
     ['assets', 'assets'],
     ['approvals', 'approvals'],
+    ['approval-workflows', 'approvalWorkflows'],
+    ['departments', 'departments'],
+    ['users', 'users'],
     ['ai', 'ai'],
     ['reports', 'reports'],
   ])
@@ -103,6 +116,7 @@ let base
         [u.id, u.tenantId, u.name, u.email, u.staffId, u.role],
       )
     }
+    await db.query("UPDATE public.users SET capabilities=ARRAY['form_author','viewer'] WHERE id=$1",[users.author.id])
     await db.exec('SET ROLE inspectai_runtime')
     const login = async () =>
       fetch(base + '/auth/login', {
@@ -323,6 +337,67 @@ let base
     checks++
     await expect(503, '/ai/analyse-failure', { itemDescription: 'test' }, 'inspector')
     await expect(200, '/reports/inspection-summary?days=30&page=1', undefined, 'admin', 'GET')
+
+    const generalDepartment = (await db.query("SELECT id FROM public.departments WHERE tenant_id=$1 AND code='GENERAL'", [tenant])).rows[0].id
+    const personGroup = await expect(201, '/approval-workflows/person-groups', {
+      name: 'Signalling Reviewer Group', description: 'Synthetic approval acceptance group', memberIds: [users.approver.id, users.manager.id],
+    })
+    await expect(403, '/approval-workflows/person-groups', undefined, 'viewer', 'GET')
+    const workflowGraph = {
+      nodes: [
+        { id: 'start', type: 'start', label: 'Start', x: 30, y: 120 },
+        { id: 'signalling', type: 'group', label: 'Signalling Reviewer Group', x: 320, y: 120, personGroupId: personGroup.id, groupRule: 'any' },
+        { id: 'engineering', type: 'individual', label: 'Engineering Manager', x: 610, y: 120, reviewerId: users.manager.id },
+        { id: 'publish', type: 'publish', label: 'Publish', x: 900, y: 120 },
+      ],
+      edges: [
+        { id: 'start-signalling', source: 'start', target: 'signalling' },
+        { id: 'signalling-engineering', source: 'signalling', target: 'engineering' },
+        { id: 'engineering-publish', source: 'engineering', target: 'publish' },
+      ],
+    }
+    const workflow = await expect(201, '/approval-workflows', {
+      workflowCode: 'SIGNALLING-REVIEW', name: 'Signalling review', description: 'Sequential synthetic route', departmentId: generalDepartment, isDefault: true, graph: workflowGraph,
+    })
+    const invalidDraft = await expect(201, '/approval-workflows', {
+      workflowCode: 'INCOMPLETE', name: 'Incomplete draft', description: '', departmentId: generalDepartment, isDefault: false, graph: { nodes: [{ id: 'start', type: 'start', label: 'Start', x: 0, y: 0 }], edges: [] },
+    })
+    const incompletePreview = await expect(200, `/approval-workflows/${invalidDraft.workflowId}/versions/${invalidDraft.id}/preview`, undefined, 'admin', 'POST')
+    assert(incompletePreview.issues.length >= 2)
+    await expect(400, `/approval-workflows/${invalidDraft.workflowId}/versions/${invalidDraft.id}/activate`, undefined, 'admin', 'POST')
+    await expect(200, `/approval-workflows/${workflow.workflowId}/versions/${workflow.id}/activate`, undefined, 'admin', 'POST')
+    const defaultRoute = await expect(200, `/approval-workflows/default?departmentId=${generalDepartment}`, undefined, 'admin', 'GET')
+    assert.deepEqual(defaultRoute.stages.map((stage) => stage.type), ['start', 'group', 'individual', 'publish'])
+    assert.equal(defaultRoute.stages[1].groupRule, 'any')
+    const routedForm = await expect(201, '/work-instructions', {
+      wiNumber: 'WI-WORKFLOW', title: 'Workflow route fixture', revision: '1',
+      checklistItems: [{ itemNo: '1', description: 'Confirm signalling state', fieldType: 'pass_fail', required: true, sortOrder: 1 }],
+    })
+    const routePreview = await expect(200, `/work-instructions/${routedForm.id}/approval-preview`, { approverIds: [] }, 'admin')
+    assert.equal(routePreview.route.workflowVersionId, workflow.id)
+    assert.deepEqual(routePreview.route.route.map((stage) => stage.type), ['start', 'group', 'individual', 'publish'])
+    await expect(200, `/work-instructions/${routedForm.id}/submit-approval`, { approverIds: [], confirmationToken: routePreview.confirmationToken }, 'admin')
+    const routedRecord = (await db.query('SELECT id,route_snapshot FROM public.approval_records WHERE work_instruction_id=$1', [routedForm.id])).rows[0]
+    assert.equal(routedRecord.route_snapshot.workflowVersionId, workflow.id)
+    let routedSteps = (await db.query('SELECT * FROM public.approval_steps WHERE approval_record_id=$1 ORDER BY step_number,approver_id', [routedRecord.id])).rows
+    assert.equal(routedSteps.filter((step) => step.step_number === 1 && step.status === 'active').length, 2)
+    assert.equal(routedSteps.find((step) => step.step_number === 1).group_rule, 'any')
+    assert.equal(routedSteps.find((step) => step.step_number === 2).status, 'wait')
+    const signallingTask = routedSteps.find((step) => step.step_number === 1 && step.approver_id === users.approver.id)
+    await expect(200, `/approvals/steps/${signallingTask.id}/approve`, {}, 'approver', 'PATCH')
+    routedSteps = (await db.query('SELECT * FROM public.approval_steps WHERE approval_record_id=$1 ORDER BY step_number,approver_id', [routedRecord.id])).rows
+    assert(routedSteps.find((step) => step.step_number === 1 && step.approver_id === users.manager.id).skipped)
+    assert.equal(routedSteps.find((step) => step.step_number === 2 && step.approver_id === users.manager.id).status, 'active')
+    const engineeringTask = routedSteps.find((step) => step.step_number === 2)
+    await expect(200, `/approvals/steps/${engineeringTask.id}/approve`, {}, 'manager', 'PATCH')
+    assert.equal((await db.query('SELECT status FROM public.work_instructions WHERE id=$1', [routedForm.id])).rows[0].status, 'active')
+    checks += 10
+
+    await require('./workflow-acceptance.cjs')({ call: expect, db, users, tenant, generalDepartment, workflow, personGroup, workflowGraph, base })
+    if (process.env.INSPECTAI_WORKFLOW_BROWSER_TEST === '1') {
+      await require('./workflow-browser.cjs')({ base, db, users, generalDepartment, passwordAuth })
+    }
+
     await expect(404, '/work-instructions/' + wi.id, undefined, 'foreign', 'GET')
     await expect(404, '/inspections/' + wo.id, undefined, 'foreign', 'GET')
     assert.equal(

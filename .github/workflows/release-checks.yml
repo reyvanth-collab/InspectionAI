@@ -51,6 +51,46 @@ jobs:
       - run: npm audit --omit=dev
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --reporter=line
+  workflow-browser:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: inspectai_workflow_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d inspectai_workflow_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      VITE_SUPABASE_URL: https://example.invalid
+      VITE_SUPABASE_ANON_KEY: test-build-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+        working-directory: inspectai/backend
+      - run: npm ci --ignore-scripts
+        working-directory: inspectai/frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: inspectai/frontend
+      - run: npm run test:workflow:browser
+        working-directory: inspectai/backend
+      - run: node test/workflow-postgres.cjs
+        working-directory: inspectai/backend
+        env:
+          WORKFLOW_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/inspectai_workflow_test
+          WORKFLOW_TEST_BROWSER: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-workflow-browser-${{ github.run_id }}
+          path: inspectai/backend/.env.workflow-browser/*.png
+          include-hidden-files: true
   container:
     runs-on: ubuntu-latest
     steps:

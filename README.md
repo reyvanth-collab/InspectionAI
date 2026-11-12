@@ -6,6 +6,8 @@ Latest table, draft and completed-PDF workflow: [implementation, safe local upda
 
 Question assessment, user access tables, report catalogue and approval preview: [behaviour, safe update and verification](inspectai/docs/QUESTION_POLICIES_REPORTS.md).
 
+IA-08 / IA-09 visual approval workflows and Person Groups: [local synthetic preview, review and verification](inspectai/docs/APPROVAL_WORKFLOWS.md).
+
 Current focused workflow: [start, permissions, migration strategy and verification](inspectai/docs/FOCUSED_APP.md). Optional fictional rail data: [safe seed and cleanup](inspectai/docs/RAIL_DEMO.md).
 
 ```sh

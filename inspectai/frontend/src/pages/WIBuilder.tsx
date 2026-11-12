@@ -1,6 +1,6 @@
 import { Assessment, defaultAssessment, configurationProblem } from '@/lib/questionPolicy'
 import { ValidationSummary, type ValidationIssue } from '@/components/ui/ValidationSummary'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { can } from '@/lib/permissions'
 import { useDepartments } from '@/hooks/useDepartments'
@@ -61,6 +61,7 @@ export type FieldType =
 
 type FieldWidth = 'full' | 'half' | 'third'
 type DragPlacement = 'before' | 'after' | 'beside'
+type ApprovalRouteDisplay = { nodeId: string; type: string; stageName?: string; label?: string; reviewerName?: string; groupRule?: 'any' | 'all'; eligibleMembers?: Array<{ id: string; name: string }>; members?: Array<{ id: string; name: string }>; assignment?: string }
 
 interface WIFieldLayout {
   width: FieldWidth
@@ -521,6 +522,16 @@ export default function WIBuilder() {
   const [selectedApprovers, setSelectedApprovers] = useState<string[]>(
     (location.state as { approvalApprovers?: string[] })?.approvalApprovers || [],
   )
+  const [configuredWorkflow, setConfiguredWorkflow] = useState<{
+    id: string
+    name: string
+    workflow_code: string
+    version_number: number
+    issues: Array<{ nodeId?: string; message: string }>
+    stages: Array<{ nodeId: string; type: string; stageName?: string; reviewerName?: string; groupRule?: 'any' | 'all'; eligibleMembers?: Array<{ id: string; name: string }> }>
+  } | null>(null)
+  const [workflowLoading, setWorkflowLoading] = useState(false)
+  const [workflowLookupError, setWorkflowLookupError] = useState('')
   const hydrated = useRef('')
   const [savedVersion, setSavedVersion] = useState<string | undefined>()
   const [savedDraftId, setSavedDraftId] = useState('')
@@ -530,11 +541,12 @@ export default function WIBuilder() {
     id: string
     token: string
     fingerprint: string
+    route: Record<string, unknown> | null
   } | null>(null)
   const submitting = useRef(false)
   const validationScope = useRef(false)
   const [preparing, setPreparing] = useState(false)
-  const fingerprint = JSON.stringify({ meta, fields, departmentId, selectedApprovers })
+  const fingerprint = JSON.stringify({ meta, fields, departmentId, selectedApprovers, workflowVersionId: configuredWorkflow?.id })
   useEffect(() => {
     if (confirmation && confirmation.fingerprint !== fingerprint) setConfirmation(null)
   }, [fingerprint, confirmation])
@@ -551,6 +563,26 @@ export default function WIBuilder() {
   const saveWI = useSaveWIWithItems()
   const submitForApproval = useSubmitForApproval()
   const { data: approvers = [] } = useApprovers(departmentId || user?.primaryDepartmentId)
+  const workflowDepartmentId = departmentId || user?.primaryDepartmentId || ''
+  useEffect(() => {
+    if (!workflowDepartmentId) return
+    let current = true
+    setWorkflowLoading(true)
+    setWorkflowLookupError('')
+    api.get<{ data: typeof configuredWorkflow }>(`/approval-workflows/default?departmentId=${encodeURIComponent(workflowDepartmentId)}`)
+      .then((result) => {
+        const workflow=result.data.data
+        if (workflow && (!workflow.id || !Array.isArray(workflow.issues) || !Array.isArray(workflow.stages))) throw new Error('The workflow routing response is incomplete.')
+        if (current) setConfiguredWorkflow(workflow)
+      })
+      .catch((cause) => { if (current) { setConfiguredWorkflow(null); setWorkflowLookupError(cause instanceof ApiError && cause.status === 404 ? 'This department is unavailable for workflow routing.' : 'The active approval workflow could not be checked. Retry before submitting this form.') } })
+      .finally(() => { if (current) setWorkflowLoading(false) })
+    return () => { current = false }
+  }, [workflowDepartmentId])
+  const frozenPreviewRoute = confirmation?.route && Array.isArray(confirmation.route.route)
+    ? confirmation.route.route as ApprovalRouteDisplay[]
+    : null
+  const approvalRouteStages: ApprovalRouteDisplay[] = frozenPreviewRoute || configuredWorkflow?.stages || []
 
   useEffect(() => {
     if (!existingData || hydrated.current === String(existingData.id)) return
@@ -767,10 +799,16 @@ export default function WIBuilder() {
     }
     if (submit && !fields.some((f) => f.type !== 'heading'))
       issues.push({ id: 'builder-questions', message: 'Add at least one answerable question' })
-    if (submit && !selectedApprovers.length)
+    if (submit && workflowLoading)
+      issues.push({ id: 'approval-selection', message: 'Checking the active approval workflow. Try again in a moment.' })
+    if (submit && workflowLookupError)
+      issues.push({ id: 'approval-selection', message: workflowLookupError })
+    if (submit && configuredWorkflow?.issues.length)
+      issues.push({ id: 'approval-selection', message: 'The active workflow has no eligible route for this form. Ask an administrator to fix it.' })
+    if (submit && !configuredWorkflow && !workflowLoading && !workflowLookupError && !selectedApprovers.length)
       issues.push({
         id: 'approval-selection',
-        message: 'Select at least one independent approver',
+        message: 'Select at least one independent approver or ask an administrator to activate a default workflow.',
         reveal: () => setShowApprovalModal(true),
       })
     setValidationIssues(issues)
@@ -858,11 +896,11 @@ export default function WIBuilder() {
       if (submit) {
         if (!wiDbId)
           throw new Error('Saved form, but could not identify it for approval submission')
-        const preview = await api.post<{ data: { confirmationToken: string } }>(
+        const preview = await api.post<{ data: { confirmationToken: string; route: Record<string, unknown> | null } }>(
           '/work-instructions/' + wiDbId + '/approval-preview',
           { approverIds: selectedApprovers },
         )
-        setConfirmation({ id: wiDbId, token: preview.data.data.confirmationToken, fingerprint })
+        setConfirmation({ id: wiDbId, token: preview.data.data.confirmationToken, fingerprint, route: preview.data.data.route })
         return
       }
       toast('Saved as draft', 'success')
@@ -891,7 +929,7 @@ export default function WIBuilder() {
       if (issue.id === 'form-meta-revision') return !meta.revision.trim()
       if (issue.id === 'form-meta-expiryDate')
         return !!meta.effectiveDate && !!meta.expiryDate && meta.expiryDate < meta.effectiveDate
-      if (issue.id === 'approval-selection') return !selectedApprovers.length
+      if (issue.id === 'approval-selection') return (!selectedApprovers.length && !configuredWorkflow) || workflowLoading || !!workflowLookupError || !!configuredWorkflow?.issues.length
       if (issue.id === 'builder-questions') return !fields.some((f) => f.type !== 'heading')
       const f = fields.find(
         (f) => 'field-editor-' + f.id === issue.id || 'field-label-' + f.id === issue.id,
@@ -1357,18 +1395,31 @@ export default function WIBuilder() {
             Department:{' '}
             {departments.find((d) => d.id === (departmentId || user?.primaryDepartmentId))?.name}
           </p>
-          <p>
-            Approval sequence:{' '}
-            {selectedApprovers
-              .map((id) => approvers.find((a) => a.id === id)?.name || 'Unavailable reviewer')
-              .join(' → ') || 'None selected'}
-          </p>
+          {configuredWorkflow || confirmation?.route ? (
+            <div className="mt-2 rounded-lg border border-border p-3">
+              <p className="font-semibold">Workflow: {String(confirmation?.route?.name || configuredWorkflow?.name || '')} · {String(confirmation?.route?.workflowCode || configuredWorkflow?.workflow_code || '')} v{String(confirmation?.route?.versionNumber || configuredWorkflow?.version_number || '')}</p>
+              <p className="mt-1">Route: {approvalRouteStages.map((stage) => {
+                const members = stage.eligibleMembers || stage.members || []
+                const assignment = stage.type === 'group'
+                  ? `${stage.groupRule === 'all' ? 'All eligible' : 'Any one'} (${members.map((member) => member.name).join(', ') || 'No eligible members'})`
+                  : stage.type === 'individual'
+                    ? stage.reviewerName || members[0]?.name || stage.assignment || 'Unassigned'
+                    : ''
+                return [stage.stageName || stage.label || stage.type, assignment].filter(Boolean).join(' · ')
+              }).join(' → ') || 'Loading route preview'}</p>
+              {!!configuredWorkflow?.issues?.length && <p role="alert" className="mt-2 text-danger">The default route needs administrator updates before this form can be submitted.</p>}
+            </div>
+          ) : (
+            <p>Approval sequence: {selectedApprovers.map((id) => approvers.find((a) => a.id === id)?.name || 'Unavailable reviewer').join(' → ') || 'None selected'}</p>
+          )}
         </div>
         <p className="text-[13px] text-text-2 mb-4">
           This form will be saved as a draft first, then routed to the selected approvers. It
           becomes active only after the final approval step is completed.
         </p>
-        {approvers.length === 0 ? (
+        {configuredWorkflow ? (
+          <p className="text-[13px] text-text-2">This active workflow will route future submissions. Reviewer assignments are frozen when this form is submitted.</p>
+        ) : approvers.length === 0 ? (
           <p className="text-[13px] text-text-3">
             No active admin or approver users are available.
           </p>

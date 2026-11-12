@@ -6,6 +6,8 @@ import { configurationProblem } from '../lib/questionPolicy'
 import { requireAuth, requireCapability, type AuthRequest } from '../middleware/auth'
 import { pool, query, beginActorTransaction } from '../lib/db'
 import { auditLog, notifyUsers } from '../lib/events'
+import { resolveDefaultWorkflow } from '../lib/workflowResolver'
+import { submittedFormHash } from '../lib/approvalAssignment'
 
 const router = Router()
 const WI_STATUSES = new Set([
@@ -60,7 +62,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res, next) => {
     }
     if (req.query.needsApproval === 'true') {
       params.push(req.user!.id)
-      sql += ` AND EXISTS(SELECT 1 FROM public.approval_records ar JOIN public.approval_steps s ON s.approval_record_id=ar.id WHERE ar.work_instruction_id=wi.id AND s.approver_id=$${params.length} AND s.status='active')`
+      sql += ` AND EXISTS(SELECT 1 FROM public.approval_records ar JOIN public.approval_steps s ON s.approval_record_id=ar.id WHERE ar.work_instruction_id=wi.id AND ar.final_status='active' AND ar.current_step=s.step_number AND s.skipped=false AND s.approver_id=$${params.length} AND s.status='active')`
     }
 
     if (search) {
@@ -447,6 +449,8 @@ async function approvalContent(
   tenant: string,
   actor: string,
   approvers: string[],
+  workflowVersionId: string | null = null,
+  routeSnapshot: Record<string, unknown> | null = null,
 ) {
   const form = (
     await run('SELECT * FROM public.work_instructions WHERE id=$1 AND tenant_id=$2', [id, tenant])
@@ -461,7 +465,7 @@ async function approvalContent(
     form,
     items,
     confirmationToken: createHmac('sha256', process.env.JWT_SECRET!)
-      .update(canonicalJson(JSON.parse(JSON.stringify({ form, items, actor, approvers }))))
+      .update(canonicalJson(JSON.parse(JSON.stringify({ form, items, actor, approvers, workflowVersionId, routeSnapshot }))))
       .digest('hex'),
   }
 }
@@ -475,7 +479,7 @@ router.post(
       req.params.id,
       req.user!.tenantId,
       req.user!.id,
-      req.body.approverIds || [],
+      Array.isArray(req.body.approverIds) ? req.body.approverIds : [],
     )
     if (!content.form) {
       res.status(404).json({ error: 'Form is unavailable' })
@@ -485,6 +489,32 @@ router.post(
       res.status(409).json({ error: 'Only editable drafts can be confirmed' })
       return
     }
+    const workflow = await resolveDefaultWorkflow(query as any, {
+      tenantId: req.user!.tenantId,
+      departmentId: content.form.department_id,
+      formId: content.form.id,
+      submitterId: req.user!.id,
+      ownerId: content.form.owner_id,
+    })
+    if (workflow?.issues.length) {
+      res.status(400).json({ error: 'The active default workflow cannot route this form yet.', issues: workflow.issues })
+      return
+    }
+    const submittedApproverIds: string[] = Array.isArray(req.body.approverIds) ? req.body.approverIds : []
+    const effectiveApproverIds = workflow ? [...new Set(workflow.steps.map((step) => step.approverId))] : submittedApproverIds
+    if (!effectiveApproverIds.length) {
+      res.status(400).json({ error: 'Choose an active default workflow or at least one independent reviewer.' })
+      return
+    }
+    const confirmation = await approvalContent(
+      query,
+      req.params.id,
+      req.user!.tenantId,
+      req.user!.id,
+      effectiveApproverIds,
+      workflow?.workflowVersionId || null,
+      workflow?.routeSnapshot || null,
+    )
     const fieldErrors: Record<string, string> = {}
     if (!content.items.some((i) => i.field_type !== 'heading'))
       fieldErrors.questions = 'Add at least one answerable question'
@@ -496,7 +526,7 @@ router.post(
       res.status(400).json({ error: 'Correct the form before confirming', fieldErrors })
       return
     }
-    res.json({ data: { confirmationToken: content.confirmationToken } })
+    res.json({ data: { confirmationToken: confirmation.confirmationToken, route: workflow?.routeSnapshot || null } })
   },
 )
 // ── POST /api/work-instructions/:id/submit-approval ─────────────
@@ -510,30 +540,9 @@ router.post(
       const { approverIds } = req.body as { approverIds: string[] }
       const wiId = req.params.id
       const submittedApproverIds = Array.isArray(approverIds) ? approverIds : []
-      const uniqueApproverIds = [...new Set(submittedApproverIds.filter(Boolean))]
-      if (uniqueApproverIds.length === 0) {
-        res.status(400).json({ error: 'At least one approver is required' })
-        return
-      }
+      let uniqueApproverIds = [...new Set(submittedApproverIds.filter(Boolean))]
       if (uniqueApproverIds.some((id) => !UUID_RE.test(id))) {
         res.status(400).json({ error: 'Approver IDs must be valid UUIDs' })
-        return
-      }
-
-      const approverRes = await query(
-        `SELECT id
-       FROM public.users
-       WHERE tenant_id = $1
-         AND active = true
-         AND ('form_approver'=ANY(capabilities) OR 'administrator'=ANY(capabilities))
-         AND id = ANY($2::uuid[])`,
-        [req.user!.tenantId, uniqueApproverIds],
-      )
-      const validApproverIds = new Set(approverRes.rows.map((row) => row.id))
-      if (uniqueApproverIds.some((id) => !validApproverIds.has(id))) {
-        res
-          .status(400)
-          .json({ error: 'Approvers must be active admin or approver users in your tenant' })
         return
       }
 
@@ -558,6 +567,35 @@ router.post(
         return
       }
       const form = wiRes.rows[0]
+      const workflow = await resolveDefaultWorkflow(client.query.bind(client) as any, {
+        tenantId: req.user!.tenantId,
+        departmentId: form.department_id,
+        formId: wiId,
+        submitterId: req.user!.id,
+        ownerId: form.owner_id,
+      })
+      if (workflow?.issues.length) {
+        await client.query('ROLLBACK')
+        res.status(400).json({ error: 'The active default workflow cannot route this form.', issues: workflow.issues })
+        return
+      }
+      if (workflow) uniqueApproverIds = [...new Set(workflow.steps.map((step) => step.approverId))]
+      if (!uniqueApproverIds.length) {
+        await client.query('ROLLBACK')
+        res.status(400).json({ error: 'At least one approver is required when there is no active default workflow.' })
+        return
+      }
+      const approverRes = await client.query(
+        `SELECT id FROM public.users WHERE tenant_id=$1 AND active=true
+         AND ('form_approver'=ANY(capabilities) OR 'administrator'=ANY(capabilities)) AND id=ANY($2::uuid[])`,
+        [req.user!.tenantId, uniqueApproverIds],
+      )
+      const validApproverIds = new Set(approverRes.rows.map((row) => row.id))
+      if (uniqueApproverIds.some((id) => !validApproverIds.has(id))) {
+        await client.query('ROLLBACK')
+        res.status(400).json({ error: 'Approvers must be active admin or approver users in this tenant.' })
+        return
+      }
       const contributors = await client.query(
         'SELECT id FROM public.users WHERE id=ANY($1::uuid[]) AND inspectai_private.form_contributor($2::uuid,id)',
         [uniqueApproverIds, wiId],
@@ -618,6 +656,8 @@ router.post(
         req.user!.tenantId,
         req.user!.id,
         uniqueApproverIds,
+        workflow?.workflowVersionId || null,
+        workflow?.routeSnapshot || null,
       )
       if (req.body.confirmationToken !== content.confirmationToken) {
         await client.query('ROLLBACK')
@@ -638,31 +678,30 @@ router.post(
 
       const approvalRes = await client.query(
         `INSERT INTO public.approval_records
-         (work_instruction_id, tenant_id, submitted_by, current_step, final_status)
-       VALUES ($1, $2, $3, 1, 'active')
+         (work_instruction_id, tenant_id, submitted_by, current_step, final_status, workflow_version_id, route_snapshot, submitted_snapshot, submitted_hash)
+       VALUES ($1, $2, $3, 1, 'active', $4, $5::jsonb, $6::jsonb, $7)
        RETURNING id`,
-        [wiId, req.user!.tenantId, req.user!.id],
+        [wiId, req.user!.tenantId, req.user!.id, workflow?.workflowVersionId || null, workflow ? JSON.stringify(workflow.routeSnapshot) : null, JSON.stringify({ form: content.form, items: content.items }), submittedFormHash(content.form, content.items)],
       )
       const approvalRecordId = approvalRes.rows[0].id as string
 
-      for (let i = 0; i < uniqueApproverIds.length; i++) {
-        const label =
-          i === 0
-            ? 'Technical Check'
-            : i === uniqueApproverIds.length - 1
-              ? 'Final Approval'
-              : `Review ${i + 1}`
+      const stepPlan = workflow
+        ? workflow.steps
+        : uniqueApproverIds.map((approverId, index) => ({ stepNumber: index + 1, label: index === 0 ? 'Technical Check' : index === uniqueApproverIds.length - 1 ? 'Final Approval' : `Review ${index + 1}`, approverId, groupRule: 'all' as const, stageSize: 1 }))
+      for (const step of stepPlan) {
         await client.query(
           `INSERT INTO public.approval_steps
-           (approval_record_id, tenant_id, step_number, label, approver_id, status)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+           (approval_record_id, tenant_id, step_number, label, approver_id, status, group_rule, stage_size, assigned_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, (SELECT name FROM public.users WHERE id=$5 AND tenant_id=$2))`,
           [
             approvalRecordId,
             req.user!.tenantId,
-            i + 1,
-            label,
-            uniqueApproverIds[i],
-            i === 0 ? 'active' : 'wait',
+            step.stepNumber,
+            step.label,
+            step.approverId,
+            step.stepNumber === 1 ? 'active' : 'wait',
+            step.groupRule,
+            step.stageSize,
           ],
         )
       }
@@ -687,9 +726,11 @@ router.post(
           wi_number: wi.wi_number,
           revision: wi.revision,
           approver_count: uniqueApproverIds.length,
+          workflow_version_id: workflow?.workflowVersionId || null,
         },
       })
-      await notifyUsers(req.user!.tenantId, [uniqueApproverIds[0]], {
+      const firstStageApprovers = [...new Set(stepPlan.filter((step) => step.stepNumber === 1).map((step) => step.approverId))]
+      await notifyUsers(req.user!.tenantId, firstStageApprovers, {
         title: `Approval Required - ${wi.wi_number}`,
         message: `${wi.title} ${wi.revision} is awaiting your approval.`,
         severity: 'info',
